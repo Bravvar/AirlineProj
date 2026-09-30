@@ -39,10 +39,10 @@ CREATE TABLE Airport (
 CREATE TABLE Aircraft (
     aircraft_id INT AUTO_INCREMENT PRIMARY KEY,
     aircraft_model VARCHAR(50) NOT NULL,
-    registration_number VARCHAR(50) NOT NULL UNIQUE, -- Constraint #7 (Alternate Key)
+    registration_number VARCHAR(50) NOT NULL UNIQUE, 
     total_capacity INT NOT NULL,
     aircraft_status VARCHAR(20),
-    CONSTRAINT chk_aircraft_capacity CHECK (total_capacity > 0) -- Constraint #7
+    CONSTRAINT chk_aircraft_capacity CHECK (total_capacity > 0) 
 );
 
 CREATE TABLE CabinClass (
