@@ -1,3 +1,6 @@
+USE airlineschema;
+
+
 INSERT INTO Passenger
 (first_name, last_name, date_of_birth, email, phone, address)
 VALUES
