@@ -16,13 +16,13 @@ VALUES
 -- Standard daytime flight (same day arrival)
 ('AA100', 'JFK', 'LAX', 1, '2026-10-15', '08:00:00', '2026-10-15', '11:15:00', 'On Time', NULL),
 -- Delayed flight with a status reason
-('UA205', 'LAX', 'JFK', 1, '2026-10-16', '14:30:00', '2026-10-16', '23:00:00', 'Delayed', 'Severe weather conditions at origin'),
+('UA205', 'LAX', 'JFK', 2, '2026-10-16', '14:30:00', '2026-10-16', '23:00:00', 'Delayed', 'Severe weather conditions at origin'),
 -- Red-eye flight (arrival date is the next day)
-('DL400', 'JFK', 'LAX', 1, '2026-10-17', '22:00:00', '2026-10-18', '01:15:00', 'On Time', NULL),
+('DL400', 'JFK', 'LAX', 3, '2026-10-17', '22:00:00', '2026-10-18', '01:15:00', 'On Time', NULL),
 -- Cancelled flight with a maintenance reason
-('JB310', 'LAX', 'JFK', 1, '2026-10-18', '06:15:00', '2026-10-18', '14:45:00', 'Cancelled', 'Aircraft maintenance required'),
+('JB310', 'LAX', 'JFK', 4, '2026-10-18', '06:15:00', '2026-10-18', '14:45:00', 'Cancelled', 'Aircraft maintenance required'),
 -- Evening flight currently boarding
-('WN512', 'JFK', 'LAX', 1, '2026-10-19', '17:45:00', '2026-10-19', '21:00:00', 'Boarding', NULL);
+('WN512', 'JFK', 'LAX', 5, '2026-10-19', '17:45:00', '2026-10-19', '21:00:00', 'Boarding', NULL);
 
 INSERT INTO FareClass (
     fare_class_name, 
