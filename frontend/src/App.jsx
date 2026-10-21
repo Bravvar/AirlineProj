@@ -38,7 +38,7 @@ function App() {
                     <div className="flex flex-col gap-1 items-baseline">
                         <label htmlFor="departDate">*Depart Date:</label>
                         <input 
-                            type="text" 
+                            type="date" 
                             name="departDate" 
                             id="departDate" 
                             className="outline-none bg-white text-black m-2" 
@@ -47,7 +47,7 @@ function App() {
                     <div className="flex flex-col gap-1 items-baseline">
                         <label htmlFor="returnDate">*Return Date:</label>
                         <input 
-                            type="text" 
+                            type="date" 
                             name="returnDate" 
                             id="returnDate" 
                             className="outline-none bg-white text-black m-2" 
