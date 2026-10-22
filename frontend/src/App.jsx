@@ -1,69 +1,76 @@
-function App() {
-    return (
-        <div className="flex justify-center items-center h-screen text-white">
-            <div className="w-max">
-                {/* Navigation Bar */}
-                <div className="flex flex-row justify-evenly w-full top-0 bg-gray-700 space-x-5 p-2 rounded-t-lg">
-                    <div>Flights</div>
-                    <div>Vacations</div>
-                    <div>Hotels</div>
-                    <div>Cars</div>
-                    <div>Cruises</div>
-                </div>
+import { useState } from 'react';
+import Logo from './components/Logo';
+import HeroSearch from './components/HeroSearch';
+import DealsSection from './components/DealsSection';
+import SignInModal from './components/SignInModal';
 
-                {/* Depart and Arrive Search Bar */}
-                <div className="flex flex-row w-full bg-blue-500 p-4">
-                    <div className="flex flex-col gap-1 items-baseline">
-                        <label htmlFor="depart">*Depart</label>
-                        <input 
-                            type="text" 
-                            name="depart" 
-                            id="depart" 
-                            className="p-2 outline-none bg-white text-black m-2" 
-                        />
-                    </div>
-                    <div className="flex flex-col gap-1 items-baseline">
-                        <label htmlFor="arrive">*Arrive</label>
-                        <input 
-                            type="text" 
-                            name="arrive" 
-                            id="arrive" 
-                            className="p-2 outline-none bg-white text-black m-2" 
-                        />
-                    </div>
-                </div>
+const HERO_IMG = '/landscapes/europe.jpg'; 
 
-                {/* Set date for depart and arrive */}
-                <div className="flex fles-row w-full bg-blue-500 p-4">
-                    <div className="flex flex-col gap-1 items-baseline">
-                        <label htmlFor="departDate">*Depart Date:</label>
-                        <input 
-                            type="date" 
-                            name="departDate" 
-                            id="departDate" 
-                            className="outline-none bg-white text-black m-2" 
-                        />                            
-                    </div>
-                    <div className="flex flex-col gap-1 items-baseline">
-                        <label htmlFor="returnDate">*Return Date:</label>
-                        <input 
-                            type="date" 
-                            name="returnDate" 
-                            id="returnDate" 
-                            className="outline-none bg-white text-black m-2" 
-                        />                            
-                    </div>                    
-                </div>
+export default function App() {
+  const [activeTab, setActiveTab] = useState('flights');
+  const [showSignIn, setShowSignIn] = useState(false);
+  const [showLang, setShowLang] = useState(false);
 
-                {/* Search Submit */}
-                <div className="p-5 bg-blue-500 flex justify-center rounded-b-lg">
-                    <button className="bg-gray-700 px-4 py-2 rounded-lg text-white font-medium hover:bg-gray-800">
-                        Search flight
+  return (
+    <div className="min-h-screen bg-gray-50 font-sans">
+      {/* HERO SECTION */}
+      <div 
+        className="relative h-screen min-h-[700px] flex flex-col bg-cover bg-center"
+        style={{ backgroundImage: `url(${HERO_IMG})` }}
+      >
+        {/* Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/10 to-black/50"></div>
+        
+        {/* Navbar */}
+        <nav className="relative z-20 flex justify-between items-center px-6 py-4">
+          <Logo />
+          <div className="flex items-center gap-6">
+            
+            {/* Language Dropdown */}
+            <div className="relative">
+              <button onClick={() => setShowLang(!showLang)} className="text-white text-xl hover:opacity-80">
+                🌐
+              </button>
+              {showLang && (
+                <div className="absolute right-0 mt-2 w-40 bg-white rounded-lg shadow-xl py-2 z-50">
+                  {['English', 'Español', 'Français'].map(lang => (
+                    <button key={lang} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                      {lang}
                     </button>
-                </div> 
+                  ))}
+                </div>
+              )}
             </div>
-        </div>
-    );
-}
 
-export default App;
+            <a href="#" className="text-white font-medium hover:opacity-80 flex items-center gap-1.5 text-sm">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              My Trips
+            </a>
+            <button onClick={() => setShowSignIn(true)} className="border border-white/50 text-white font-medium px-5 py-2 rounded-full hover:bg-white/10 transition-colors text-sm">
+              Sign In
+            </button>
+          </div>
+        </nav>
+
+        {/* Main Content / Search Area */}
+        <div className="relative z-10 flex-grow flex flex-col justify-center items-center px-4">
+          <HeroSearch activeTab={activeTab} setActiveTab={setActiveTab} />
+        </div>
+
+        {/* Bottom Location Label */}
+        <div className="relative z-10 flex justify-end px-6 pb-6">
+          <div className="flex items-center gap-2 text-white">
+            <span className="font-medium drop-shadow-md">The Alps, Europe</span>
+            <span className="bg-black/40 px-2 py-1 rounded-full text-xs tracking-widest">•••</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Deals Section */}
+      <DealsSection />
+
+      {/* Sign In Modal */}
+      <SignInModal show={showSignIn} onHide={() => setShowSignIn(false)} />
+    </div>
+  );
+}
