@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import Logo from './components/Logo';
 import HeroSearch from './components/HeroSearch';
 import DealsSection from './components/DealsSection';
@@ -13,13 +14,12 @@ const BACKGROUNDS = [
 ];
 
 export default function App() {
+  const { t, i18n } = useTranslation();
+  
   const [activeTab, setActiveTab] = useState('flights');
   const [showSignIn, setShowSignIn] = useState(false);
   const [showLang, setShowLang] = useState(false);
-  
-  // New state to handle switching between pages
   const [currentPage, setCurrentPage] = useState('home'); 
-
   const [bgIndex, setBgIndex] = useState(0);
 
   useEffect(() => {
@@ -32,7 +32,6 @@ export default function App() {
 
   const currentBg = BACKGROUNDS[bgIndex];
 
-  // Helper function to handle tab changes from HeroSearch
   const handleTabChange = (tabId) => {
     if (tabId === 'deals') {
       setCurrentPage('deals');
@@ -42,7 +41,11 @@ export default function App() {
     }
   };
 
-  // If the user navigates to the Deals page, render it full screen
+  const changeLanguage = (langCode) => {
+    i18n.changeLanguage(langCode);
+    setShowLang(false);
+  };
+
   if (currentPage === 'deals') {
     return (
       <>
@@ -55,7 +58,6 @@ export default function App() {
     );
   }
 
-  // Otherwise, render the Main Home Page
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
       <div 
@@ -71,27 +73,30 @@ export default function App() {
               <button onClick={() => setShowLang(!showLang)} className="text-white text-2xl hover:opacity-80 transition-opacity">🌐</button>
               {showLang && (
                 <div className="absolute right-0 mt-3 w-44 bg-white rounded-2xl shadow-xl py-2 z-50 border border-gray-100">
-                  {['English', 'Español', 'Français'].map(lang => (
-                    <button key={lang} className="block w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                      {lang}
-                    </button>
-                  ))}
+                  <button onClick={() => changeLanguage('en')} className="block w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                    English
+                  </button>
+                  <button onClick={() => changeLanguage('es')} className="block w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                    Español
+                  </button>
+                  <button onClick={() => changeLanguage('fr')} className="block w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                    Français
+                  </button>
                 </div>
               )}
             </div>
 
             <a href="#" className="text-white font-semibold hover:opacity-80 flex items-center gap-2 text-sm drop-shadow-sm transition-opacity">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-              My Trips
+              {t('My Trips')}
             </a>
             <button onClick={() => setShowSignIn(true)} className="border border-white/60 text-white font-semibold px-6 py-2.5 rounded-full hover:bg-white/20 transition-all text-sm backdrop-blur-sm shadow-sm">
-              Sign In
+              {t('Sign In')}
             </button>
           </div>
         </nav>
 
         <div className="relative z-10 flex-grow flex flex-col justify-center items-center px-4 w-full">
-          {/* Pass the new handler to HeroSearch */}
           <HeroSearch activeTab={activeTab} setActiveTab={handleTabChange} />
         </div>
 
@@ -107,7 +112,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Need to pass the handler to DealsSection too, so "See All" works */}
       <DealsSection onSeeAll={() => setCurrentPage('deals')} />
 
       <SignInModal show={showSignIn} onHide={() => setShowSignIn(false)} />
