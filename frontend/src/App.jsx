@@ -1,25 +1,21 @@
 import { useState, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
 import Logo from './components/Logo';
 import HeroSearch from './components/HeroSearch';
 import DealsSection from './components/DealsSection';
 import SignInModal from './components/SignInModal';
-import DealsPage from './components/DealsPage'; 
+import DealsPage from './components/DealsPage';
 
 const BACKGROUNDS = [
-  { src: '/landscapes/alps.jpg', name: 'The Alps, Europe' },         
-  { src: '/landscapes/uluru.jpg', name: 'Uluru, Australia' },        
-  { src: '/landscapes/dolomites.jpg', name: 'Dolomites, Italy' },    
-  { src: '/landscapes/machu-picchu.jpg', name: 'Andes Mountains, Peru' }, 
+  { src: '/landscapes/alps.jpg', name: 'The Alps, Europe' },
+  { src: '/landscapes/uluru.jpg', name: 'Uluru, Australia' },
+  { src: '/landscapes/dolomites.jpg', name: 'Dolomites, Italy' },
+  { src: '/landscapes/machu-picchu.jpg', name: 'Andes Mountains, Peru' },
 ];
 
 export default function App() {
-  const { t, i18n } = useTranslation();
-  
   const [activeTab, setActiveTab] = useState('flights');
   const [showSignIn, setShowSignIn] = useState(false);
-  const [showLang, setShowLang] = useState(false);
-  const [currentPage, setCurrentPage] = useState('home'); 
+  const [currentPage, setCurrentPage] = useState('home');
   const [bgIndex, setBgIndex] = useState(0);
 
   useEffect(() => {
@@ -41,16 +37,11 @@ export default function App() {
     }
   };
 
-  const changeLanguage = (langCode) => {
-    i18n.changeLanguage(langCode);
-    setShowLang(false);
-  };
-
   if (currentPage === 'deals') {
     return (
       <>
-        <DealsPage 
-          onBackToHome={() => { setCurrentPage('home'); setActiveTab('flights'); }} 
+        <DealsPage
+          onBackToHome={() => { setCurrentPage('home'); setActiveTab('flights'); }}
           onSignIn={() => setShowSignIn(true)}
         />
         <SignInModal show={showSignIn} onHide={() => setShowSignIn(false)} />
@@ -60,38 +51,21 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
-      <div 
+      <div
         className="relative h-screen min-h-[700px] flex flex-col bg-cover bg-center transition-all duration-1000 ease-in-out"
         style={{ backgroundImage: `url(${currentBg.src})` }}
       >
         <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/10 to-black/60 transition-opacity duration-1000"></div>
-        
+
         <nav className="relative z-20 flex justify-between items-center px-8 py-5">
           <Logo />
           <div className="flex items-center gap-6">
-            <div className="relative">
-              <button onClick={() => setShowLang(!showLang)} className="text-white text-2xl hover:opacity-80 transition-opacity">🌐</button>
-              {showLang && (
-                <div className="absolute right-0 mt-3 w-44 bg-white rounded-2xl shadow-xl py-2 z-50 border border-gray-100">
-                  <button onClick={() => changeLanguage('en')} className="block w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                    English
-                  </button>
-                  <button onClick={() => changeLanguage('es')} className="block w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                    Español
-                  </button>
-                  <button onClick={() => changeLanguage('fr')} className="block w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                    Français
-                  </button>
-                </div>
-              )}
-            </div>
-
             <a href="#" className="text-white font-semibold hover:opacity-80 flex items-center gap-2 text-sm drop-shadow-sm transition-opacity">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-              {t('My Trips')}
+              My Trips
             </a>
             <button onClick={() => setShowSignIn(true)} className="border border-white/60 text-white font-semibold px-6 py-2.5 rounded-full hover:bg-white/20 transition-all text-sm backdrop-blur-sm shadow-sm">
-              {t('Sign In')}
+              Sign In
             </button>
           </div>
         </nav>
@@ -102,7 +76,7 @@ export default function App() {
 
         <div className="relative z-10 flex justify-end px-8 pb-8">
           <div className="flex items-center">
-            <span 
+            <span
               key={currentBg.name}
               className="text-white font-bold text-lg drop-shadow-lg tracking-wide animate-in fade-in zoom-in-95 duration-500"
             >

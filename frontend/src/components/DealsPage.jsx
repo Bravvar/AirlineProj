@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import Logo from './Logo';
 
 const ALL_DEALS = [
@@ -6,44 +6,25 @@ const ALL_DEALS = [
   { title: 'Australia', desc: 'Tap to save 35% off hotels', img: '/landscapes/ausi.jpg', badge: 'VISIT AUSTRALIA' },
   { title: 'India', desc: 'Tap to save 30% off hotels', img: '/landscapes/india.jpg', badge: 'DISCOVER INDIA' },
   { title: 'Italy', desc: 'Tap to save 20% off packages to Rome & Venice', img: '/landscapes/italy.jpg', badge: 'EXPLORE ITALY' },
-  { title: 'Japan', desc: 'Tap to save 15% off flights to Tokyo', img: '/landscapes/japan.jpg', badge: 'DISCOVER JAPAN' }, // Add your own image path
+  { title: 'Japan', desc: 'Tap to save 15% off flights to Tokyo', img: '/landscapes/japan.jpg', badge: 'DISCOVER JAPAN' },
   { title: 'Peru', desc: 'Tap to save $200 off tours to Machu Picchu', img: '/landscapes/peru.jpg', badge: 'VISIT PERU' },
 ];
 
 export default function DealsPage({ onBackToHome, onSignIn }) {
-  const [showLang, setShowLang] = useState(false);
-
-  // Scroll to top when page loads
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
   return (
     <div className="min-h-screen bg-white font-sans text-gray-900">
-      
+
       {/* Navbar */}
       <nav className="sticky top-0 z-50 bg-white border-b border-gray-100 px-8 py-4 flex justify-between items-center shadow-sm">
         <div className="cursor-pointer" onClick={onBackToHome}>
-          {/* We wrap Logo in a div to make it clickable to go home */}
           <Logo />
         </div>
-        
-        <div className="flex items-center gap-6">
-          <div className="relative">
-            <button onClick={() => setShowLang(!showLang)} className="text-gray-600 text-2xl hover:text-black transition-opacity">
-              🌐
-            </button>
-            {showLang && (
-              <div className="absolute right-0 mt-3 w-44 bg-white rounded-2xl shadow-xl py-2 z-50 border border-gray-100">
-                {['English', 'Español', 'Français'].map(lang => (
-                  <button key={lang} className="block w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                    {lang}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
 
+        <div className="flex items-center gap-6">
           <a href="#" className="text-gray-600 font-semibold hover:text-black flex items-center gap-2 text-sm transition-colors">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
             My Trips
