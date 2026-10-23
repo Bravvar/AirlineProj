@@ -8,7 +8,8 @@ const deals = [
   { title: 'India', desc: 'Tap to save 30% off hotels', img: DEAL_3_IMG, badge: 'DISCOVER INDIA' },
 ];
 
-export default function DealsSection() {
+// Add the onSeeAll prop
+export default function DealsSection({ onSeeAll }) {
   return (
     <div className="max-w-6xl mx-auto py-16 px-4">
       <div className="flex justify-between items-end mb-8">
@@ -16,7 +17,10 @@ export default function DealsSection() {
           <h2 className="text-2xl font-bold text-gray-900 mb-1">Deals for top destinations</h2>
           <p className="text-sm text-gray-500">Sponsored</p>
         </div>
-        <a href="#" className="text-blue-600 font-medium hover:underline text-sm">See all</a>
+        {/* Attach the click handler */}
+        <button onClick={onSeeAll} className="text-blue-600 font-medium hover:underline text-sm cursor-pointer">
+          See all
+        </button>
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

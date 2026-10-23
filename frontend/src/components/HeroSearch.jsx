@@ -10,6 +10,19 @@ export default function HeroSearch({ activeTab, setActiveTab }) {
   const [showTravelers, setShowTravelers] = useState(false);
   const [travelers, setTravelers] = useState({ adults: 1, children: 0, infantsSeat: 0, infantsLap: 0 });
 
+  // Cars/Stays States
+  const [differentDropoff, setDifferentDropoff] = useState(false);
+  const [pickupTime, setPickupTime] = useState('10:00 AM');
+  const [dropoffTime, setDropoffTime] = useState('10:00 AM');
+  const [checkInTime, setCheckInTime] = useState('3:00 PM'); 
+  const [driverAge, setDriverAge] = useState('26');
+
+  // Dropdown states
+  const [activeTimePicker, setActiveTimePicker] = useState(null); // 'pickup', 'dropoff', 'checkin'
+  const [showDriverAge, setShowDriverAge] = useState(false);
+  
+  const timePickerRef = useRef(null);
+  const driverAgeRef = useRef(null);
   const calendarRef = useRef(null);
   const travelersRef = useRef(null);
   const dateTriggerRef = useRef(null);
@@ -17,6 +30,20 @@ export default function HeroSearch({ activeTab, setActiveTab }) {
 
   const TODAY = { month: 9, day: 22, year: 2026 }; 
   const BASE_DATE = { month: 9, year: 2026 };
+
+  // Generate 24-hour time array (30 min increments)
+  const generateTimes = () => {
+    const times = [];
+    for (let i = 0; i < 24; i++) {
+      const hour = i === 0 ? 12 : i > 12 ? i - 12 : i;
+      const ampm = i < 12 ? 'AM' : 'PM';
+      times.push(`${hour}:00 ${ampm}`);
+      times.push(`${hour}:30 ${ampm}`);
+    }
+    return times;
+  };
+  const ALL_TIMES = generateTimes();
+  const AGES = ['26', '25', '24', '23', '22', '21'];
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -31,6 +58,12 @@ export default function HeroSearch({ activeTab, setActiveTab }) {
         travelersTriggerRef.current && !travelersTriggerRef.current.contains(event.target)
       ) {
         setShowTravelers(false);
+      }
+      if (timePickerRef.current && !timePickerRef.current.contains(event.target) && !event.target.closest('.time-trigger')) {
+        setActiveTimePicker(null);
+      }
+      if (driverAgeRef.current && !driverAgeRef.current.contains(event.target) && !event.target.closest('.age-trigger')) {
+        setShowDriverAge(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -54,11 +87,6 @@ export default function HeroSearch({ activeTab, setActiveTab }) {
     }
   };
 
-  const handleTripTypeChange = (type) => {
-    setTripType(type);
-    if (type === 'one-way') setEndDate(null);
-  };
-
   const getDateDisplay = () => {
     if (startDate && endDate && tripType === 'round-trip') {
       const startMonth = new Date(startDate.year, startDate.month).toLocaleString('default', { month: 'short' });
@@ -69,7 +97,7 @@ export default function HeroSearch({ activeTab, setActiveTab }) {
       const startMonth = new Date(startDate.year, startDate.month).toLocaleString('default', { month: 'short' });
       return `${startMonth} ${startDate.day}`;
     }
-    return tripType === 'round-trip' ? 'Add dates' : 'Add date';
+    return 'Add dates';
   };
 
   const getDisplayedMonth = (offset) => {
@@ -150,6 +178,7 @@ export default function HeroSearch({ activeTab, setActiveTab }) {
   const isAtEarliestMonth = monthOffset === 0;
 
   return (
+    /* FIXED: Added z-50 to force the entire Hero Search block above the background text */
     <div className="relative z-50 w-full max-w-5xl mx-auto flex flex-col items-center mt-4">
       
       {/* Tabs */}
@@ -174,28 +203,21 @@ export default function HeroSearch({ activeTab, setActiveTab }) {
         
         {/* Trip Type Toggles */}
         {activeTab === 'flights' && (
-          <div className="flex gap-6 mb-3 ml-4">
-            <label className="flex items-center gap-2 cursor-pointer text-white text-sm font-medium drop-shadow-md">
-              <input 
-                type="radio" 
-                name="tripType" 
-                value="round-trip" 
-                checked={tripType === 'round-trip'} 
-                onChange={() => handleTripTypeChange('round-trip')}
-                className="w-4 h-4 text-blue-600 border-white/50 focus:ring-blue-500 bg-white/20 backdrop-blur-sm"
-              />
-              Round-trip
+          <div className="flex gap-8 mb-4 ml-4">
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${tripType === 'round-trip' ? 'border-white' : 'border-white/60 group-hover:border-white'}`}>
+                {tripType === 'round-trip' && <div className="w-3 h-3 rounded-full bg-white" />}
+              </div>
+              <span className="text-white text-sm font-medium drop-shadow-md">Round-trip</span>
+              <input type="radio" className="hidden" checked={tripType === 'round-trip'} onChange={() => { setTripType('round-trip'); }} />
             </label>
-            <label className="flex items-center gap-2 cursor-pointer text-white text-sm font-medium drop-shadow-md">
-              <input 
-                type="radio" 
-                name="tripType" 
-                value="one-way" 
-                checked={tripType === 'one-way'} 
-                onChange={() => handleTripTypeChange('one-way')}
-                className="w-4 h-4 text-blue-600 border-white/50 focus:ring-blue-500 bg-white/20 backdrop-blur-sm"
-              />
-              One-way
+
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${tripType === 'one-way' ? 'border-white' : 'border-white/60 group-hover:border-white'}`}>
+                {tripType === 'one-way' && <div className="w-3 h-3 rounded-full bg-white" />}
+              </div>
+              <span className="text-white text-sm font-medium drop-shadow-md">One-way</span>
+              <input type="radio" className="hidden" checked={tripType === 'one-way'} onChange={() => { setTripType('one-way'); setEndDate(null); }} />
             </label>
           </div>
         )}
@@ -203,43 +225,27 @@ export default function HeroSearch({ activeTab, setActiveTab }) {
         {/* Main Search Bar */}
         <div className="w-full bg-white rounded-full shadow-2xl flex items-center p-1.5 min-h-[64px]">
           
-          {/* Flights Tab UI */}
+          {/* FLIGHTS TAB */}
           {activeTab === 'flights' && (
             <div className="flex w-full items-center">
               <div className="flex-1 px-5 py-1">
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">From</div>
                 <input type="text" placeholder="Departure" className="w-full outline-none text-sm font-medium text-gray-900 placeholder-gray-400 bg-transparent" />
               </div>
-              
               <button className="text-gray-400 hover:text-gray-600 px-2 text-lg transition-colors">⇄</button>
-              
               <div className="flex-1 px-5 py-1">
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">To</div>
                 <input type="text" placeholder="Destination" className="w-full outline-none text-sm font-medium text-gray-900 placeholder-gray-400 bg-transparent" />
               </div>
-              
               <div className="w-px h-10 bg-gray-200"></div>
-              
-              <div 
-                ref={dateTriggerRef}
-                className="flex-1 px-5 py-1 cursor-pointer group date-trigger" 
-                onClick={() => { setShowCalendar(!showCalendar); setShowTravelers(false); }}
-              >
-                <div className="text-xs text-gray-500 font-semibold mb-0.5">
-                  {tripType === 'round-trip' ? 'Dates' : 'Date'}
-                </div>
+              <div ref={dateTriggerRef} className="flex-1 px-5 py-1 cursor-pointer group date-trigger" onClick={() => { setShowCalendar(!showCalendar); setShowTravelers(false); setActiveTimePicker(null); setShowDriverAge(false); }}>
+                <div className="text-xs text-gray-500 font-semibold mb-0.5">{tripType === 'round-trip' ? 'Dates' : 'Date'}</div>
                 <div className={`text-sm font-medium transition-colors ${startDate ? 'text-gray-900' : 'text-gray-400 group-hover:text-gray-600'}`}>
-                  {getDateDisplay()}
+                  {startDate ? getDateDisplay() : (tripType === 'round-trip' ? 'Add dates' : 'Add date')}
                 </div>
               </div>
-              
               <div className="w-px h-10 bg-gray-200"></div>
-              
-              <div 
-                ref={travelersTriggerRef}
-                className="flex-1 px-5 py-1 cursor-pointer group"
-                onClick={() => { setShowTravelers(!showTravelers); setShowCalendar(false); }}
-              >
+              <div ref={travelersTriggerRef} className="flex-1 px-5 py-1 cursor-pointer group" onClick={() => { setShowTravelers(!showTravelers); setShowCalendar(false); setActiveTimePicker(null); setShowDriverAge(false); }}>
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">Travelers</div>
                 <div className="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors">
                   {totalTravelers} {totalTravelers === 1 ? 'traveler' : 'travelers'}
@@ -248,7 +254,7 @@ export default function HeroSearch({ activeTab, setActiveTab }) {
             </div>
           )}
 
-          {/* Stays Tab UI */}
+          {/* STAYS TAB */}
           {activeTab === 'stays' && (
             <div className="flex w-full items-center">
               <div className="flex-1 px-5 py-1">
@@ -256,49 +262,181 @@ export default function HeroSearch({ activeTab, setActiveTab }) {
                 <input type="text" placeholder="Search destination" className="w-full outline-none text-sm font-medium text-gray-900 placeholder-gray-400 bg-transparent" />
               </div>
               <div className="w-px h-10 bg-gray-200"></div>
-              <div ref={dateTriggerRef} className="flex-1 px-5 py-1 cursor-pointer date-trigger" onClick={() => { setShowCalendar(!showCalendar); setShowTravelers(false); }}>
-                <div className="text-xs text-gray-500 font-semibold mb-0.5">Dates</div>
+              <div ref={dateTriggerRef} className="flex-1 px-5 py-1 cursor-pointer date-trigger" onClick={() => { setShowCalendar(!showCalendar); setShowTravelers(false); setActiveTimePicker(null); setShowDriverAge(false); }}>
+                <div className="text-xs text-gray-500 font-semibold mb-0.5">Check-in / Check-out</div>
                 <div className={`text-sm font-medium ${startDate ? 'text-gray-900' : 'text-gray-400'}`}>{getDateDisplay()}</div>
               </div>
               <div className="w-px h-10 bg-gray-200"></div>
-              <div ref={travelersTriggerRef} className="flex-1 px-5 py-1 cursor-pointer" onClick={() => { setShowTravelers(!showTravelers); setShowCalendar(false); }}>
+              
+              <div className="flex-1 px-5 py-1 relative">
+                <div className="text-xs text-gray-500 font-semibold mb-0.5">Check-in time</div>
+                <div 
+                  className="text-sm font-medium text-gray-900 cursor-pointer time-trigger hover:text-blue-600 transition-colors"
+                  onClick={() => { setActiveTimePicker(activeTimePicker === 'checkin' ? null : 'checkin'); setShowCalendar(false); setShowTravelers(false); setShowDriverAge(false); }}
+                >
+                  {checkInTime}
+                </div>
+                
+                {activeTimePicker === 'checkin' && (
+                  <div 
+                    ref={timePickerRef} 
+                    className="absolute top-full mt-2 left-4 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] w-[140px] max-h-[260px] overflow-y-auto z-[110] text-gray-800 border border-gray-100 animate-in fade-in zoom-in-95 duration-150"
+                  >
+                    <div className="flex flex-col p-2">
+                      {ALL_TIMES.map(time => {
+                        const isSelected = checkInTime === time;
+                        return (
+                          <div 
+                            key={time}
+                            onClick={() => { setCheckInTime(time); setActiveTimePicker(null); }}
+                            className={`py-2 px-3 text-sm font-medium rounded-xl cursor-pointer transition-colors ${isSelected ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-700 hover:bg-gray-100'}`}
+                          >
+                            {time}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="w-px h-10 bg-gray-200"></div>
+              <div ref={travelersTriggerRef} className="flex-1 px-5 py-1 cursor-pointer" onClick={() => { setShowTravelers(!showTravelers); setShowCalendar(false); setActiveTimePicker(null); setShowDriverAge(false); }}>
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">Guests</div>
                 <div className="text-sm font-medium text-gray-900">{totalTravelers} {totalTravelers === 1 ? 'guest' : 'guests'}</div>
               </div>
             </div>
           )}
 
-          {/* Cars Tab UI */}
+          {/* CARS TAB */}
           {activeTab === 'cars' && (
             <div className="flex w-full items-center">
-              <div className="flex-[1.5] px-4 py-1">
-                <div className="text-xs text-gray-500 font-semibold mb-0.5">Pick-up location</div>
-                <input type="text" placeholder="Search location..." className="w-full outline-none text-sm font-medium text-gray-900 placeholder-gray-400 bg-transparent" />
+              <div className="flex-[1.5] px-5 py-1 flex items-center">
+                <div className="flex-1">
+                  <div className="text-xs text-gray-500 font-semibold mb-0.5">Pick-up location</div>
+                  <input type="text" placeholder="Search location..." className="w-full outline-none text-sm font-medium text-gray-900 placeholder-gray-400 bg-transparent" />
+                </div>
+                {differentDropoff && (
+                  <>
+                    <button className="text-gray-400 hover:text-gray-600 px-2 mx-1 text-lg transition-colors">⇄</button>
+                    <div className="flex-1">
+                      <div className="text-xs text-gray-500 font-semibold mb-0.5">Drop-off location</div>
+                      <input type="text" placeholder="Search location..." className="w-full outline-none text-sm font-medium text-gray-900 placeholder-gray-400 bg-transparent" />
+                    </div>
+                  </>
+                )}
               </div>
               <div className="w-px h-10 bg-gray-200"></div>
-              <div ref={dateTriggerRef} className="flex-1 px-4 py-1 cursor-pointer date-trigger" onClick={() => { setShowCalendar(!showCalendar); setShowTravelers(false); }}>
+              
+              <div ref={dateTriggerRef} className="flex-1 px-4 py-1 cursor-pointer date-trigger" onClick={() => { setShowCalendar(!showCalendar); setShowTravelers(false); setActiveTimePicker(null); setShowDriverAge(false); }}>
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">Dates</div>
                 <div className={`text-sm font-medium ${startDate ? 'text-gray-900' : 'text-gray-400'}`}>{getDateDisplay()}</div>
               </div>
               <div className="w-px h-10 bg-gray-200"></div>
-              <div className="flex-1 px-4 py-1">
+              
+              <div className="flex-1 px-4 py-1 relative">
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">Pick-up</div>
-                <div className="text-sm font-bold text-gray-900">10:00 AM</div>
+                <div 
+                  className="text-sm font-bold text-gray-900 cursor-pointer time-trigger hover:text-blue-600 transition-colors"
+                  onClick={() => { setActiveTimePicker(activeTimePicker === 'pickup' ? null : 'pickup'); setShowCalendar(false); setShowTravelers(false); setShowDriverAge(false); }}
+                >
+                  {pickupTime}
+                </div>
+
+                {activeTimePicker === 'pickup' && (
+                  <div 
+                    ref={timePickerRef} 
+                    className="absolute top-full mt-2 left-2 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] w-[140px] max-h-[260px] overflow-y-auto z-[110] text-gray-800 border border-gray-100 animate-in fade-in zoom-in-95 duration-150"
+                  >
+                    <div className="flex flex-col p-2">
+                      {ALL_TIMES.map(time => {
+                        const isSelected = pickupTime === time;
+                        return (
+                          <div 
+                            key={time}
+                            onClick={() => { setPickupTime(time); setActiveTimePicker(null); }}
+                            className={`py-2 px-3 text-sm font-medium rounded-xl cursor-pointer transition-colors ${isSelected ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-700 hover:bg-gray-100'}`}
+                          >
+                            {time}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="w-px h-10 bg-gray-200"></div>
-              <div className="flex-1 px-4 py-1">
+
+              <div className="flex-1 px-4 py-1 relative">
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">Drop-off</div>
-                <div className="text-sm font-bold text-gray-900">10:00 AM</div>
+                <div 
+                  className="text-sm font-bold text-gray-900 cursor-pointer time-trigger hover:text-blue-600 transition-colors"
+                  onClick={() => { setActiveTimePicker(activeTimePicker === 'dropoff' ? null : 'dropoff'); setShowCalendar(false); setShowTravelers(false); setShowDriverAge(false); }}
+                >
+                  {dropoffTime}
+                </div>
+
+                {activeTimePicker === 'dropoff' && (
+                  <div 
+                    ref={timePickerRef} 
+                    className="absolute top-full mt-2 left-2 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] w-[140px] max-h-[260px] overflow-y-auto z-[110] text-gray-800 border border-gray-100 animate-in fade-in zoom-in-95 duration-150"
+                  >
+                    <div className="flex flex-col p-2">
+                      {ALL_TIMES.map(time => {
+                        const isSelected = dropoffTime === time;
+                        return (
+                          <div 
+                            key={time}
+                            onClick={() => { setDropoffTime(time); setActiveTimePicker(null); }}
+                            className={`py-2 px-3 text-sm font-medium rounded-xl cursor-pointer transition-colors ${isSelected ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-700 hover:bg-gray-100'}`}
+                          >
+                            {time}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="w-px h-10 bg-gray-200"></div>
-              <div className="flex-1 px-4 py-1">
+
+              {/* Custom Driver Age Selector */}
+              <div className="flex-1 px-4 py-1 relative">
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">Driver age</div>
-                <div className="text-sm font-bold text-gray-900">26</div>
+                <div 
+                  className="text-sm font-bold text-gray-900 cursor-pointer age-trigger hover:text-blue-600 transition-colors flex items-center justify-between"
+                  onClick={() => { setShowDriverAge(!showDriverAge); setShowCalendar(false); setShowTravelers(false); setActiveTimePicker(null); }}
+                >
+                  {driverAge}
+                  <svg className={`w-4 h-4 text-gray-400 transition-transform ${showDriverAge ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
+
+                {showDriverAge && (
+                  <div 
+                    ref={driverAgeRef} 
+                    className="absolute top-full mt-2 right-4 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] w-[100px] max-h-[200px] overflow-y-auto z-[110] text-gray-800 border border-gray-100 animate-in fade-in zoom-in-95 duration-150"
+                  >
+                    <div className="flex flex-col p-2">
+                      {AGES.map(age => {
+                        const isSelected = driverAge === age;
+                        return (
+                          <div 
+                            key={age}
+                            onClick={() => { setDriverAge(age); setShowDriverAge(false); }}
+                            className={`py-2 px-3 text-sm font-medium rounded-xl cursor-pointer transition-colors ${isSelected ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-700 hover:bg-gray-100'}`}
+                          >
+                            {age}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {/* Packages & Deals Tab UI (The part that was missing!) */}
+          {/* PACKAGES & DEALS TABS */}
           {['packages', 'deals'].includes(activeTab) && (
             <div className="flex w-full items-center">
               <div className="flex-1 px-5 py-1">
@@ -306,12 +444,12 @@ export default function HeroSearch({ activeTab, setActiveTab }) {
                 <input type="text" placeholder="Search destination" className="w-full outline-none text-sm font-medium text-gray-900 placeholder-gray-400 bg-transparent" />
               </div>
               <div className="w-px h-10 bg-gray-200"></div>
-              <div ref={dateTriggerRef} className="flex-1 px-5 py-1 cursor-pointer date-trigger" onClick={() => { setShowCalendar(!showCalendar); setShowTravelers(false); }}>
+              <div ref={dateTriggerRef} className="flex-1 px-5 py-1 cursor-pointer date-trigger" onClick={() => { setShowCalendar(!showCalendar); setShowTravelers(false); setActiveTimePicker(null); setShowDriverAge(false); }}>
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">Dates</div>
                 <div className={`text-sm font-medium ${startDate ? 'text-gray-900' : 'text-gray-400'}`}>{getDateDisplay()}</div>
               </div>
               <div className="w-px h-10 bg-gray-200"></div>
-              <div ref={travelersTriggerRef} className="flex-1 px-5 py-1 cursor-pointer" onClick={() => { setShowTravelers(!showTravelers); setShowCalendar(false); }}>
+              <div ref={travelersTriggerRef} className="flex-1 px-5 py-1 cursor-pointer" onClick={() => { setShowTravelers(!showTravelers); setShowCalendar(false); setActiveTimePicker(null); setShowDriverAge(false); }}>
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">Guests</div>
                 <div className="text-sm font-medium text-gray-900">{totalTravelers} {totalTravelers === 1 ? 'guest' : 'guests'}</div>
               </div>
@@ -330,14 +468,19 @@ export default function HeroSearch({ activeTab, setActiveTab }) {
       {/* Checkbox for Cars */}
       {activeTab === 'cars' && (
         <div className="w-full flex justify-start mt-3 px-5 text-white text-sm">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" className="w-4 h-4 rounded border-gray-300" />
-            <span className="drop-shadow-md">Drop-off at a different location</span>
+          <label className="flex items-center gap-2 cursor-pointer group">
+            <div className={`w-5 h-5 rounded-[4px] border-2 flex items-center justify-center transition-colors ${differentDropoff ? 'bg-white border-white' : 'border-white/60 group-hover:border-white'}`}>
+              {differentDropoff && (
+                <svg className="w-3.5 h-3.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"></path></svg>
+              )}
+            </div>
+            <span className="drop-shadow-md font-medium">Drop-off at a different location</span>
+            <input type="checkbox" className="hidden" checked={differentDropoff} onChange={(e) => setDifferentDropoff(e.target.checked)} />
           </label>
         </div>
       )}
 
-      {/* --- CALENDAR DROPDOWN --- */}
+      {/* --- CALENDAR DROPDOWN (z-[100]) --- */}
       {showCalendar && (
         <div 
           ref={calendarRef} 
@@ -345,112 +488,57 @@ export default function HeroSearch({ activeTab, setActiveTab }) {
         >
           <div className="flex justify-between items-center mb-6">
             <div className="flex-1 flex items-center justify-center gap-3">
-              <button 
-                onClick={() => setMonthOffset(prev => prev - 1)}
-                disabled={isAtEarliestMonth}
-                className={`p-1.5 rounded-full transition-colors ${isAtEarliestMonth ? 'text-gray-300 cursor-not-allowed' : 'hover:bg-gray-100 text-blue-600'}`}
-              >
+              <button onClick={() => setMonthOffset(prev => prev - 1)} disabled={isAtEarliestMonth} className={`p-1.5 rounded-full transition-colors ${isAtEarliestMonth ? 'text-gray-300 cursor-not-allowed' : 'hover:bg-gray-100 text-blue-600'}`}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
               </button>
               <h5 className="font-bold text-xl text-gray-900 w-44 text-center">{leftMonth.label}</h5>
             </div>
-
             <div className="flex-1 flex items-center justify-center gap-3">
               <h5 className="font-bold text-xl text-gray-900 w-44 text-center">{rightMonth.label}</h5>
-              <button 
-                onClick={() => setMonthOffset(prev => prev + 1)}
-                className="p-1.5 rounded-full hover:bg-gray-100 text-blue-600 transition-colors"
-              >
+              <button onClick={() => setMonthOffset(prev => prev + 1)} className="p-1.5 rounded-full hover:bg-gray-100 text-blue-600 transition-colors">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
               </button>
             </div>
           </div>
-
           <div className="w-full h-px bg-gray-100 mb-6"></div>
-
           <div className="flex gap-8">
             <div className="flex-1">{renderMonth(leftMonth.month, leftMonth.year)}</div>
             <div className="flex-1">{renderMonth(rightMonth.month, rightMonth.year)}</div>
           </div>
-
           <div className="flex justify-end items-center mt-6 pt-5 border-t border-gray-100">
             {(startDate || endDate) ? (
-              <button 
-                onClick={() => { setStartDate(null); setEndDate(null); }}
-                className="text-sm font-semibold text-blue-600 hover:text-blue-800 transition-colors bg-blue-50 hover:bg-blue-100 px-5 py-2.5 rounded-xl whitespace-nowrap"
-              >
+              <button onClick={() => { setStartDate(null); setEndDate(null); }} className="text-sm font-semibold text-blue-600 hover:text-blue-800 transition-colors bg-blue-50 hover:bg-blue-100 px-5 py-2.5 rounded-xl whitespace-nowrap">
                 Clear Dates
               </button>
-            ) : (
-              <div className="h-[42px]"></div>
-            )}
+            ) : <div className="h-[42px]"></div>}
           </div>
         </div>
       )}
 
-      {/* --- TRAVELERS DROPDOWN --- */}
+      {/* --- TRAVELERS DROPDOWN (z-[100]) --- */}
       {showTravelers && (
-        <div 
-          ref={travelersRef}
-          className="absolute top-full mt-4 right-0 bg-white rounded-3xl shadow-2xl p-8 w-[420px] z-[100] text-gray-800 border border-gray-100 animate-in fade-in slide-in-from-top-2 duration-200"
-        >
+        <div ref={travelersRef} className="absolute top-full mt-4 right-0 bg-white rounded-3xl shadow-2xl p-8 w-[420px] z-[100] text-gray-800 border border-gray-100 animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="flex flex-col gap-6">
-            {/* Adults */}
-            <div className="flex justify-between items-center">
-              <div>
-                <div className="font-bold text-lg text-gray-900">Adults</div>
-                <div className="text-sm text-gray-500 font-medium">Age 12 or above</div>
+            {Object.entries({
+              adults: { label: 'Adults', sub: 'Age 12 or above' },
+              children: { label: 'Children', sub: 'Ages 2-11' },
+              infantsSeat: { label: 'Infants', sub: 'In seat' },
+              infantsLap: { label: 'Infants', sub: 'On lap' }
+            }).map(([key, info]) => (
+              <div key={key} className="flex justify-between items-center">
+                <div>
+                  <div className="font-bold text-lg text-gray-900">{info.label}</div>
+                  <div className="text-sm text-gray-500 font-medium">{info.sub}</div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <button onClick={() => updateTraveler(key, 'subtract')} className={`w-10 h-10 rounded-full border flex items-center justify-center transition-colors text-xl font-light ${travelers[key] === 0 || (key === 'adults' && travelers.adults <= 1) ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 text-gray-600 hover:border-gray-400'}`}>—</button>
+                  <span className="w-6 text-center font-medium text-lg">{travelers[key]}</span>
+                  <button onClick={() => updateTraveler(key, 'add')} className="w-10 h-10 rounded-full border border-gray-300 text-gray-600 hover:border-gray-400 flex items-center justify-center transition-colors text-xl font-light">+</button>
+                </div>
               </div>
-              <div className="flex items-center gap-4">
-                <button onClick={() => updateTraveler('adults', 'subtract')} className={`w-10 h-10 rounded-full border flex items-center justify-center transition-colors text-xl font-light ${travelers.adults <= 1 ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 text-gray-600 hover:border-gray-400'}`}>—</button>
-                <span className="w-6 text-center font-medium text-lg">{travelers.adults}</span>
-                <button onClick={() => updateTraveler('adults', 'add')} className="w-10 h-10 rounded-full border border-gray-300 text-gray-600 hover:border-gray-400 flex items-center justify-center transition-colors text-xl font-light">+</button>
-              </div>
-            </div>
-
-            {/* Children */}
-            <div className="flex justify-between items-center">
-              <div>
-                <div className="font-bold text-lg text-gray-900">Children</div>
-                <div className="text-sm text-gray-500 font-medium">Ages 2-11</div>
-              </div>
-              <div className="flex items-center gap-4">
-                <button onClick={() => updateTraveler('children', 'subtract')} className={`w-10 h-10 rounded-full border flex items-center justify-center transition-colors text-xl font-light ${travelers.children === 0 ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 text-gray-600 hover:border-gray-400'}`}>—</button>
-                <span className="w-6 text-center font-medium text-lg">{travelers.children}</span>
-                <button onClick={() => updateTraveler('children', 'add')} className="w-10 h-10 rounded-full border border-gray-300 text-gray-600 hover:border-gray-400 flex items-center justify-center transition-colors text-xl font-light">+</button>
-              </div>
-            </div>
-
-            {/* Infants in seat */}
-            <div className="flex justify-between items-center">
-              <div>
-                <div className="font-bold text-lg text-gray-900">Infants</div>
-                <div className="text-sm text-gray-500 font-medium">In seat</div>
-              </div>
-              <div className="flex items-center gap-4">
-                <button onClick={() => updateTraveler('infantsSeat', 'subtract')} className={`w-10 h-10 rounded-full border flex items-center justify-center transition-colors text-xl font-light ${travelers.infantsSeat === 0 ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 text-gray-600 hover:border-gray-400'}`}>—</button>
-                <span className="w-6 text-center font-medium text-lg">{travelers.infantsSeat}</span>
-                <button onClick={() => updateTraveler('infantsSeat', 'add')} className="w-10 h-10 rounded-full border border-gray-300 text-gray-600 hover:border-gray-400 flex items-center justify-center transition-colors text-xl font-light">+</button>
-              </div>
-            </div>
-
-            {/* Infants on lap */}
-            <div className="flex justify-between items-center">
-              <div>
-                <div className="font-bold text-lg text-gray-900">Infants</div>
-                <div className="text-sm text-gray-500 font-medium">On lap</div>
-              </div>
-              <div className="flex items-center gap-4">
-                <button onClick={() => updateTraveler('infantsLap', 'subtract')} className={`w-10 h-10 rounded-full border flex items-center justify-center transition-colors text-xl font-light ${travelers.infantsLap === 0 ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 text-gray-600 hover:border-gray-400'}`}>—</button>
-                <span className="w-6 text-center font-medium text-lg">{travelers.infantsLap}</span>
-                <button onClick={() => updateTraveler('infantsLap', 'add')} className="w-10 h-10 rounded-full border border-gray-300 text-gray-600 hover:border-gray-400 flex items-center justify-center transition-colors text-xl font-light">+</button>
-              </div>
-            </div>
+            ))}
           </div>
-
-          <div className="text-sm text-gray-500 mt-8 pt-6 border-t border-gray-100">
-            You can search for up to 6 travelers
-          </div>
+          <div className="text-sm text-gray-500 mt-8 pt-6 border-t border-gray-100">You can search for up to 6 travelers</div>
         </div>
       )}
     </div>

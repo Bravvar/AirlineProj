@@ -3,12 +3,13 @@ import Logo from './components/Logo';
 import HeroSearch from './components/HeroSearch';
 import DealsSection from './components/DealsSection';
 import SignInModal from './components/SignInModal';
+import DealsPage from './components/DealsPage'; 
 
 const BACKGROUNDS = [
-  { src: '/landscapes/europe.jpg', name: 'The Alps, Europe' },         
-  { src: '/landscapes/ausi.jpg', name: 'Uluru, Australia' },        
-  { src: '/landscapes/italy.jpg', name: 'Dolomites, Italy' },    
-  { src: '/landscapes/peru.jpg', name: 'Andes Mountains, Peru' }, 
+  { src: '/landscapes/alps.jpg', name: 'The Alps, Europe' },         
+  { src: '/landscapes/uluru.jpg', name: 'Uluru, Australia' },        
+  { src: '/landscapes/dolomites.jpg', name: 'Dolomites, Italy' },    
+  { src: '/landscapes/machu-picchu.jpg', name: 'Andes Mountains, Peru' }, 
 ];
 
 export default function App() {
@@ -16,6 +17,9 @@ export default function App() {
   const [showSignIn, setShowSignIn] = useState(false);
   const [showLang, setShowLang] = useState(false);
   
+  // New state to handle switching between pages
+  const [currentPage, setCurrentPage] = useState('home'); 
+
   const [bgIndex, setBgIndex] = useState(0);
 
   useEffect(() => {
@@ -28,6 +32,30 @@ export default function App() {
 
   const currentBg = BACKGROUNDS[bgIndex];
 
+  // Helper function to handle tab changes from HeroSearch
+  const handleTabChange = (tabId) => {
+    if (tabId === 'deals') {
+      setCurrentPage('deals');
+    } else {
+      setCurrentPage('home');
+      setActiveTab(tabId);
+    }
+  };
+
+  // If the user navigates to the Deals page, render it full screen
+  if (currentPage === 'deals') {
+    return (
+      <>
+        <DealsPage 
+          onBackToHome={() => { setCurrentPage('home'); setActiveTab('flights'); }} 
+          onSignIn={() => setShowSignIn(true)}
+        />
+        <SignInModal show={showSignIn} onHide={() => setShowSignIn(false)} />
+      </>
+    );
+  }
+
+  // Otherwise, render the Main Home Page
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
       <div 
@@ -63,10 +91,10 @@ export default function App() {
         </nav>
 
         <div className="relative z-10 flex-grow flex flex-col justify-center items-center px-4 w-full">
-          <HeroSearch activeTab={activeTab} setActiveTab={setActiveTab} />
+          {/* Pass the new handler to HeroSearch */}
+          <HeroSearch activeTab={activeTab} setActiveTab={handleTabChange} />
         </div>
 
-        {/* UPDATED: Removed the gray ••• oval, added key to force fade animation on text change */}
         <div className="relative z-10 flex justify-end px-8 pb-8">
           <div className="flex items-center">
             <span 
@@ -79,7 +107,9 @@ export default function App() {
         </div>
       </div>
 
-      <DealsSection />
+      {/* Need to pass the handler to DealsSection too, so "See All" works */}
+      <DealsSection onSeeAll={() => setCurrentPage('deals')} />
+
       <SignInModal show={showSignIn} onHide={() => setShowSignIn(false)} />
     </div>
   );
