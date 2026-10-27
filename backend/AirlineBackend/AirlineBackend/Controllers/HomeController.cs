@@ -113,12 +113,41 @@ public async Task<IActionResult> Register([FromBody] RegisterPayload reg)
             passengerId = created.PassengerId;
         }
     }
-    else
-    {
-        return BadRequest("Passenger information is missing");
-    }
+      else
+        {
+            if (string.IsNullOrEmpty(reg.email))
+            {
+                return BadRequest("Passenger information is missing");
+            }
 
-    var data = new UserAccount
+            var found = _context.Passenger.FirstOrDefault(i => i.Email == reg.email);
+            if (found != null)
+            {
+                passengerId = found.PassengerId;
+            }
+            else
+            {
+                var name = reg.email.Split('@')[0];
+                var parts = name.Split('.', '_', '-');
+                var first = parts.Length > 0 && parts[0].Length > 0 ? char.ToUpper(parts[0][0]) + parts[0].Substring(1) : "New";
+                var last = parts.Length > 1 && parts[1].Length > 0 ? char.ToUpper(parts[1][0]) + parts[1].Substring(1) : "Passenger";
+                var created = new Passenger
+                {
+                    FirstName = first,
+                    LastName = last,
+                    DateOfBirth = new DateTime(1990, 1, 1),
+                    Email = reg.email,
+                    Phone = null,
+                    Address = null
+                };
+
+                _context.Passenger.Add(created);
+                await _context.SaveChangesAsync();
+                passengerId = created.PassengerId;
+            }
+        }
+
+        var data = new UserAccount
     {
         Email = reg.email,
         PasswordHash = BCrypt.Net.BCrypt.HashPassword(reg.password),
