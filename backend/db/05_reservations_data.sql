@@ -12,17 +12,17 @@ INSERT INTO Reservation (confirmation_number, booking_date, booking_time,
 -- ReservationPassenger
 INSERT INTO ReservationPassenger (reservation_id, passenger_id, additional_checked_bags, meal_selection) VALUES
 ((SELECT reservation_id FROM Reservation WHERE confirmation_number='ARS1001'),
- (SELECT passenger_id   FROM Passenger   WHERE email='james.wilson@example.com'),   0, 'Standard'),
+ (SELECT passenger_id   FROM Passenger   WHERE email='james.wilson@google.com'),   0, 'Standard'),
 ((SELECT reservation_id FROM Reservation WHERE confirmation_number='ARS1002'),
- (SELECT passenger_id   FROM Passenger   WHERE email='emily.johnson@example.com'),  1, 'Vegetarian'),
+ (SELECT passenger_id   FROM Passenger   WHERE email='emily.johnson@google.com'),  1, 'Vegetarian'),
 ((SELECT reservation_id FROM Reservation WHERE confirmation_number='ARS1002'),
- (SELECT passenger_id   FROM Passenger   WHERE email='michael.brown@example.com'),  0, 'Standard'),
+ (SELECT passenger_id   FROM Passenger   WHERE email='michael.brown@google.com'),  0, 'Standard'),
 ((SELECT reservation_id FROM Reservation WHERE confirmation_number='ARS1003'),
- (SELECT passenger_id   FROM Passenger   WHERE email='sarah.davis@example.com'),    0, 'Vegan'),
+ (SELECT passenger_id   FROM Passenger   WHERE email='sarah.davis@google.com'),    0, 'Vegan'),
 ((SELECT reservation_id FROM Reservation WHERE confirmation_number='ARS1004'),
- (SELECT passenger_id   FROM Passenger   WHERE email='daniel.martinez@example.com'),2, 'Standard'),
+ (SELECT passenger_id   FROM Passenger   WHERE email='daniel.martinez@google.com'),2, 'Standard'),
 ((SELECT reservation_id FROM Reservation WHERE confirmation_number='ARS1005'),
- (SELECT passenger_id   FROM Passenger   WHERE email='michael.brown@example.com'),  0, 'Gluten Free');
+ (SELECT passenger_id   FROM Passenger   WHERE email='michael.brown@google.com'),  0, 'Gluten Free');
 
 -- ReservationSegment
 -- ARS1005 is Cancelled: segments marked Cancelled with cancellation metadata.
@@ -81,7 +81,7 @@ INSERT INTO SeatAssignment (reservation_segment_id, reservation_passenger_id, se
  (SELECT rp.reservation_passenger_id FROM ReservationPassenger rp
    JOIN Reservation r ON r.reservation_id = rp.reservation_id
    JOIN Passenger p   ON p.passenger_id   = rp.passenger_id
-  WHERE r.confirmation_number='ARS1001' AND p.email='james.wilson@example.com'),
+  WHERE r.confirmation_number='ARS1001' AND p.email='james.wilson@google.com'),
  (SELECT seat_id FROM Seat s JOIN Aircraft a ON a.aircraft_id = s.aircraft_id
    WHERE a.registration_number='N12345' AND s.seat_number='A01'),
  '2026-08-01 10:16:00', 0.00),
@@ -92,7 +92,7 @@ INSERT INTO SeatAssignment (reservation_segment_id, reservation_passenger_id, se
  (SELECT rp.reservation_passenger_id FROM ReservationPassenger rp
    JOIN Reservation r ON r.reservation_id = rp.reservation_id
    JOIN Passenger p   ON p.passenger_id   = rp.passenger_id
-  WHERE r.confirmation_number='ARS1002' AND p.email='emily.johnson@example.com'),
+  WHERE r.confirmation_number='ARS1002' AND p.email='emily.johnson@google.com'),
  (SELECT seat_id FROM Seat s JOIN Aircraft a ON a.aircraft_id = s.aircraft_id
    WHERE a.registration_number='N12345' AND s.seat_number='A02'),
  '2026-08-03 14:31:00', 0.00),
@@ -103,7 +103,7 @@ INSERT INTO SeatAssignment (reservation_segment_id, reservation_passenger_id, se
  (SELECT rp.reservation_passenger_id FROM ReservationPassenger rp
    JOIN Reservation r ON r.reservation_id = rp.reservation_id
    JOIN Passenger p   ON p.passenger_id   = rp.passenger_id
-  WHERE r.confirmation_number='ARS1002' AND p.email='michael.brown@example.com'),
+  WHERE r.confirmation_number='ARS1002' AND p.email='michael.brown@google.com'),
  (SELECT seat_id FROM Seat s JOIN Aircraft a ON a.aircraft_id = s.aircraft_id
    WHERE a.registration_number='N54321' AND s.seat_number='B01'),
  '2026-08-03 14:31:00', 15.00),
@@ -114,7 +114,7 @@ INSERT INTO SeatAssignment (reservation_segment_id, reservation_passenger_id, se
  (SELECT rp.reservation_passenger_id FROM ReservationPassenger rp
    JOIN Reservation r ON r.reservation_id = rp.reservation_id
    JOIN Passenger p   ON p.passenger_id   = rp.passenger_id
-  WHERE r.confirmation_number='ARS1004' AND p.email='daniel.martinez@example.com'),
+  WHERE r.confirmation_number='ARS1004' AND p.email='daniel.martinez@google.com'),
  (SELECT seat_id FROM Seat s JOIN Aircraft a ON a.aircraft_id = s.aircraft_id
    WHERE a.registration_number='N1234A' AND s.seat_number='C01'),
  '2026-06-10 16:21:00', 0.00);

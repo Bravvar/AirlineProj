@@ -99,6 +99,20 @@ export default function SignInModal({ show, onHide }) {
                 />
               </div>
 
+              {/* Username */}
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
+                </div>
+                <input 
+                  type="text" 
+                  placeholder="Username" 
+                  value={username}
+                  onChange={handleUsernameChange}
+                  className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl pl-11 pr-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all placeholder-gray-400" 
+                />
+              </div>
+
               {/* Email */}
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
@@ -142,26 +156,26 @@ export default function SignInModal({ show, onHide }) {
 
           {/* SHARED FIELDS */}
           
-          {/* Username */}
+          {/* Email (Moved here: Shared by both views) */}
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
+              <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" /><path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" /></svg>
             </div>
             <input 
-              type="text" 
-              placeholder="Username" 
-              value={username}
-              onChange={handleUsernameChange}
+              type="email" 
+              placeholder="Email" 
+              value={email}
+              onChange={handleEmailChange}
               className={`w-full bg-gray-50 border text-gray-900 font-medium rounded-2xl pl-11 pr-12 py-3 outline-none transition-all placeholder-gray-400 ${
-                view === 'signup' && username.length > 0 
+                view === 'signup' && isEmailValid 
                   ? 'border-green-400 focus:border-green-500 focus:ring-2 focus:ring-green-100 bg-green-50/30' 
                   : 'border-gray-200 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
               }`}
             />
-            {view === 'signup' && username.length > 0 && (
-               <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-green-500">
-                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-               </div>
+            {view === 'signup' && isEmailValid && (
+              <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-green-500">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
+              </div>
             )}
           </div>
 
