@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+
+const API_URL = "https://airlineproj.runasp.net";
 
 export default function SignInModal({ show, onHide }) {
   const [view, setView] = useState('login'); 
@@ -9,6 +11,52 @@ export default function SignInModal({ show, onHide }) {
   const [phone, setPhone] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+
+  const [formError, setFormError] = useState('');
+  const [formNotice, setFormNotice] = useState('');
+
+  // Send login / signup to the backend
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setFormError('');
+    setFormNotice('');
+    if (view === 'login') {
+      const res = await fetch(`${API_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: username, password }),
+      });
+      const text = await res.text();
+      if (!res.ok) { setFormError(text || 'Login failed'); return; }
+      const data = JSON.parse(text);
+      sessionStorage.setItem('token', data.token);
+      sessionStorage.setItem('role', data.role);
+      sessionStorage.setItem('email', data.email);
+      onHide();
+    } else {
+      const res = await fetch(`${API_URL}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, passengerId: 1 }),
+      });
+      const text = await res.text();
+      if (!res.ok) { setFormError(text || 'Sign up failed'); return; }
+      setFormNotice('Account created. Now log in.');
+      setView('login');
+    }
+  };
+
+  useEffect(() => {
+    if (!show) {
+      setFullName('');
+      setEmail('');
+      setPhone('');
+      setUsername('');
+      setPassword('');
+      setFormError('');
+      setFormNotice('');
+    }
+  }, [show]);
 
   if (!show) return null;
 
@@ -36,10 +84,10 @@ export default function SignInModal({ show, onHide }) {
     }
   };
 
-  // Handle Username typing (Only letters and numbers allowed)
+  // Handle Username typing (letters, numbers, @, dot, underscore, hyphen — so an email fits)
   const handleUsernameChange = (e) => {
     const value = e.target.value;
-    if (/^[a-zA-Z0-9]*$/.test(value)) {
+    if (/^[a-zA-Z0-9@._-]*$/.test(value)) {
       setUsername(value);
     }
   };
@@ -80,7 +128,7 @@ export default function SignInModal({ show, onHide }) {
           {view === 'login' ? 'Welcome Back' : 'Create an Account'}
         </h3>
         
-        <form onSubmit={(e) => e.preventDefault()} className="flex flex-col gap-3">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           
           {/* SIGN UP SPECIFIC FIELDS */}
           {view === 'signup' && (
@@ -201,6 +249,13 @@ export default function SignInModal({ show, onHide }) {
             </div>
           )}
 
+          {formError && (
+            <p className="bg-red-50 border border-red-200 text-red-700 font-semibold rounded-2xl px-4 py-3 text-sm text-center">{formError}</p>
+          )}
+          {formNotice && (
+            <p className="bg-green-50 border border-green-200 text-green-800 font-semibold rounded-2xl px-4 py-3 text-sm text-center">{formNotice}</p>
+          )}
+
           {/* Submit Button */}
           <button className={`w-full font-bold py-3 rounded-2xl mt-1 transition-all shadow-md hover:shadow-lg ${
             view === 'signup' && (!isPasswordValid || !isEmailValid)
@@ -216,12 +271,12 @@ export default function SignInModal({ show, onHide }) {
           {view === 'login' ? (
             <>
               Don't have an account?{' '}
-              <button onClick={() => setView('signup')} className="text-blue-600 hover:underline font-semibold">Sign up</button>
+              <button onClick={() => { setView('signup'); setFormError(''); setFormNotice(''); }} className="text-blue-600 hover:underline font-semibold">Sign up</button>
             </>
           ) : (
             <>
               Already have an account?{' '}
-              <button onClick={() => setView('login')} className="text-blue-600 hover:underline font-semibold">Log In</button>
+              <button onClick={() => { setView('login'); setFormError(''); setFormNotice(''); }} className="text-blue-600 hover:underline font-semibold">Log In</button>
             </>
           )}
         </p>
