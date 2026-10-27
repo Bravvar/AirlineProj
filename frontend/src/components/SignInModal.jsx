@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
-export default function SignInModal({ show, onHide }) {
+
+export default function SignInModal({ show, onHide, onLogin }) {
   const [view, setView] = useState('login'); 
 
   // Form State
@@ -9,6 +10,7 @@ export default function SignInModal({ show, onHide }) {
   const [phone, setPhone] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
 
   if (!show) return null;
 
@@ -53,6 +55,26 @@ export default function SignInModal({ show, onHide }) {
   const hasSymbol = /[^A-Za-z0-9]/.test(password);
   const isPasswordValid = isLengthValid && hasUppercase && hasSymbol;
 
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setError('');
+    if (view === 'login') {
+      const acct = DEMO_ACCOUNTS.find(
+        (a) => a.email.toLowerCase() === email.toLowerCase() && a.password === password
+      );
+      if (!acct) {
+        setError('Email or password is incorrect.');
+        return;
+      }
+      onLogin?.({ name: acct.name, email: acct.email, passengerId: acct.passengerId });
+    } else {
+      if (!isEmailValid || !isPasswordValid || !fullName.trim()) return;
+      onLogin?.({ name: fullName.trim(), email, passengerId: null });
+    }
+    setPassword('');
+    onHide();
+  };
+
   // Helper to render the green checkmark or gray dot
   const ValidationIndicator = ({ isValid, text }) => (
     <div className={`flex items-center gap-1.5 text-[11px] font-medium transition-colors ${isValid ? 'text-green-600' : 'text-gray-400'}`}>
@@ -80,7 +102,7 @@ export default function SignInModal({ show, onHide }) {
           {view === 'login' ? 'Welcome Back' : 'Create an Account'}
         </h3>
         
-        <form onSubmit={(e) => e.preventDefault()} className="flex flex-col gap-3">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           
           {/* SIGN UP SPECIFIC FIELDS */}
           {view === 'signup' && (
@@ -111,31 +133,6 @@ export default function SignInModal({ show, onHide }) {
                   onChange={handleUsernameChange}
                   className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl pl-11 pr-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all placeholder-gray-400" 
                 />
-              </div>
-
-              {/* Email */}
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" /><path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" /></svg>
-                </div>
-                <input 
-                  type="email" 
-                  placeholder="Email" 
-                  value={email}
-                  onChange={handleEmailChange}
-                  // Added dynamic styling for valid email
-                  className={`w-full bg-gray-50 border text-gray-900 font-medium rounded-2xl pl-11 pr-12 py-3 outline-none transition-all placeholder-gray-400 ${
-                    view === 'signup' && isEmailValid 
-                      ? 'border-green-400 focus:border-green-500 focus:ring-2 focus:ring-green-100 bg-green-50/30' 
-                      : 'border-gray-200 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
-                  }`}
-                />
-                {/* Checkmark for valid email */}
-                {view === 'signup' && isEmailValid && (
-                  <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-green-500">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-                  </div>
-                )}
               </div>
 
               {/* Phone Number */}
@@ -215,6 +212,8 @@ export default function SignInModal({ show, onHide }) {
             </div>
           )}
 
+          {error && <p className="text-sm text-red-600 font-medium px-1">{error}</p>}
+
           {/* Submit Button */}
           <button className={`w-full font-bold py-3 rounded-2xl mt-1 transition-all shadow-md hover:shadow-lg ${
             view === 'signup' && (!isPasswordValid || !isEmailValid)
@@ -230,12 +229,12 @@ export default function SignInModal({ show, onHide }) {
           {view === 'login' ? (
             <>
               Don't have an account?{' '}
-              <button onClick={() => setView('signup')} className="text-blue-600 hover:underline font-semibold">Sign up</button>
+              <button type="button" onClick={() => { setView('signup'); setError(''); }} className="text-blue-600 hover:underline font-semibold">Sign up</button>
             </>
           ) : (
             <>
               Already have an account?{' '}
-              <button onClick={() => setView('login')} className="text-blue-600 hover:underline font-semibold">Log In</button>
+              <button type="button" onClick={() => { setView('login'); setError(''); }} className="text-blue-600 hover:underline font-semibold">Log In</button>
             </>
           )}
         </p>
