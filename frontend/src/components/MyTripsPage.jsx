@@ -37,7 +37,7 @@ export default function MyTripsPage({ token, email, onBackToHome, onSignIn, onSi
     <div className="min-h-screen bg-white font-sans text-gray-900">
       {/* Navbar */}
       <nav className="sticky top-0 z-50 bg-white border-b border-gray-100 px-8 py-4 flex justify-between items-center shadow-sm">
-        <div className="cursor-pointer" onClick={onBackToHome}>
+        <div className="cursor-pointer" onClick={() => onBackToHome()}>
           <Logo />
         </div>
         <div className="flex items-center gap-6">

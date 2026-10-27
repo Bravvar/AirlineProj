@@ -67,10 +67,12 @@ export default function App() {
     }
   };
 
-  const goHome = () => { setCurrentPage('home'); setActiveTab('flights'); };
-  const modal = (
-    <SignInModal show={showSignIn} onHide={closeSignIn} />
-  );
+  const goHome = (tab = 'flights') => {
+    setCurrentPage('home');
+    setActiveTab(tab);
+  };
+
+  const modal = <SignInModal show={showSignIn} onHide={closeSignIn} />;
 
   if (currentPage === 'trips') {
     return (
