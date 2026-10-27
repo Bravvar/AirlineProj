@@ -6,10 +6,10 @@ import SignInModal from './components/SignInModal';
 import DealsPage from './components/DealsPage';
 
 const BACKGROUNDS = [
-  { src: '/landscapes/alps.jpg', name: 'The Alps, Europe' },
-  { src: '/landscapes/uluru.jpg', name: 'Uluru, Australia' },
-  { src: '/landscapes/dolomites.jpg', name: 'Dolomites, Italy' },
-  { src: '/landscapes/machu-picchu.jpg', name: 'Andes Mountains, Peru' },
+  { src: '/landscapes/europe.jpg', name: 'The Alps, Europe' },
+  { src: '/landscapes/ausi.jpg', name: 'Uluru, Australia' },
+  { src: '/landscapes/italy.jpg', name: 'Dolomites, Italy' },
+  { src: '/landscapes/peru.jpg', name: 'Andes Mountains, Peru' },
 ];
 
 export default function App() {
