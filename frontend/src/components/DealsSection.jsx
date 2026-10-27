@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import ComingSoonModal from './ComingSoonModal';
+
 const DEAL_1_IMG = '/landscapes/new zea.jpg';
 const DEAL_2_IMG = '/landscapes/ausi.jpg';
 const DEAL_3_IMG = '/landscapes/india.jpg';
@@ -10,6 +13,8 @@ const deals = [
 
 // Add the onSeeAll prop
 export default function DealsSection({ onSeeAll }) {
+  const [showComingSoon, setShowComingSoon] = useState(false);
+
   return (
     <div className="max-w-6xl mx-auto py-16 px-4">
       <div className="flex justify-between items-end mb-8">
@@ -35,13 +40,18 @@ export default function DealsSection({ onSeeAll }) {
             <div className="p-6 flex flex-col flex-grow">
               <h3 className="text-xl font-bold text-gray-900 mb-2">{deal.title}</h3>
               <p className="text-gray-500 text-sm mb-6 flex-grow">{deal.desc}</p>
-              <button className="bg-gray-100 hover:bg-gray-200 text-gray-900 font-medium py-2 px-6 rounded-lg self-start transition-colors">
+              <button
+                onClick={() => setShowComingSoon(true)}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-900 font-medium py-2 px-6 rounded-lg self-start transition-colors cursor-pointer"
+              >
                 Claim now
               </button>
             </div>
           </div>
         ))}
       </div>
+
+      <ComingSoonModal show={showComingSoon} onHide={() => setShowComingSoon(false)} />
     </div>
   );
 }

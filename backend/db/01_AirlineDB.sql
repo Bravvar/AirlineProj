@@ -247,6 +247,7 @@ CREATE TABLE FlightFare (
 );
 
 
+
 CREATE TABLE ReservationSegment (
     reservation_segment_id  INT AUTO_INCREMENT PRIMARY KEY,
     reservation_id          INT NOT NULL,
@@ -257,15 +258,31 @@ CREATE TABLE ReservationSegment (
     fare_price_at_booking   DECIMAL(10,2) NOT NULL,
     cancellation_date_time  DATETIME,
     cancellation_reason     VARCHAR(255),
-    FOREIGN KEY (reservation_id) REFERENCES Reservation(reservation_id) ON DELETE CASCADE,
-    FOREIGN KEY (flight_id)      REFERENCES Flight(flight_id),
-    FOREIGN KEY (flight_fare_id) REFERENCES FlightFare(flight_fare_id),
-    CONSTRAINT chk_segment_price   CHECK (fare_price_at_booking >= 0.00),
-    CONSTRAINT chk_segment_number  CHECK (segment_number > 0),
+
+    FOREIGN KEY (reservation_id)
+        REFERENCES Reservation(reservation_id) ON DELETE CASCADE,
+    FOREIGN KEY (flight_id)
+        REFERENCES Flight(flight_id),
+    FOREIGN KEY (flight_fare_id)
+        REFERENCES FlightFare(flight_fare_id),
+
+    CONSTRAINT chk_segment_price
+        CHECK (fare_price_at_booking >= 0.00),
+    CONSTRAINT chk_segment_number
+        CHECK (segment_number > 0),
     CONSTRAINT chk_segment_status
-        CHECK (segment_status IN ('Booked','Cancelled','Changed','Flown')),
-    CONSTRAINT uq_reservation_segment_number UNIQUE (reservation_id, segment_number)
+        CHECK (segment_status IN
+            ('Booked', 'Cancelled', 'Changed', 'Flown')),
+
+    CONSTRAINT uq_reservation_segment_number
+        UNIQUE (reservation_id, segment_number),
+
+    -- Ensures seat assignments reference the correct flight.
+    CONSTRAINT uq_segment_flight_pair
+        UNIQUE (reservation_segment_id, flight_id)
 );
+
+
 
 
 CREATE TABLE SeatAssignment (
@@ -275,13 +292,52 @@ CREATE TABLE SeatAssignment (
     seat_id                  INT NOT NULL,
     assignment_date_time     DATETIME NOT NULL,
     seat_fee                 DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-    FOREIGN KEY (reservation_segment_id)   REFERENCES ReservationSegment(reservation_segment_id) ON DELETE CASCADE,
-    FOREIGN KEY (reservation_passenger_id) REFERENCES ReservationPassenger(reservation_passenger_id),
-    FOREIGN KEY (seat_id)                  REFERENCES Seat(seat_id),
-    CONSTRAINT chk_seat_fee CHECK (seat_fee >= 0.00),
-    CONSTRAINT uq_passenger_segment_seat UNIQUE (reservation_segment_id, reservation_passenger_id),
-    -- Business Rule 8: same physical seat cannot be assigned twice on same segment
-    CONSTRAINT uq_segment_seat UNIQUE (reservation_segment_id, seat_id)
+
+    -- New columns for flight and seat status.
+    flight_id                INT NOT NULL,
+    active_seat              TINYINT NULL DEFAULT 1,
+
+    FOREIGN KEY (reservation_segment_id)
+        REFERENCES ReservationSegment(reservation_segment_id)
+        ON DELETE CASCADE,
+
+    FOREIGN KEY (reservation_passenger_id)
+        REFERENCES ReservationPassenger(reservation_passenger_id),
+
+    FOREIGN KEY (seat_id)
+        REFERENCES Seat(seat_id),
+
+    -- Ensure the seat assignment belongs to the segment's flight.
+    CONSTRAINT fk_seat_assignment_segment_flight
+        FOREIGN KEY (reservation_segment_id, flight_id)
+        REFERENCES ReservationSegment
+            (reservation_segment_id, flight_id),
+
+    CONSTRAINT chk_seat_fee
+        CHECK (seat_fee >= 0.00),
+
+    CONSTRAINT chk_active_seat
+        CHECK (active_seat = 1 OR active_seat IS NULL),
+
+    -- One active assignment per physical seat per flight.
+    CONSTRAINT uq_active_flight_seat
+        UNIQUE (flight_id, seat_id, active_seat),
+
+    -- One active seat per passenger within a segment.
+    CONSTRAINT uq_active_passenger_segment
+        UNIQUE (
+            reservation_segment_id,
+            reservation_passenger_id,
+            active_seat
+        ),
+
+    -- Allow historical released seats but prevent active duplicates.
+    CONSTRAINT uq_active_segment_seat
+        UNIQUE (
+            reservation_segment_id,
+            seat_id,
+            active_seat
+        )
 );
 
 CREATE TABLE TicketSegment (
