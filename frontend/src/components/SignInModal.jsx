@@ -33,10 +33,15 @@ export default function SignInModal({ show, onHide }) {
       sessionStorage.setItem('email', data.email);
       onHide();
     } else {
+      const normalized = email.trim().toLowerCase();
+      if (normalized.endsWith('@coog10admin.com') || normalized.endsWith('@coog10employee.com')) {
+        setFormError('This email domain is reserved for staff accounts.');
+        return;
+      }
       const res = await fetch(`${API_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, passengerId: 1 }),
+        body: JSON.stringify({ email, password }),
       });
       const text = await res.text();
       if (!res.ok) { setFormError(text || 'Sign up failed'); return; }

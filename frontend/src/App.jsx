@@ -5,6 +5,8 @@ import DealsSection from './components/DealsSection';
 import SignInModal from './components/SignInModal';
 import DealsPage from './components/DealsPage';
 import MyTripsPage from './components/MyTripsPage';
+import AdminPage from './components/AdminPage';
+import EmployeePage from './components/EmployeePage';
 
 const BACKGROUNDS = [
   { src: '/landscapes/europe.jpg', name: 'The Alps, Europe' },
@@ -74,6 +76,25 @@ export default function App() {
 
   const modal = <SignInModal show={showSignIn} onHide={closeSignIn} />;
 
+  if (currentPage === 'admin' && auth.role === 'Supervisor') {
+    return (
+      <>
+        <AdminPage token={auth.token} email={auth.email} onBackToHome={goHome} onSignOut={handleLogout} />
+        {modal}
+      </>
+    );
+  }
+
+  if (currentPage === 'employee' && (auth.role === 'Employee' || auth.role === 'Supervisor')) {
+    return (
+      <>
+        <EmployeePage token={auth.token} email={auth.email} onBackToHome={goHome} onSignOut={handleLogout} />
+        {modal}
+      </>
+    );
+  }
+
+
   if (currentPage === 'trips') {
     return (
       <>
@@ -119,6 +140,25 @@ export default function App() {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
               My Trips
             </a>
+            {auth.role === 'Supervisor' && (
+              <a
+                href="#"
+                onClick={(e) => { e.preventDefault(); setCurrentPage('admin'); }}
+                className="text-white font-semibold hover:opacity-80 text-sm drop-shadow-sm transition-opacity"
+              >
+                Admin
+              </a>
+            )}
+            {(auth.role === 'Employee' || auth.role === 'Supervisor') && (
+              <a
+                href="#"
+                onClick={(e) => { e.preventDefault(); setCurrentPage('employee'); }}
+                className="text-white font-semibold hover:opacity-80 text-sm drop-shadow-sm transition-opacity"
+              >
+                Staff
+              </a>
+            )}
+            
             {auth.token ? (
               <div className="flex items-center gap-3">
                 <span className="text-white font-semibold text-sm drop-shadow-sm">
