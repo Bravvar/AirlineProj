@@ -3,7 +3,7 @@ import Logo from './Logo';
 
 const API_URL = "https://airlineproj.runasp.net";
 
-export default function EmployeePage({ token, email, onBackToHome, onSignOut }) {
+export default function EmployeePage({ token, email, onBackToHome, onSignOut, onToggleSidebar }) {
   const [tab, setTab] = useState('flights');
   const [flights, setFlights] = useState(null);
   const [reservations, setReservations] = useState(null);
@@ -41,126 +41,114 @@ export default function EmployeePage({ token, email, onBackToHome, onSignOut }) 
     setManifest(res.ok ? await res.json() : { passengers: [], segments: [] });
   };
 
-  const menuItems = [
-    { id: 'flights', label: 'Flight Status', icon: 'M12 19l9 2-9-18-9 18 9-2zm0 0v-8' },
-    { id: 'reservations', label: 'Passengers', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z' },
-  ];
-
   return (
-    <div className="min-h-screen bg-[#F4F6F9] flex font-sans text-gray-900">
-      {/* SIDEBAR */}
-      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col fixed h-full z-20">
-        <div className="h-20 flex items-center px-8 border-b border-gray-100 cursor-pointer" onClick={() => onBackToHome()}>
+    <div className="min-h-screen bg-[#F4F6F9] flex flex-col font-sans text-gray-900">
+      <header className="h-20 bg-white border-b border-gray-200 flex items-center justify-between px-8 sticky top-0 z-10">
+        <div className="cursor-pointer" onClick={() => onBackToHome()}>
           <Logo />
         </div>
-        <div className="flex-1 py-6 px-4 flex flex-col gap-2">
-          {menuItems.map(item => (
+        <div className="flex items-center gap-4">
+          <span className="text-sm font-semibold text-gray-500">{email} (Staff)</span>
+          <button onClick={onToggleSidebar} className="w-10 h-10 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold shadow-md hover:scale-105 transition-transform">
+            {email.charAt(0).toUpperCase()}
+          </button>
+        </div>
+      </header>
+
+      <main className="flex-1 max-w-7xl mx-auto w-full p-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-8">Staff Workspace</h1>
+
+        <div className="flex gap-2 mb-8 flex-wrap">
+          {[
+            { id: 'flights', label: 'Flight Status' },
+            { id: 'reservations', label: 'Passengers' },
+          ].map(item => (
             <button
               key={item.id}
               onClick={() => setTab(item.id)}
-              className={`flex items-center gap-3 px-4 py-3 rounded-2xl font-semibold text-sm transition-all ${
-                tab === item.id ? 'bg-[#0066ff] text-white shadow-md' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+              className={`px-5 py-2 rounded-full text-sm font-semibold transition-all ${
+                tab === item.id
+                  ? 'bg-[#0066ff] text-white shadow-md'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
               }`}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={item.icon} /></svg>
               {item.label}
             </button>
           ))}
         </div>
-        <div className="p-4 border-t border-gray-100">
-          <button onClick={onSignOut} className="w-full text-red-600 font-semibold text-sm py-3 rounded-2xl hover:bg-red-50 transition-colors">
-            Sign Out
-          </button>
-        </div>
-      </aside>
 
-      {/* MAIN CONTENT */}
-      <main className="ml-64 flex-1 flex flex-col min-h-screen">
-        <header className="h-20 bg-white border-b border-gray-200 flex items-center justify-between px-8 sticky top-0 z-10">
-          <h1 className="text-2xl font-bold text-gray-900">Staff Workspace</h1>
-          <div className="flex items-center gap-4">
-            <span className="text-sm font-semibold text-gray-400">{email}</span>
-            <div className="w-10 h-10 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold">
-              {email.charAt(0).toUpperCase()}
-            </div>
+        {error && <p className="text-sm text-red-600 font-medium mb-4">{error}</p>}
+
+        {tab === 'flights' && (
+          flights === null ? <p className="text-gray-500">Loading…</p> :
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            {flights.map(f => (
+              <div key={f.flightId} className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm relative overflow-hidden">
+                <div className="flex justify-between items-start mb-6">
+                  <div>
+                    <p className="text-xs text-gray-400 font-bold mb-1">{String(f.departureDate).slice(0,10)}</p>
+                    <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                      {f.originAirportCode} 
+                      <svg className="w-4 h-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/></svg>
+                      {f.destinationAirportCode}
+                    </h3>
+                    <p className="text-sm text-gray-500 mt-1 font-medium">{f.flightNumber}</p>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                    f.flightStatus === 'Cancelled' ? 'bg-red-50 text-red-700'
+                    : f.flightStatus === 'Delayed' ? 'bg-amber-50 text-amber-700'
+                    : 'bg-green-50 text-green-700'
+                  }`}>{f.flightStatus}</span>
+                </div>
+                <div className="bg-gray-50 rounded-2xl p-4 flex justify-between items-center">
+                  <span className="text-sm text-gray-500 font-semibold">Passengers</span>
+                  <span className="text-lg font-bold text-gray-900">{f.bookedSeats}</span>
+                </div>
+                {f.statusReason && (
+                  <p className="text-xs text-amber-700 bg-amber-50 rounded-xl px-3 py-2 mt-3">{f.statusReason}</p>
+                )}
+              </div>
+            ))}
           </div>
-        </header>
+        )}
 
-        <div className="p-8 max-w-7xl mx-auto w-full">
-          {error && <p className="text-sm text-red-600 font-medium mb-4">{error}</p>}
+        {tab === 'reservations' && (
+          <div className="flex flex-col gap-6">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search confirmation number..."
+              className="w-full max-w-md bg-white border border-gray-200 rounded-2xl px-5 py-3 text-sm font-medium outline-none focus:border-[#0066ff] focus:ring-2 focus:ring-blue-100 shadow-sm"
+            />
 
-          {tab === 'flights' && (
-            flights === null ? <p className="text-gray-500">Loading…</p> :
-            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-              {flights.map(f => (
-                <div key={f.flightId} className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm relative overflow-hidden">
-                  <div className="flex justify-between items-start mb-6">
-                    <div>
-                      <p className="text-xs text-gray-400 font-bold mb-1">{String(f.departureDate).slice(0,10)}</p>
-                      <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                        {f.originAirportCode} 
-                        <svg className="w-4 h-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/></svg>
-                        {f.destinationAirportCode}
-                      </h3>
-                      <p className="text-sm text-gray-500 mt-1 font-medium">{f.flightNumber}</p>
-                    </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                      f.flightStatus === 'Cancelled' ? 'bg-red-50 text-red-700'
-                      : f.flightStatus === 'Delayed' ? 'bg-amber-50 text-amber-700'
-                      : 'bg-green-50 text-green-700'
-                    }`}>{f.flightStatus}</span>
-                  </div>
-                  <div className="bg-gray-50 rounded-2xl p-4 flex justify-between items-center">
-                    <span className="text-sm text-gray-500 font-semibold">Passengers</span>
-                    <span className="text-lg font-bold text-gray-900">{f.bookedSeats}</span>
-                  </div>
-                  {f.statusReason && (
-                    <p className="text-xs text-amber-700 bg-amber-50 rounded-xl px-3 py-2 mt-3">{f.statusReason}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {tab === 'reservations' && (
-            <div className="flex flex-col gap-6">
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search confirmation number..."
-                className="w-full max-w-md bg-white border border-gray-200 rounded-2xl px-5 py-3 text-sm font-medium outline-none focus:border-[#0066ff] focus:ring-2 focus:ring-blue-100 shadow-sm"
-              />
-
-              {reservations === null ? <p className="text-gray-500">Loading…</p> :
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {reservations.map(r => (
-                    <div key={r.reservationId} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 flex flex-col justify-between">
-                      <div className="flex justify-between items-start mb-6">
-                        <div>
-                          <h3 className="text-lg font-bold text-gray-900">{r.confirmationNumber}</h3>
-                          <p className="text-sm text-gray-500 mt-1">{r.passengerCount} passenger{r.passengerCount !== 1 ? 's' : ''} · {r.tripType}</p>
-                        </div>
-                        <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700">
-                          {r.reservationStatus}
-                        </span>
+            {reservations === null ? <p className="text-gray-500">Loading…</p> :
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {reservations.map(r => (
+                  <div key={r.reservationId} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 flex flex-col justify-between">
+                    <div className="flex justify-between items-start mb-6">
+                      <div>
+                        <h3 className="text-lg font-bold text-gray-900">{r.confirmationNumber}</h3>
+                        <p className="text-sm text-gray-500 mt-1">{r.passengerCount} passenger{r.passengerCount !== 1 ? 's' : ''} · {r.tripType}</p>
                       </div>
-                      <button
-                        onClick={() => openManifest(r.reservationId)}
-                        className="w-full bg-gray-50 hover:bg-gray-100 text-gray-900 font-bold py-3 rounded-xl transition-colors text-sm"
-                      >
-                        View Manifest
-                      </button>
+                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700">
+                        {r.reservationStatus}
+                      </span>
                     </div>
-                  ))}
-                </div>
-              }
-            </div>
-          )}
-        </div>
+                    <button
+                      onClick={() => openManifest(r.reservationId)}
+                      className="w-full bg-gray-50 hover:bg-gray-100 text-gray-900 font-bold py-3 rounded-xl transition-colors text-sm"
+                    >
+                      View Manifest
+                    </button>
+                  </div>
+                ))}
+              </div>
+            }
+          </div>
+        )}
       </main>
 
-      {/* MANIFEST MODAL */}
       {selectedRes && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setSelectedRes(null)}>
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-8 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
