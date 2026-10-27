@@ -63,70 +63,78 @@ public class HomeController : ControllerBase
     }
 
     [AllowAnonymous]
-    [HttpPost("auth/register")]
-    public async Task<IActionResult> Register([FromBody] RegisterPayload reg)
+[HttpPost("auth/register")]
+public async Task<IActionResult> Register([FromBody] RegisterPayload reg)
+{
+    var normalized = reg.email.Trim().ToLowerInvariant();
+
+    // Staff domains are issued by the company, never self-registered
+    if (normalized.EndsWith("@coog10admin.com") || normalized.EndsWith("@coog10employee.com"))
     {
-        var check = _context.UserAccount.FirstOrDefault(i => i.Email == reg.email);
-        if (check != null)
+        return BadRequest("This email domain is reserved for staff accounts.");
+    }
+    if (_context.UserAccount.Any(i => i.Email == normalized))
+    {
+        return BadRequest("Account already exists");
+    }
+    int? passengerId = null;
+
+    if (reg.passengerId != null)
+    {
+        var linked = _context.Passenger.FirstOrDefault(i => i.PassengerId == reg.passengerId);
+        if (linked == null)
         {
-            return BadRequest("Account already exists");
+            return NotFound("No passenger found");
         }
 
-        int? passengerId = null;
-
-        if (reg.passengerId != null)
+        passengerId = reg.passengerId;
+    }
+    else if (!string.IsNullOrEmpty(reg.firstName) && !string.IsNullOrEmpty(reg.lastName) && reg.dateOfBirth != null)
+    {
+        var existing = _context.Passenger.FirstOrDefault(i => i.Email == reg.email);
+        if (existing != null)
         {
-            var linked = _context.Passenger.FirstOrDefault(i => i.PassengerId == reg.passengerId);
-            if (linked == null)
-            {
-                return NotFound("No passenger found");
-            }
-
-            passengerId = reg.passengerId;
-        }
-        else if (!string.IsNullOrEmpty(reg.firstName) && !string.IsNullOrEmpty(reg.lastName) && reg.dateOfBirth != null)
-        {
-            var existing = _context.Passenger.FirstOrDefault(i => i.Email == reg.email);
-            if (existing != null)
-            {
-                passengerId = existing.PassengerId;
-            }
-            else
-            {
-                var created = new Passenger
-                {
-                    FirstName = reg.firstName,
-                    LastName = reg.lastName,
-                    DateOfBirth = reg.dateOfBirth.Value,
-                    Email = reg.email,
-                    Phone = null,
-                    Address = null
-                };
-
-                _context.Passenger.Add(created);
-                await _context.SaveChangesAsync();
-                passengerId = created.PassengerId;
-            }
+            passengerId = existing.PassengerId;
         }
         else
         {
-            return BadRequest("Passenger information is missing");
+            var created = new Passenger
+            {
+                FirstName = reg.firstName,
+                LastName = reg.lastName,
+                DateOfBirth = reg.dateOfBirth.Value,
+                Email = reg.email,
+                Phone = null,
+                Address = null
+            };
+
+            _context.Passenger.Add(created);
+            await _context.SaveChangesAsync();
+            passengerId = created.PassengerId;
         }
-
-        var data = new UserAccount
-        {
-            Email = reg.email,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(reg.password),
-            Role = "Member",
-            PassengerId = passengerId,
-            EmployeeId = null
-        };
-
-        _context.UserAccount.Add(data);
-        await _context.SaveChangesAsync();
-
-        return Ok("Account created");
     }
+    else
+    {
+        return BadRequest("Passenger information is missing");
+    }
+
+    var data = new UserAccount
+    {
+        Email = reg.email,
+        PasswordHash = BCrypt.Net.BCrypt.HashPassword(reg.password),
+        Role = "Member",
+        PassengerId = passengerId,
+        EmployeeId = null
+    };
+
+    _context.UserAccount.Add(data);
+    await _context.SaveChangesAsync();
+
+    return Ok("Account created");
+}
+
+private static string Capitalize(string s) =>
+    string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s[1..];
 
     [HttpGet("auth/me")]
     public IActionResult Me()

@@ -23,7 +23,7 @@ export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onS
 
       {/* Navbar */}
       <nav className="sticky top-0 z-50 bg-white border-b border-gray-100 px-8 py-4 flex justify-between items-center shadow-sm">
-        <div className="cursor-pointer" onClick={onBackToHome}>
+        <div className="cursor-pointer" onClick={() => onBackToHome()}>
           <Logo />
         </div>
 
@@ -46,16 +46,10 @@ export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onS
 
       {/* Secondary Nav (Tabs) - purely visual for the Deals page */}
       <div className="flex justify-center border-b border-gray-100 py-4 gap-8">
-        <button onClick={onBackToHome} className="flex items-center gap-2 text-gray-500 hover:text-black font-medium transition-colors">
-          <span>🛏</span> Stays
-        </button>
-        <button onClick={onBackToHome} className="flex items-center gap-2 text-gray-500 hover:text-black font-medium transition-colors">
+        <button onClick={() => onBackToHome('flights')} className="flex items-center gap-2 text-gray-500 hover:text-black font-medium transition-colors">
           <span>✈</span> Flights
         </button>
-        <button onClick={onBackToHome} className="flex items-center gap-2 text-gray-500 hover:text-black font-medium transition-colors">
-          <span>🚗</span> Cars
-        </button>
-        <button onClick={onBackToHome} className="flex items-center gap-2 text-gray-500 hover:text-black font-medium transition-colors">
+        <button onClick={() => onBackToHome('packages')} className="flex items-center gap-2 text-gray-500 hover:text-black font-medium transition-colors">
           <span>🧳</span> Packages
         </button>
         <button className="flex items-center gap-2 text-blue-600 border border-blue-600 bg-blue-50 px-4 py-1.5 rounded-full font-medium">

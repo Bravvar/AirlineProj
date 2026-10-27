@@ -37,7 +37,7 @@ export default function MyTripsPage({ token, email, onBackToHome, onSignIn, onSi
     <div className="min-h-screen bg-white font-sans text-gray-900">
       {/* Navbar */}
       <nav className="sticky top-0 z-50 bg-white border-b border-gray-100 px-8 py-4 flex justify-between items-center shadow-sm">
-        <div className="cursor-pointer" onClick={onBackToHome}>
+        <div className="cursor-pointer" onClick={() => onBackToHome()}>
           <Logo />
         </div>
         <div className="flex items-center gap-6">
@@ -85,7 +85,7 @@ export default function MyTripsPage({ token, email, onBackToHome, onSignIn, onSi
               <div className="max-w-md mx-auto bg-white rounded-3xl border border-gray-200 shadow-[0_4px_20px_rgb(0,0,0,0.05)] p-10 text-center">
                 <h3 className="text-xl font-bold text-gray-900 mb-2">No confirmed trips yet</h3>
                 <p className="text-gray-500 text-sm mb-6">Book a flight and it will show up here.</p>
-                <button onClick={onBackToHome} className="bg-gray-100 hover:bg-gray-200 text-gray-900 font-medium py-2.5 px-6 rounded-lg transition-colors">
+                <button onClick={() => onBackToHome('flights')} className="bg-gray-100 hover:bg-gray-200 text-gray-900 font-medium py-2.5 px-6 rounded-lg transition-colors">
                   Search flights
                 </button>
               </div>
