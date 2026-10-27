@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Logo from './Logo';
+import ComingSoonModal from './ComingSoonModal';
 
 const ALL_DEALS = [
   { title: 'New Zealand', desc: 'Tap to save $300 off select flights to New Zealand', img: '/landscapes/new zea.jpg', badge: '100% PURE NEW ZEALAND' },
@@ -11,6 +12,8 @@ const ALL_DEALS = [
 ];
 
 export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onSignOut }) {
+  const [showComingSoon, setShowComingSoon] = useState(false);
+
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
@@ -70,7 +73,11 @@ export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onS
         {/* Grid of Deals */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {ALL_DEALS.map((deal, idx) => (
-            <div key={idx} className="bg-white rounded-3xl shadow-[0_4px_20px_rgb(0,0,0,0.05)] border border-gray-200 overflow-hidden flex flex-col hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer">
+            <div
+              key={idx}
+              onClick={() => setShowComingSoon(true)}
+              className="bg-white rounded-3xl shadow-[0_4px_20px_rgb(0,0,0,0.05)] border border-gray-200 overflow-hidden flex flex-col hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:-translate-y-1 transition-all duration-300 cursor-pointer"
+            >
               <div className="relative h-56">
                 <img src={deal.img} alt={deal.title} className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-black/30 flex items-center justify-center p-4">
@@ -88,6 +95,8 @@ export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onS
           ))}
         </div>
       </div>
+
+      <ComingSoonModal show={showComingSoon} onHide={() => setShowComingSoon(false)} />
     </div>
   );
 }
