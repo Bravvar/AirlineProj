@@ -23,7 +23,7 @@ export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onS
 
       {/* Navbar */}
       <nav className="sticky top-0 z-50 bg-white border-b border-gray-100 px-8 py-4 flex justify-between items-center shadow-sm">
-        <div className="cursor-pointer" onClick={() => onBackToHome()}>
+        <div className="cursor-pointer" onClick={() => onBackToHome('flights')}>
           <Logo />
         </div>
 

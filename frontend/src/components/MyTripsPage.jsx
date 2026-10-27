@@ -354,7 +354,7 @@ export default function MyTripsPage({ token, email, onBackToHome, onReports, onS
           <Logo />
         </div>
         <div className="flex items-center gap-6">
-          <button onClick={onBackToHome} className="text-gray-600 hover:text-gray-900 font-semibold text-sm transition-colors">
+          <button onClick={() => onBackToHome('flights')} className="text-gray-600 hover:text-gray-900 font-semibold text-sm transition-colors cursor-pointer">
             Flights
           </button>
           <span className="text-blue-600 font-semibold flex items-center gap-2 text-sm">

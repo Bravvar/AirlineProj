@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import Logo from './Logo';
+import { API_URL } from '../config';
 
-const API_URL = "https://airlineproj.runasp.net";
-
-export default function EmployeePage({ token, email, onBackToHome, onSignOut, onToggleSidebar }) {
+export default function EmployeePage({ token, email, onBackToHome, onToggleSidebar }) {
   const [tab, setTab] = useState('flights');
   const [flights, setFlights] = useState(null);
   const [reservations, setReservations] = useState(null);
@@ -12,31 +11,35 @@ export default function EmployeePage({ token, email, onBackToHome, onSignOut, on
   const [selectedRes, setSelectedRes] = useState(null);
   const [error, setError] = useState('');
 
-  const headers = { Authorization: `Bearer ${token}` };
-
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
   useEffect(() => {
-    if (!token) return;
-    const load = async () => {
+    let ignore = false;
+    async function load() {
+      if (!token) return;
       try {
+        const headers = { Authorization: `Bearer ${token}` };
         if (tab === 'flights') {
           const res = await fetch(`${API_URL}/api/staff/flights`, { headers });
-          setFlights(res.ok ? await res.json() : []);
+          if (!ignore) setFlights(res.ok ? await res.json() : []);
         }
         if (tab === 'reservations') {
           const qs = search ? `?confirmation=${encodeURIComponent(search)}` : '';
           const res = await fetch(`${API_URL}/api/staff/reservations${qs}`, { headers });
-          setReservations(res.ok ? await res.json() : []);
+          if (!ignore) setReservations(res.ok ? await res.json() : []);
         }
-      } catch { setError('Could not load data.'); }
-    };
+      } catch {
+        if (!ignore) setError('Could not load data.');
+      }
+    }
     load();
+    return () => { ignore = true; };
   }, [tab, token, search]);
 
   const openManifest = async (id) => {
     setSelectedRes(id);
     setManifest(null);
+    const headers = { Authorization: `Bearer ${token}` };
     const res = await fetch(`${API_URL}/api/staff/reservations/${id}/manifest`, { headers });
     setManifest(res.ok ? await res.json() : { passengers: [], segments: [] });
   };
@@ -44,12 +47,12 @@ export default function EmployeePage({ token, email, onBackToHome, onSignOut, on
   return (
     <div className="min-h-screen bg-[#F4F6F9] flex flex-col font-sans text-gray-900">
       <header className="h-20 bg-white border-b border-gray-200 flex items-center justify-between px-8 sticky top-0 z-10">
-        <div className="cursor-pointer" onClick={() => onBackToHome()}>
+        <div className="cursor-pointer" onClick={() => onBackToHome('flights')}>
           <Logo />
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm font-semibold text-gray-500">{email} (Staff)</span>
-          <button onClick={onToggleSidebar} className="w-10 h-10 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold shadow-md hover:scale-105 transition-transform">
+          <button onClick={onToggleSidebar} className="w-10 h-10 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold shadow-md hover:scale-105 transition-transform cursor-pointer">
             {email.charAt(0).toUpperCase()}
           </button>
         </div>
@@ -66,7 +69,7 @@ export default function EmployeePage({ token, email, onBackToHome, onSignOut, on
             <button
               key={item.id}
               onClick={() => setTab(item.id)}
-              className={`px-5 py-2 rounded-full text-sm font-semibold transition-all ${
+              className={`px-5 py-2 rounded-full text-sm font-semibold transition-all cursor-pointer ${
                 tab === item.id
                   ? 'bg-[#0066ff] text-white shadow-md'
                   : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
@@ -137,7 +140,7 @@ export default function EmployeePage({ token, email, onBackToHome, onSignOut, on
                     </div>
                     <button
                       onClick={() => openManifest(r.reservationId)}
-                      className="w-full bg-gray-50 hover:bg-gray-100 text-gray-900 font-bold py-3 rounded-xl transition-colors text-sm"
+                      className="w-full bg-gray-50 hover:bg-gray-100 text-gray-900 font-bold py-3 rounded-xl transition-colors text-sm cursor-pointer"
                     >
                       View Manifest
                     </button>

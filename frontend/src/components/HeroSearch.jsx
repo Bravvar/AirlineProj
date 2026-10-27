@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { API_URL } from '../config';
 
-export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
+export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn }) {
   const currentTab = (activeTab === 'packages' || activeTab === 'deals') ? activeTab : 'flights';
 
   const [tripType, setTripType] = useState('round-trip');
@@ -33,6 +33,13 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
   const toRef = useRef(null);
 
   const BASE_DATE = { month: 9, year: 2026 };
+
+  // Clears any current search results or booking messages immediately
+  const clearResults = () => {
+    if (results !== null) setResults(null);
+    if (bookingMessage) setBookingMessage('');
+    if (bookingError) setBookingError('');
+  };
 
   // Fetch airports on mount for autocomplete; falls back gracefully to plain text if unavailable
   useEffect(() => {
@@ -85,13 +92,12 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
   const getAirportMatches = (query, excludeCode) => {
     if (!airports || !Array.isArray(airports)) return [];
     const q = (query || '').trim().toLowerCase();
-    if (!q) return [];
-
     const exclude = (excludeCode || '').trim().toUpperCase();
 
     const matches = airports.filter((a) => {
       const code = (a.airportCode || a.AirportCode || '').toUpperCase();
       if (exclude && code === exclude) return false;
+      if (!q) return true;
 
       const city = (a.city || a.City || '').toLowerCase();
       const name = (a.airportName || a.AirportName || '').toLowerCase();
@@ -99,6 +105,14 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
 
       return codeLower.includes(q) || city.includes(q) || name.includes(q);
     });
+
+    if (!q) {
+      return matches.sort((a, b) => {
+        const aCity = (a.city || a.City || '').toLowerCase();
+        const bCity = (b.city || b.City || '').toLowerCase();
+        return aCity.localeCompare(bCity);
+      });
+    }
 
     return matches.sort((a, b) => {
       const aCode = (a.airportCode || a.AirportCode || '').toLowerCase();
@@ -127,6 +141,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
   const toMatches = getAirportMatches(to, from);
 
   const handleDateClick = (day, monthIndex, year) => {
+    clearResults();
     if (!startDate) {
       setStartDate({ day, month: monthIndex, year });
     } else if (startDate && !endDate && tripType === 'round-trip') {
@@ -203,6 +218,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
   };
 
   const updateTraveler = (type, operation) => {
+    clearResults();
     setTravelers(prev => {
       const newCount = operation === 'add' ? prev[type] + 1 : prev[type] - 1;
       if (newCount < 0) return prev;
@@ -248,7 +264,11 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
 
   const bookFare = async (fareId) => {
     const token = sessionStorage.getItem('token');
-    if (!token) { setBookingError('Please log in first'); return; }
+    if (!token) {
+      setBookingError('Please log in first to book a flight.');
+      if (onSignIn) onSignIn();
+      return;
+    }
     setBookingError('');
     setBookingMessage('');
     try {
@@ -290,8 +310,8 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
         {tabs.map(tab => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold transition-all ${
+            onClick={() => { clearResults(); setActiveTab(tab.id); }}
+            className={`flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold transition-all cursor-pointer ${
               currentTab === tab.id
                 ? 'bg-white text-gray-900 shadow-md scale-100'
                 : 'text-white hover:bg-white/20 scale-95 hover:scale-100'
@@ -303,17 +323,18 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
         ))}
       </div>
 
-      <div className="w-full flex flex-col relative z-20">
+      {/* Search Container - relative z-30 so all dropdowns paint above flight results */}
+      <div className="w-full flex flex-col items-center relative z-30">
 
         {/* Trip Type Toggles */}
         {currentTab === 'flights' && (
-          <div className="flex gap-8 mb-4 ml-4">
+          <div className="flex gap-8 mb-4 ml-4 self-start">
             <label className="flex items-center gap-3 cursor-pointer group">
               <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${tripType === 'round-trip' ? 'border-white' : 'border-white/60 group-hover:border-white'}`}>
                 {tripType === 'round-trip' && <div className="w-3 h-3 rounded-full bg-white" />}
               </div>
               <span className="text-white text-sm font-medium drop-shadow-md">Round-trip</span>
-              <input type="radio" className="hidden" checked={tripType === 'round-trip'} onChange={() => { setTripType('round-trip'); }} />
+              <input type="radio" className="hidden" checked={tripType === 'round-trip'} onChange={() => { clearResults(); setTripType('round-trip'); }} />
             </label>
 
             <label className="flex items-center gap-3 cursor-pointer group">
@@ -321,13 +342,13 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
                 {tripType === 'one-way' && <div className="w-3 h-3 rounded-full bg-white" />}
               </div>
               <span className="text-white text-sm font-medium drop-shadow-md">One-way</span>
-              <input type="radio" className="hidden" checked={tripType === 'one-way'} onChange={() => { setTripType('one-way'); setEndDate(null); }} />
+              <input type="radio" className="hidden" checked={tripType === 'one-way'} onChange={() => { clearResults(); setTripType('one-way'); setEndDate(null); }} />
             </label>
           </div>
         )}
 
         {/* Main Search Bar */}
-        <div className="w-full bg-white rounded-full shadow-2xl flex items-center p-1.5 min-h-[64px] relative z-20">
+        <div className="w-full bg-white rounded-full shadow-2xl flex items-center p-1.5 min-h-[64px] relative z-30">
 
           {/* FLIGHTS TAB */}
           {currentTab === 'flights' && (
@@ -345,18 +366,20 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
                     setShowToDropdown(false);
                     setShowCalendar(false);
                     setShowTravelers(false);
+                    clearResults();
                   }}
                   onFocus={() => {
-                    if (from.trim()) setShowFromDropdown(true);
+                    setShowFromDropdown(true);
                     setShowToDropdown(false);
                     setShowCalendar(false);
                     setShowTravelers(false);
+                    clearResults();
                   }}
                   className="w-full outline-none text-sm font-medium text-gray-900 placeholder-gray-400 bg-transparent"
                 />
 
                 {/* Dropdown for From */}
-                {showFromDropdown && airports && from.trim().length > 0 && (
+                {showFromDropdown && airports && (
                   <div className="absolute top-full mt-3 left-0 w-[340px] max-w-[90vw] bg-white rounded-2xl shadow-2xl p-2 z-[110] text-gray-800 border border-gray-100 max-h-[300px] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
                     {fromMatches.length === 0 ? (
                       <div className="p-3 text-xs text-gray-400 text-center">No matching airports</div>
@@ -367,6 +390,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
                           onMouseDown={() => {
                             setFrom(a.airportCode);
                             setShowFromDropdown(false);
+                            clearResults();
                           }}
                           className="flex items-center justify-between p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors"
                         >
@@ -397,6 +421,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
                   setTo(temp);
                   setShowFromDropdown(false);
                   setShowToDropdown(false);
+                  clearResults();
                 }}
                 className="text-gray-400 hover:text-gray-600 px-2 text-lg transition-colors cursor-pointer"
                 title="Swap departure and destination"
@@ -417,18 +442,20 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
                     setShowFromDropdown(false);
                     setShowCalendar(false);
                     setShowTravelers(false);
+                    clearResults();
                   }}
                   onFocus={() => {
-                    if (to.trim()) setShowToDropdown(true);
+                    setShowToDropdown(true);
                     setShowFromDropdown(false);
                     setShowCalendar(false);
                     setShowTravelers(false);
+                    clearResults();
                   }}
                   className="w-full outline-none text-sm font-medium text-gray-900 placeholder-gray-400 bg-transparent"
                 />
 
                 {/* Dropdown for To */}
-                {showToDropdown && airports && to.trim().length > 0 && (
+                {showToDropdown && airports && (
                   <div className="absolute top-full mt-3 left-0 w-[340px] max-w-[90vw] bg-white rounded-2xl shadow-2xl p-2 z-[110] text-gray-800 border border-gray-100 max-h-[300px] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
                     {toMatches.length === 0 ? (
                       <div className="p-3 text-xs text-gray-400 text-center">No matching airports</div>
@@ -439,6 +466,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
                           onMouseDown={() => {
                             setTo(a.airportCode);
                             setShowToDropdown(false);
+                            clearResults();
                           }}
                           className="flex items-center justify-between p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors"
                         >
@@ -471,6 +499,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
                   setShowTravelers(false);
                   setShowFromDropdown(false);
                   setShowToDropdown(false);
+                  clearResults();
                 }}
               >
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">{tripType === 'round-trip' ? 'Dates' : 'Date'}</div>
@@ -490,6 +519,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
                   setShowCalendar(false);
                   setShowFromDropdown(false);
                   setShowToDropdown(false);
+                  clearResults();
                 }}
               >
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">Travelers</div>
@@ -516,6 +546,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
                   setShowTravelers(false);
                   setShowFromDropdown(false);
                   setShowToDropdown(false);
+                  clearResults();
                 }}
               >
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">Dates</div>
@@ -530,6 +561,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
                   setShowCalendar(false);
                   setShowFromDropdown(false);
                   setShowToDropdown(false);
+                  clearResults();
                 }}
               >
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">Guests</div>
@@ -545,11 +577,73 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
             </button>
           </div>
         </div>
+
+        {/* --- CALENDAR DROPDOWN (z-[100]) positioned directly under search bar --- */}
+        {showCalendar && (
+          <div
+            ref={calendarRef}
+            className="absolute top-full mt-4 bg-white rounded-3xl shadow-2xl p-8 w-[740px] max-w-[95vw] z-[100] text-gray-800 border border-gray-100 animate-in fade-in slide-in-from-top-2 duration-200"
+          >
+            <div className="flex justify-between items-center mb-6">
+              <div className="flex-1 flex items-center justify-center gap-3">
+                <button onClick={() => setMonthOffset(prev => prev - 1)} disabled={isAtEarliestMonth} className={`p-1.5 rounded-full transition-colors ${isAtEarliestMonth ? 'text-gray-300 cursor-not-allowed' : 'hover:bg-gray-100 text-blue-600 cursor-pointer'}`}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+                </button>
+                <h5 className="font-bold text-xl text-gray-900 w-44 text-center">{leftMonth.label}</h5>
+              </div>
+              <div className="flex-1 flex items-center justify-center gap-3">
+                <h5 className="font-bold text-xl text-gray-900 w-44 text-center">{rightMonth.label}</h5>
+                <button onClick={() => setMonthOffset(prev => prev + 1)} className="p-1.5 rounded-full hover:bg-gray-100 text-blue-600 transition-colors cursor-pointer">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                </button>
+              </div>
+            </div>
+            <div className="w-full h-px bg-gray-100 mb-6"></div>
+            <div className="flex flex-col sm:flex-row gap-8">
+              <div className="flex-1">{renderMonth(leftMonth.month, leftMonth.year)}</div>
+              <div className="flex-1">{renderMonth(rightMonth.month, rightMonth.year)}</div>
+            </div>
+            <div className="flex justify-end items-center mt-6 pt-5 border-t border-gray-100">
+              {(startDate || endDate) ? (
+                <button onClick={() => { setStartDate(null); setEndDate(null); clearResults(); }} className="text-sm font-semibold text-blue-600 hover:text-blue-800 transition-colors bg-blue-50 hover:bg-blue-100 px-5 py-2.5 rounded-xl whitespace-nowrap cursor-pointer">
+                  Clear Dates
+                </button>
+              ) : <div className="h-[42px]"></div>}
+            </div>
+          </div>
+        )}
+
+        {/* --- TRAVELERS DROPDOWN (z-[100]) positioned directly under search bar --- */}
+        {showTravelers && (
+          <div ref={travelersRef} className="absolute top-full mt-4 right-0 bg-white rounded-3xl shadow-2xl p-8 w-[420px] max-w-[95vw] z-[100] text-gray-800 border border-gray-100 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex flex-col gap-6">
+              {Object.entries({
+                adults: { label: 'Adults', sub: 'Age 12 or above' },
+                children: { label: 'Children', sub: 'Ages 2-11' },
+                infantsSeat: { label: 'Infants', sub: 'In seat' },
+                infantsLap: { label: 'Infants', sub: 'On lap' }
+              }).map(([key, info]) => (
+                <div key={key} className="flex justify-between items-center">
+                  <div>
+                    <div className="font-bold text-lg text-gray-900">{info.label}</div>
+                    <div className="text-sm text-gray-500 font-medium">{info.sub}</div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <button onClick={() => updateTraveler(key, 'subtract')} className={`w-10 h-10 rounded-full border flex items-center justify-center transition-colors text-xl font-light cursor-pointer ${travelers[key] === 0 || (key === 'adults' && travelers.adults <= 1) ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 text-gray-600 hover:border-gray-400'}`}>—</button>
+                    <span className="w-6 text-center font-medium text-lg">{travelers[key]}</span>
+                    <button onClick={() => updateTraveler(key, 'add')} className="w-10 h-10 rounded-full border border-gray-300 text-gray-600 hover:border-gray-400 flex items-center justify-center transition-colors text-xl font-light cursor-pointer">+</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="text-sm text-gray-500 mt-8 pt-6 border-t border-gray-100">You can search for up to 9 travelers</div>
+          </div>
+        )}
       </div>
 
-      {/* --- FLIGHT RESULTS --- */}
+      {/* --- FLIGHT RESULTS (relative z-10 so search bar and its dropdowns always paint on top) --- */}
       {currentTab === 'flights' && (searching || results !== null) && (
-        <div className="w-full bg-white rounded-3xl shadow-2xl mt-4 p-6 text-gray-800 relative z-20">
+        <div className="w-full bg-white rounded-3xl shadow-2xl mt-4 p-6 text-gray-800 relative z-10">
           {bookingMessage && (
             <p className="bg-green-50 border border-green-200 text-green-800 font-semibold rounded-2xl px-4 py-3 mb-4">{bookingMessage}</p>
           )}
@@ -559,7 +653,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
           {searching ? (
             <p className="text-gray-500">Searching...</p>
           ) : results.length === 0 ? (
-            <p className="text-gray-500">No flights found. Try JFK to LAX.</p>
+            <p className="text-gray-500">No flights found. Try different airports or dates.</p>
           ) : (
             <div className="flex flex-col gap-4">
               {results.map((f) => (
@@ -595,68 +689,6 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked }) {
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {/* --- CALENDAR DROPDOWN (z-[100]) --- */}
-      {showCalendar && (
-        <div
-          ref={calendarRef}
-          className="absolute top-full mt-4 bg-white rounded-3xl shadow-2xl p-8 w-[740px] max-w-[95vw] z-[100] text-gray-800 border border-gray-100 animate-in fade-in slide-in-from-top-2 duration-200"
-        >
-          <div className="flex justify-between items-center mb-6">
-            <div className="flex-1 flex items-center justify-center gap-3">
-              <button onClick={() => setMonthOffset(prev => prev - 1)} disabled={isAtEarliestMonth} className={`p-1.5 rounded-full transition-colors ${isAtEarliestMonth ? 'text-gray-300 cursor-not-allowed' : 'hover:bg-gray-100 text-blue-600 cursor-pointer'}`}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-              </button>
-              <h5 className="font-bold text-xl text-gray-900 w-44 text-center">{leftMonth.label}</h5>
-            </div>
-            <div className="flex-1 flex items-center justify-center gap-3">
-              <h5 className="font-bold text-xl text-gray-900 w-44 text-center">{rightMonth.label}</h5>
-              <button onClick={() => setMonthOffset(prev => prev + 1)} className="p-1.5 rounded-full hover:bg-gray-100 text-blue-600 transition-colors cursor-pointer">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-              </button>
-            </div>
-          </div>
-          <div className="w-full h-px bg-gray-100 mb-6"></div>
-          <div className="flex flex-col sm:flex-row gap-8">
-            <div className="flex-1">{renderMonth(leftMonth.month, leftMonth.year)}</div>
-            <div className="flex-1">{renderMonth(rightMonth.month, rightMonth.year)}</div>
-          </div>
-          <div className="flex justify-end items-center mt-6 pt-5 border-t border-gray-100">
-            {(startDate || endDate) ? (
-              <button onClick={() => { setStartDate(null); setEndDate(null); }} className="text-sm font-semibold text-blue-600 hover:text-blue-800 transition-colors bg-blue-50 hover:bg-blue-100 px-5 py-2.5 rounded-xl whitespace-nowrap cursor-pointer">
-                Clear Dates
-              </button>
-            ) : <div className="h-[42px]"></div>}
-          </div>
-        </div>
-      )}
-
-      {/* --- TRAVELERS DROPDOWN (z-[100]) --- */}
-      {showTravelers && (
-        <div ref={travelersRef} className="absolute top-full mt-4 right-0 bg-white rounded-3xl shadow-2xl p-8 w-[420px] max-w-[95vw] z-[100] text-gray-800 border border-gray-100 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="flex flex-col gap-6">
-            {Object.entries({
-              adults: { label: 'Adults', sub: 'Age 12 or above' },
-              children: { label: 'Children', sub: 'Ages 2-11' },
-              infantsSeat: { label: 'Infants', sub: 'In seat' },
-              infantsLap: { label: 'Infants', sub: 'On lap' }
-            }).map(([key, info]) => (
-              <div key={key} className="flex justify-between items-center">
-                <div>
-                  <div className="font-bold text-lg text-gray-900">{info.label}</div>
-                  <div className="text-sm text-gray-500 font-medium">{info.sub}</div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <button onClick={() => updateTraveler(key, 'subtract')} className={`w-10 h-10 rounded-full border flex items-center justify-center transition-colors text-xl font-light cursor-pointer ${travelers[key] === 0 || (key === 'adults' && travelers.adults <= 1) ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 text-gray-600 hover:border-gray-400'}`}>—</button>
-                  <span className="w-6 text-center font-medium text-lg">{travelers[key]}</span>
-                  <button onClick={() => updateTraveler(key, 'add')} className="w-10 h-10 rounded-full border border-gray-300 text-gray-600 hover:border-gray-400 flex items-center justify-center transition-colors text-xl font-light cursor-pointer">+</button>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="text-sm text-gray-500 mt-8 pt-6 border-t border-gray-100">You can search for up to 9 travelers</div>
         </div>
       )}
     </div>

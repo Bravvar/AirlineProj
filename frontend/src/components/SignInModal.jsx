@@ -57,7 +57,7 @@ export default function SignInModal({ show, onHide }) {
         const res = await fetch(`${API_URL}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: username, password }),
+          body: JSON.stringify({ email: username.trim(), password }),
         });
         const text = await res.text();
         if (!res.ok) { setFormError(text || 'Login failed'); return; }
@@ -74,12 +74,17 @@ export default function SignInModal({ show, onHide }) {
         setFormError('Please fill in First Name, Last Name, and Date of Birth.');
         return;
       }
+      const lowerEmail = email.trim().toLowerCase();
+      if (lowerEmail.endsWith('@coog10admin.com') || lowerEmail.endsWith('@coog10employee.com')) {
+        setFormError('This email domain is reserved for staff accounts.');
+        return;
+      }
       try {
         const res = await fetch(`${API_URL}/api/auth/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            email,
+            email: email.trim(),
             password,
             firstName: firstName.trim(),
             lastName: lastName.trim(),
@@ -89,6 +94,8 @@ export default function SignInModal({ show, onHide }) {
         const text = await res.text();
         if (!res.ok) { setFormError(text || 'Sign up failed'); return; }
         setFormNotice('Account created. Now log in.');
+        setUsername(email.trim());
+        setPassword('');
         setView('login');
       } catch {
         setFormError('Unable to connect to server.');
@@ -134,7 +141,7 @@ export default function SignInModal({ show, onHide }) {
       {/* Modal Box */}
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[440px] p-7 relative animate-in zoom-in-95 duration-200">
         {/* Close Button */}
-        <button onClick={handleClose} className="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-3xl leading-none transition-colors">&times;</button>
+        <button onClick={handleClose} className="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-3xl leading-none transition-colors cursor-pointer">&times;</button>
         
         <h3 className="text-2xl font-bold text-gray-900 mb-6 text-center">
           {view === 'login' ? 'Welcome Back' : 'Create an Account'}
@@ -210,7 +217,7 @@ export default function SignInModal({ show, onHide }) {
                 <label className="text-xs font-semibold text-gray-600 mb-1 block">Password</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>
+                    <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
                   </div>
                   <input 
                     type="password" 
@@ -245,7 +252,7 @@ export default function SignInModal({ show, onHide }) {
                 </div>
                 <input 
                   type="text" 
-                  placeholder="Username" 
+                  placeholder="Username / Email" 
                   value={username}
                   onChange={handleUsernameChange}
                   className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl pl-11 pr-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all placeholder-gray-400" 
@@ -255,7 +262,7 @@ export default function SignInModal({ show, onHide }) {
               {/* Password */}
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>
+                  <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
                 </div>
                 <input 
                   type="password" 
@@ -287,7 +294,7 @@ export default function SignInModal({ show, onHide }) {
           {/* Submit Button */}
           <button 
             type="submit"
-            className={`w-full font-bold py-3 rounded-2xl mt-1 transition-all shadow-md hover:shadow-lg ${
+            className={`w-full font-bold py-3 rounded-2xl mt-1 transition-all shadow-md hover:shadow-lg cursor-pointer ${
               view === 'signup' && (!isPasswordValid || !isEmailValid || !firstName.trim() || !lastName.trim() || !dateOfBirth)
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
                 : 'bg-[#0066ff] hover:bg-blue-700 text-white'
@@ -303,12 +310,12 @@ export default function SignInModal({ show, onHide }) {
           {view === 'login' ? (
             <>
               Don't have an account?{' '}
-              <button onClick={() => { setView('signup'); setFormError(''); setFormNotice(''); }} className="text-blue-600 hover:underline font-semibold">Sign up</button>
+              <button onClick={() => { setView('signup'); setFormError(''); setFormNotice(''); }} className="text-blue-600 hover:underline font-semibold cursor-pointer">Sign up</button>
             </>
           ) : (
             <>
               Already have an account?{' '}
-              <button onClick={() => { setView('login'); setFormError(''); setFormNotice(''); }} className="text-blue-600 hover:underline font-semibold">Log In</button>
+              <button onClick={() => { setView('login'); setFormError(''); setFormNotice(''); }} className="text-blue-600 hover:underline font-semibold cursor-pointer">Log In</button>
             </>
           )}
         </p>

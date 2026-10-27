@@ -1,16 +1,13 @@
 import { useEffect, useState } from 'react';
 import Logo from './Logo';
+import { API_URL } from '../config';
 
-const API_URL = "https://airlineproj.runasp.net";
-
-export default function AdminPage({ token, email, onBackToHome, onSignOut, onToggleSidebar }) {
+export default function AdminPage({ token, email, onBackToHome, onToggleSidebar }) {
   const [tab, setTab] = useState('overview');
   const [overview, setOverview] = useState(null);
   const [users, setUsers] = useState([]);
   const [flights, setFlights] = useState([]);
   const [error, setError] = useState('');
-
-  const headers = { Authorization: `Bearer ${token}` };
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
@@ -18,6 +15,7 @@ export default function AdminPage({ token, email, onBackToHome, onSignOut, onTog
     if (!token) return;
     const load = async () => {
       try {
+        const headers = { Authorization: `Bearer ${token}` };
         const paths = { overview: 'admin/overview', users: 'admin/users', flights: 'admin/flights' };
         if(!paths[tab]) return;
         const res = await fetch(`${API_URL}/api/${paths[tab]}`, { headers });
@@ -35,12 +33,12 @@ export default function AdminPage({ token, email, onBackToHome, onSignOut, onTog
   return (
     <div className="min-h-screen bg-[#F4F6F9] flex flex-col font-sans text-gray-900">
       <header className="h-20 bg-white border-b border-gray-200 flex items-center justify-between px-8 sticky top-0 z-10">
-        <div className="cursor-pointer" onClick={() => onBackToHome()}>
+        <div className="cursor-pointer" onClick={() => onBackToHome('flights')}>
           <Logo />
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm font-semibold text-gray-500">{email} (Admin)</span>
-          <button onClick={onToggleSidebar} className="w-10 h-10 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold shadow-md hover:scale-105 transition-transform">
+          <button onClick={onToggleSidebar} className="w-10 h-10 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold shadow-md hover:scale-105 transition-transform cursor-pointer">
             {email.charAt(0).toUpperCase()}
           </button>
         </div>
@@ -58,7 +56,7 @@ export default function AdminPage({ token, email, onBackToHome, onSignOut, onTog
             <button
               key={item.id}
               onClick={() => setTab(item.id)}
-              className={`px-5 py-2 rounded-full text-sm font-semibold transition-all ${
+              className={`px-5 py-2 rounded-full text-sm font-semibold transition-all cursor-pointer ${
                 tab === item.id
                   ? 'bg-[#0066ff] text-white shadow-md'
                   : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
