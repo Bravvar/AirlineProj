@@ -88,7 +88,7 @@ export default function SignInModal({ show, onHide }) {
             password,
             firstName: firstName.trim(),
             lastName: lastName.trim(),
-            dateOfBirth,
+            dateOfBirth: `${dateOfBirth}T00:00:00`, // Format for C# DateTime
           }),
         });
         const text = await res.text();
