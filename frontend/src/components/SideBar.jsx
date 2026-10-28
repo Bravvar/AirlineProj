@@ -41,7 +41,7 @@ export default function SideBar({ show, onHide, auth, onLogout, onNavigate }) {
     <div className="fixed inset-0 z-[200] flex justify-end">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={onHide}></div>
       
-      <div className="relative w-80 bg-[#0f172a] text-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+      <div className="relative w-80 bg-[#0f172a] text-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 rounded-l-3xl overflow-hidden">
         
         <div className="p-8 border-b border-white/10 flex flex-col items-center text-center">
           <div className="w-20 h-20 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold text-3xl shadow-lg mb-4">
