@@ -206,12 +206,6 @@ export default function App() {
             {auth.token ? (
               <div className="flex items-center gap-4">
                 <button
-                  onClick={handleLogout}
-                  className="text-white/80 hover:text-white font-semibold text-sm transition-colors cursor-pointer"
-                >
-                  Log Out
-                </button>
-                <button
                   onClick={() => setShowSidebar(true)}
                   title="Menu"
                   className="w-10 h-10 rounded-full bg-white text-[#0066ff] flex items-center justify-center font-bold text-lg shadow-md hover:scale-105 transition-transform cursor-pointer"

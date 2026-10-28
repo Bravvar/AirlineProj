@@ -51,7 +51,7 @@ export default function EmployeePage({ token, email, onBackToHome, onToggleSideb
           <Logo />
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-sm font-semibold text-gray-500">{email} (Staff)</span>
+          {/* <--- REMOVED EMAIL TEXT FROM HERE ---> */}
           <button onClick={onToggleSidebar} className="w-10 h-10 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold shadow-md hover:scale-105 transition-transform cursor-pointer">
             {email.charAt(0).toUpperCase()}
           </button>
