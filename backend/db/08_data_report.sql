@@ -1,7 +1,6 @@
 USE airlineschema;
 
--- =========================================================
--- REPORT 1 — Revenue by Flight (FIXED: no double-counting)
+-- REPORT 1 — Revenue by Flight
 -- =========================================================
 SELECT f.flight_number,
        f.origin_airport_code AS origin,
@@ -15,7 +14,7 @@ LEFT JOIN Ticket t              ON t.reservation_id = rs.reservation_id
 GROUP BY f.flight_id, f.flight_number, f.origin_airport_code, f.destination_airport_code
 ORDER BY revenue DESC;
 
--- =========================================================
+
 -- REPORT 2 — Membership tier summary
 -- =========================================================
 SELECT p.passenger_id,
@@ -35,7 +34,7 @@ FROM Passenger p
 LEFT JOIN MembershipAccount m ON m.passenger_id = p.passenger_id
 ORDER BY m.points_balance DESC;
 
--- =========================================================
+
 -- REPORT 3 — Payment / refund audit
 -- =========================================================
 SELECT r.confirmation_number,
@@ -51,8 +50,8 @@ JOIN Reservation r ON r.reservation_id = p.reservation_id
 LEFT JOIN Employee e ON e.employee_id  = p.employee_id
 ORDER BY p.payment_date_time;
 
--- =========================================================
--- REPORT 4 — Flight load factor (FIXED: uses allocated_capacity)
+
+-- REPORT 4 — Flight load factor 
 -- =========================================================
 SELECT f.flight_number,
        cc.cabin_name,
@@ -65,7 +64,7 @@ JOIN Flight     f  ON f.flight_id      = ff.flight_id
 JOIN CabinClass cc ON cc.cabin_class_id = ff.cabin_class_id
 ORDER BY f.flight_number, ff.fare_class_id;
 
--- =========================================================
+
 -- REPORT 5 — Passenger booking history
 -- =========================================================
 SELECT CONCAT(p.first_name,' ',p.last_name) AS passenger,
@@ -82,8 +81,8 @@ LEFT JOIN Ticket t           ON t.reservation_id  = r.reservation_id
 GROUP BY p.passenger_id, r.reservation_id
 ORDER BY p.last_name, r.booking_date;
 
--- =========================================================
--- REPORT 6 (NEW) — Refund audit showing Constraint 20 enforcement
+
+-- REPORT 6 — Refund audit showing Constraint 20 enforcement
 -- =========================================================
 SELECT r.confirmation_number,
        pay.transaction_reference,
@@ -97,7 +96,7 @@ JOIN Employee    e ON e.employee_id    = pay.employee_id
 WHERE pay.transaction_type = 'Refund'
 ORDER BY pay.payment_date_time;
 
--- =========================================================
+
 -- QUERIES
 -- =========================================================
 
@@ -159,7 +158,7 @@ LEFT JOIN Payment pay        ON pay.reservation_id = r.reservation_id
 WHERE r.reservation_status = 'Cancelled'
 GROUP BY r.reservation_id, p.passenger_id;
 
--- Q5 (NEW): Segment-level ticket drilldown (demonstrates TicketSegment)
+-- Q5: Segment-level ticket drilldown (demonstrates TicketSegment)
 SELECT r.confirmation_number,
        CONCAT(p.first_name,' ',p.last_name) AS passenger,
        t.ticket_number,

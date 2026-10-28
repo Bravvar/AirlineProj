@@ -56,6 +56,7 @@ export default function App() {
     if (pageId === 'deals') setCurrentPage('deals');
     if (pageId === 'admin') setCurrentPage('admin');
     if (pageId === 'employee') setCurrentPage('employee');
+    if (pageId === 'reports') setCurrentPage('reports');
     if (pageId === 'dashboard' || pageId === 'home') {
       setCurrentPage('home');
       setActiveTab('flights');
@@ -202,9 +203,6 @@ export default function App() {
             
             {auth.token ? (
               <div className="flex items-center gap-4">
-                <span className="text-white font-semibold text-sm drop-shadow-sm">
-                  {auth.email} {auth.role ? `(${auth.role})` : ''}
-                </span>
                 <button
                   onClick={handleLogout}
                   className="text-white/80 hover:text-white font-semibold text-sm transition-colors cursor-pointer"
