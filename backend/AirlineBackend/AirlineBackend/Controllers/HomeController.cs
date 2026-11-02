@@ -252,6 +252,14 @@ public class HomeController : ControllerBase
         var fare = _context.FlightFare.FirstOrDefault(i => i.FlightFareId == book.flightFareId);
         if (fare == null) return NotFound("No fare like that");
         if (fare.AvailableInventory <= 0) return BadRequest("No seats left on this flight");
+        
+        if (book.seats != null && book.seats.Count > 1)
+            return BadRequest("Only one seat can be selected per passenger.");
+
+        decimal seatFee = 25.00m;
+        int seatCount = book.seats?.Count ?? 0;
+
+        decimal calculatedTotal = fare.CurrentPrice + (seatCount * seatFee);
 
         var flight = _context.Flight.FirstOrDefault(i => i.FlightId == fare.FlightId);
 
@@ -263,7 +271,8 @@ public class HomeController : ControllerBase
             ReservationStatus = "Confirmed",
             HoldExpiration = null,
             TripType = book.tripType == "round-trip" ? "Round Trip" : "One Way",
-            TotalAmount = book.totalAmount > 0 ? book.totalAmount : fare.CurrentPrice
+            TotalAmount = calculatedTotal
+
         };
 
         _context.Reservation.Add(reservation);
@@ -409,7 +418,7 @@ public class HomeController : ControllerBase
 
 public record Payload(string email, string password);
 public record RegisterPayload(string email, string password, int? passengerId, string? firstName, string? lastName, DateTime? dateOfBirth);
-public record BookingPayload(int flightFareId, string? tripType, decimal totalAmount, List<int>? seats);
+public record BookingPayload(int flightFareId, string? tripType,  List<int>? seats);
 public record ModifyPayload(string? phone, string? address, string? mealSelection, int? additionalCheckedBags);
 
 public class Report1Row { public string FlightNumber { get; set; } = string.Empty; public string Origin { get; set; } = string.Empty; public string Destination { get; set; } = string.Empty; public long TicketsSold { get; set; } public decimal Revenue { get; set; } }
