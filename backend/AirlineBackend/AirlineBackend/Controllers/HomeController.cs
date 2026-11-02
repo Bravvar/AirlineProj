@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -49,15 +50,8 @@ public class HomeController : ControllerBase
         var normalizedEmail = log.email.Trim().ToLowerInvariant();
         var data = _context.UserAccount.FirstOrDefault(i => i.Email.ToLower() == normalizedEmail);
         
-        if (data == null)
-        {
-            return NotFound("No user found");
-        }
-
-        if (!BCrypt.Net.BCrypt.Verify(log.password, data.PasswordHash))
-        {
-            return NotFound("Password is invalid");
-        }
+        if (data == null) return NotFound("No user found");
+        if (!BCrypt.Net.BCrypt.Verify(log.password, data.PasswordHash)) return NotFound("Password is invalid");
 
         var tokenString = GenerateJSONWebToken(data);
         return Ok(new { token = tokenString, role = data.Role, email = data.Email });
@@ -69,33 +63,24 @@ public class HomeController : ControllerBase
     {
         var normalizedEmail = reg.email.Trim().ToLowerInvariant();
 
-        // Staff domains are issued by the company, never self-registered
         if (normalizedEmail.EndsWith("@coog10admin.com") || normalizedEmail.EndsWith("@coog10employee.com"))
-        {
             return BadRequest("This email domain is reserved for staff accounts.");
-        }
 
-        // Check if the UserAccount already exists
         if (_context.UserAccount.Any(i => i.Email.ToLower() == normalizedEmail))
-        {
             return BadRequest("Account already exists");
-        }
 
         int? passengerId = null;
 
-        // If they provided standard signup details, create a new passenger record
         if (!string.IsNullOrEmpty(reg.firstName) && !string.IsNullOrEmpty(reg.lastName) && reg.dateOfBirth != null)
         {
             var existingPassenger = _context.Passenger.FirstOrDefault(i => i.Email.ToLower() == normalizedEmail);
             
             if (existingPassenger != null)
             {
-                // If passenger exists but doesn't have an account, link to them
                 passengerId = existingPassenger.PassengerId;
             }
             else
             {
-                // Create a BRAND NEW passenger record for this user
                 var created = new Passenger
                 {
                     FirstName = reg.firstName,
@@ -116,7 +101,6 @@ public class HomeController : ControllerBase
             return BadRequest("First Name, Last Name, and Date of Birth are required for new accounts.");
         }
 
-        // Create the User Account and link it to the NEW Passenger ID
         var data = new UserAccount
         {
             Email = normalizedEmail,
@@ -136,16 +120,10 @@ public class HomeController : ControllerBase
     public IActionResult Me()
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (userId == null)
-        {
-            return Unauthorized();
-        }
+        if (userId == null) return Unauthorized();
 
         var data = _context.UserAccount.FirstOrDefault(i => i.UserAccountId == int.Parse(userId));
-        if (data == null)
-        {
-            return NotFound("No user found");
-        }
+        if (data == null) return NotFound("No user found");
 
         return Ok(new { id = data.UserAccountId, email = data.Email, role = data.Role, employeeId = data.EmployeeId, passengerId = data.PassengerId });
     }
@@ -158,20 +136,48 @@ public class HomeController : ControllerBase
 
         if (!string.IsNullOrEmpty(origin))
         {
-            data = data.Where(i => i.OriginAirportCode == origin);
+            var o = origin.Trim().ToUpperInvariant();
+            data = data.Where(i => i.OriginAirportCode.ToUpper() == o);
         }
 
         if (!string.IsNullOrEmpty(destination))
         {
-            data = data.Where(i => i.DestinationAirportCode == destination);
+            var d = destination.Trim().ToUpperInvariant();
+            data = data.Where(i => i.DestinationAirportCode.ToUpper() == d);
         }
 
-        if (!string.IsNullOrEmpty(date) && DateTime.TryParse(date, out var day))
+        DateTime? parsedDay = null;
+        if (!string.IsNullOrEmpty(date))
         {
-            data = data.Where(i => i.DepartureDate == day.Date);
+            if (DateTime.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+            {
+                parsedDay = parsed.Date;
+                data = data.Where(i => i.DepartureDate.Date == parsedDay.Value);
+            }
         }
 
-        return Ok(data.ToList());
+        var rows = data.OrderBy(i => i.DepartureDate).ThenBy(i => i.DepartureTime).Take(25).ToList();
+
+        if (rows.Count == 0 && parsedDay.HasValue)
+        {
+            var fallback = _context.Flight.AsQueryable();
+
+            if (!string.IsNullOrEmpty(origin))
+            {
+                var o = origin.Trim().ToUpperInvariant();
+                fallback = fallback.Where(i => i.OriginAirportCode.ToUpper() == o);
+            }
+
+            if (!string.IsNullOrEmpty(destination))
+            {
+                var d = destination.Trim().ToUpperInvariant();
+                fallback = fallback.Where(i => i.DestinationAirportCode.ToUpper() == d);
+            }
+
+            rows = fallback.OrderBy(i => i.DepartureDate).ThenBy(i => i.DepartureTime).Take(25).ToList();
+        }
+
+        return Ok(rows);
     }
 
     [AllowAnonymous]
@@ -179,13 +185,23 @@ public class HomeController : ControllerBase
     public IActionResult Fares(int id)
     {
         var flight = _context.Flight.FirstOrDefault(i => i.FlightId == id);
-        if (flight == null)
-        {
-            return NotFound("No flight like that");
-        }
+        if (flight == null) return NotFound("No flight like that");
 
         var data = _context.FlightFare.Where(i => i.FlightId == id).ToList();
         return Ok(data);
+    }
+
+    // NEW: Get all currently occupied seats for this flight
+    [AllowAnonymous]
+    [HttpGet("flights/{id}/seats")]
+    public IActionResult FlightSeats(int id)
+    {
+        var bookedSeats = _context.SeatAssignment
+            .Where(sa => sa.flight_id == id && sa.active_seat == 1)
+            .Select(sa => sa.seat_id)
+            .ToList();
+        
+        return Ok(bookedSeats);
     }
 
     [AllowAnonymous]
@@ -200,16 +216,10 @@ public class HomeController : ControllerBase
     public IActionResult MyReservations()
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (userId == null)
-        {
-            return Unauthorized();
-        }
+        if (userId == null) return Unauthorized();
 
         var account = _context.UserAccount.FirstOrDefault(i => i.UserAccountId == int.Parse(userId));
-        if (account == null || account.PassengerId == null)
-        {
-            return Ok(new List<Reservation>());
-        }
+        if (account == null || account.PassengerId == null) return Ok(new List<Reservation>());
 
         var ids = _context.ReservationPassenger
             .Where(i => i.PassengerId == account.PassengerId)
@@ -224,10 +234,7 @@ public class HomeController : ControllerBase
     public IActionResult Segments(int id)
     {
         var reservation = _context.Reservation.FirstOrDefault(i => i.ReservationId == id);
-        if (reservation == null)
-        {
-            return NotFound("No reservation like that");
-        }
+        if (reservation == null) return NotFound("No reservation like that");
 
         var data = _context.ReservationSegment.Where(i => i.ReservationId == id).ToList();
         return Ok(data);
@@ -237,27 +244,16 @@ public class HomeController : ControllerBase
     public async Task<IActionResult> CreateReservation([FromBody] BookingPayload book)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (userId == null)
-        {
-            return Unauthorized();
-        }
+        if (userId == null) return Unauthorized();
 
         var account = _context.UserAccount.FirstOrDefault(i => i.UserAccountId == int.Parse(userId));
-        if (account == null || account.PassengerId == null)
-        {
-            return BadRequest("Account has no passenger");
-        }
+        if (account == null || account.PassengerId == null) return BadRequest("Account has no passenger");
 
         var fare = _context.FlightFare.FirstOrDefault(i => i.FlightFareId == book.flightFareId);
-        if (fare == null)
-        {
-            return NotFound("No fare like that");
-        }
+        if (fare == null) return NotFound("No fare like that");
+        if (fare.AvailableInventory <= 0) return BadRequest("No seats left on this flight");
 
-        if (fare.AvailableInventory <= 0)
-        {
-            return BadRequest("No seats left");
-        }
+        var flight = _context.Flight.FirstOrDefault(i => i.FlightId == fare.FlightId);
 
         var reservation = new Reservation
         {
@@ -266,8 +262,8 @@ public class HomeController : ControllerBase
             BookingTime = DateTime.Now.TimeOfDay,
             ReservationStatus = "Confirmed",
             HoldExpiration = null,
-            TripType = "One Way",
-            TotalAmount = fare.CurrentPrice
+            TripType = book.tripType == "round-trip" ? "Round Trip" : "One Way",
+            TotalAmount = book.totalAmount > 0 ? book.totalAmount : fare.CurrentPrice
         };
 
         _context.Reservation.Add(reservation);
@@ -280,77 +276,82 @@ public class HomeController : ControllerBase
             AdditionalCheckedBags = 0,
             MealSelection = null
         };
-
         _context.ReservationPassenger.Add(passenger);
+        await _context.SaveChangesAsync(); // Save to get reservation_passenger_id
 
-        var segment = new ReservationSegment
+        // Outbound Segment
+        var segment1 = new ReservationSegment
         {
             ReservationId = reservation.ReservationId,
             FlightId = fare.FlightId,
             FlightFareId = fare.FlightFareId,
             SegmentNumber = 1,
             SegmentStatus = "Booked",
-            FarePriceAtBooking = fare.CurrentPrice,
-            CancellationDateTime = null,
-            CancellationReason = null
+            FarePriceAtBooking = fare.CurrentPrice
         };
+        _context.ReservationSegment.Add(segment1);
+        await _context.SaveChangesAsync(); // Save to get reservation_segment_id
 
-        _context.ReservationSegment.Add(segment);
+        // Handle Seat Assignments (Seat Update 2)
+        if (book.seats != null && book.seats.Count > 0)
+        {
+            foreach (var seatId in book.seats)
+            {
+                // Verify seat isn't taken
+                var isTaken = _context.SeatAssignment.Any(sa => sa.flight_id == fare.FlightId && sa.seat_id == seatId && sa.active_seat == 1);
+                if (isTaken) return BadRequest("One of the selected seats was just booked by someone else.");
+
+                var assignment = new SeatAssignment
+                {
+                    reservation_segment_id = segment1.ReservationSegmentId,
+                    reservation_passenger_id = passenger.ReservationPassengerId,
+                    seat_id = seatId,
+                    flight_id = fare.FlightId,
+                    assignment_date_time = DateTime.Now,
+                    seat_fee = 25.00m, // Hardcoded seat fee for demo
+                    active_seat = 1
+                };
+                _context.SeatAssignment.Add(assignment);
+            }
+        }
+
         await _context.SaveChangesAsync();
-
-        return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount });
+        return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, totalAmount = reservation.TotalAmount });
     }
 
     [HttpPut("reservations/{id}/cancel")]
     public async Task<IActionResult> CancelReservation(int id)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (userId == null)
-        {
-            return Unauthorized();
-        }
+        if (userId == null) return Unauthorized();
 
         var account = _context.UserAccount.FirstOrDefault(i => i.UserAccountId == int.Parse(userId));
-        if (account == null || account.PassengerId == null)
-        {
-            return BadRequest("Account has no passenger");
-        }
+        if (account == null || account.PassengerId == null) return BadRequest("Account has no passenger");
 
         var reservation = _context.Reservation.FirstOrDefault(i => i.ReservationId == id);
-        if (reservation == null)
-        {
-            return NotFound("No reservation like that");
-        }
+        if (reservation == null) return NotFound("No reservation like that");
 
         var link = _context.ReservationPassenger.FirstOrDefault(i => i.ReservationId == id && i.PassengerId == account.PassengerId);
-        if (link == null)
-        {
-            return NotFound("No reservation like that");
-        }
-
-        if (reservation.ReservationStatus == "Cancelled")
-        {
-            return BadRequest("Already cancelled");
-        }
+        if (link == null) return NotFound("No reservation like that");
+        if (reservation.ReservationStatus == "Cancelled") return BadRequest("Already cancelled");
 
         var segments = _context.ReservationSegment.Where(i => i.ReservationId == id).ToList();
-        if (segments.Any(i => i.SegmentStatus == "Flown"))
-        {
-            return BadRequest("Cannot cancel a flown booking");
-        }
+        if (segments.Any(i => i.SegmentStatus == "Flown")) return BadRequest("Cannot cancel a flown booking");
 
-        reservation.ReservationStatus = "Cancelled";
-
+        // STEP 1: Cancel segments FIRST to trigger inventory restore and bypass the SQL cancel check
         foreach (var segment in segments)
         {
-            if (segment.SegmentStatus != "Cancelled")
+            if (segment.SegmentStatus == "Booked")
             {
                 segment.SegmentStatus = "Cancelled";
                 segment.CancellationDateTime = DateTime.Now;
                 segment.CancellationReason = "Cancelled by passenger";
             }
         }
+        await _context.SaveChangesAsync();
 
+        // STEP 2: Cancel the parent reservation
+        reservation.ReservationStatus = "Cancelled";
         await _context.SaveChangesAsync();
 
         return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount });
@@ -360,65 +361,30 @@ public class HomeController : ControllerBase
     public async Task<IActionResult> ModifyReservation(int id, [FromBody] ModifyPayload mod)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (userId == null)
-        {
-            return Unauthorized();
-        }
+        if (userId == null) return Unauthorized();
 
         var account = _context.UserAccount.FirstOrDefault(i => i.UserAccountId == int.Parse(userId));
-        if (account == null || account.PassengerId == null)
-        {
-            return BadRequest("Account has no passenger");
-        }
+        if (account == null || account.PassengerId == null) return BadRequest("Account has no passenger");
 
         var reservation = _context.Reservation.FirstOrDefault(i => i.ReservationId == id);
-        if (reservation == null)
-        {
-            return NotFound("No reservation like that");
-        }
+        if (reservation == null) return NotFound("No reservation like that");
 
         var link = _context.ReservationPassenger.FirstOrDefault(i => i.ReservationId == id && i.PassengerId == account.PassengerId);
-        if (link == null)
-        {
-            return NotFound("No reservation like that");
-        }
-
-        if (reservation.ReservationStatus == "Cancelled")
-        {
-            return BadRequest("Cannot modify a cancelled booking");
-        }
-
-        if (mod.additionalCheckedBags != null && mod.additionalCheckedBags < 0)
-        {
-            return BadRequest("Bags cannot be negative");
-        }
+        if (link == null) return NotFound("No reservation like that");
+        if (reservation.ReservationStatus == "Cancelled") return BadRequest("Cannot modify a cancelled booking");
+        if (mod.additionalCheckedBags != null && mod.additionalCheckedBags < 0) return BadRequest("Bags cannot be negative");
 
         var passenger = _context.Passenger.FirstOrDefault(i => i.PassengerId == account.PassengerId);
         if (passenger != null)
         {
-            if (mod.phone != null)
-            {
-                passenger.Phone = mod.phone;
-            }
-
-            if (mod.address != null)
-            {
-                passenger.Address = mod.address;
-            }
+            if (mod.phone != null) passenger.Phone = mod.phone;
+            if (mod.address != null) passenger.Address = mod.address;
         }
 
-        if (mod.mealSelection != null)
-        {
-            link.MealSelection = mod.mealSelection;
-        }
-
-        if (mod.additionalCheckedBags != null)
-        {
-            link.AdditionalCheckedBags = mod.additionalCheckedBags.Value;
-        }
+        if (mod.mealSelection != null) link.MealSelection = mod.mealSelection;
+        if (mod.additionalCheckedBags != null) link.AdditionalCheckedBags = mod.additionalCheckedBags.Value;
 
         await _context.SaveChangesAsync();
-
         return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount });
     }
 
@@ -443,76 +409,13 @@ public class HomeController : ControllerBase
 
 public record Payload(string email, string password);
 public record RegisterPayload(string email, string password, int? passengerId, string? firstName, string? lastName, DateTime? dateOfBirth);
-public record BookingPayload(int flightFareId);
+public record BookingPayload(int flightFareId, string? tripType, decimal totalAmount, List<int>? seats);
 public record ModifyPayload(string? phone, string? address, string? mealSelection, int? additionalCheckedBags);
 
-public class Report1Row
-{
-    public string FlightNumber { get; set; } = string.Empty;
-    public string Origin { get; set; } = string.Empty;
-    public string Destination { get; set; } = string.Empty;
-    public long TicketsSold { get; set; }
-    public decimal Revenue { get; set; }
-}
-
-public class Report2Row
-{
-    public int PassengerId { get; set; }
-    public string Passenger { get; set; } = string.Empty;
-    public string Email { get; set; } = string.Empty;
-    public string? MembershipNumber { get; set; }
-    public int? PointsBalance { get; set; }
-    public string? MembershipStatus { get; set; }
-    public string Tier { get; set; } = string.Empty;
-}
-
-public class Report3Row
-{
-    public string ConfirmationNumber { get; set; } = string.Empty;
-    public string TransactionReference { get; set; } = string.Empty;
-    public string TransactionType { get; set; } = string.Empty;
-    public decimal Amount { get; set; }
-    public string PaymentStatus { get; set; } = string.Empty;
-    public string ProcessedBy { get; set; } = string.Empty;
-    public string? EmployeeRole { get; set; }
-    public DateTime PaymentDateTime { get; set; }
-}
-
-public class Report4Row
-{
-    public string FlightNumber { get; set; } = string.Empty;
-    public string CabinName { get; set; } = string.Empty;
-    public int FareClassId { get; set; }
-    public int AvailableInventory { get; set; }
-    public int AllocatedCapacity { get; set; }
-    public decimal PctFull { get; set; }
-}
-
-public class Report5Row
-{
-    public string Passenger { get; set; } = string.Empty;
-    public string ConfirmationNumber { get; set; } = string.Empty;
-    public string ReservationStatus { get; set; } = string.Empty;
-    public string TripType { get; set; } = string.Empty;
-    public decimal TotalAmount { get; set; }
-    public long Tickets { get; set; }
-}
-
-public class Report6Row
-{
-    public string ConfirmationNumber { get; set; } = string.Empty;
-    public string TransactionReference { get; set; } = string.Empty;
-    public decimal Amount { get; set; }
-    public string ApprovedBy { get; set; } = string.Empty;
-    public string EmployeeRole { get; set; } = string.Empty;
-    public DateTime PaymentDateTime { get; set; }
-}
-
-public class AirportRow
-{
-    public string AirportCode { get; set; } = string.Empty;
-    public string AirportName { get; set; } = string.Empty;
-    public string City { get; set; } = string.Empty;
-    public string? StateProvince { get; set; }
-    public string Country { get; set; } = string.Empty;
-}
+public class Report1Row { public string FlightNumber { get; set; } = string.Empty; public string Origin { get; set; } = string.Empty; public string Destination { get; set; } = string.Empty; public long TicketsSold { get; set; } public decimal Revenue { get; set; } }
+public class Report2Row { public int PassengerId { get; set; } public string Passenger { get; set; } = string.Empty; public string Email { get; set; } = string.Empty; public string? MembershipNumber { get; set; } public int? PointsBalance { get; set; } public string? MembershipStatus { get; set; } public string Tier { get; set; } = string.Empty; }
+public class Report3Row { public string ConfirmationNumber { get; set; } = string.Empty; public string TransactionReference { get; set; } = string.Empty; public string TransactionType { get; set; } = string.Empty; public decimal Amount { get; set; } public string PaymentStatus { get; set; } = string.Empty; public string ProcessedBy { get; set; } = string.Empty; public string? EmployeeRole { get; set; } public DateTime PaymentDateTime { get; set; } }
+public class Report4Row { public string FlightNumber { get; set; } = string.Empty; public string CabinName { get; set; } = string.Empty; public int FareClassId { get; set; } public int AvailableInventory { get; set; } public int AllocatedCapacity { get; set; } public decimal PctFull { get; set; } }
+public class Report5Row { public string Passenger { get; set; } = string.Empty; public string ConfirmationNumber { get; set; } = string.Empty; public string ReservationStatus { get; set; } = string.Empty; public string TripType { get; set; } = string.Empty; public decimal TotalAmount { get; set; } public long Tickets { get; set; } }
+public class Report6Row { public string ConfirmationNumber { get; set; } = string.Empty; public string TransactionReference { get; set; } = string.Empty; public decimal Amount { get; set; } public string ApprovedBy { get; set; } = string.Empty; public string EmployeeRole { get; set; } = string.Empty; public DateTime PaymentDateTime { get; set; } }
+public class AirportRow { public string AirportCode { get; set; } = string.Empty; public string AirportName { get; set; } = string.Empty; public string City { get; set; } = string.Empty; public string? StateProvince { get; set; } public string Country { get; set; } = string.Empty; }
