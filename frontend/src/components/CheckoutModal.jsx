@@ -21,7 +21,6 @@ export default function CheckoutModal({ show, onHide, fareId, totalPrice, seats,
         body: JSON.stringify({ 
           flightFareId: fareId, 
           tripType: tripType, 
-          totalAmount: totalPrice,
           seats: seats
         }),
       });
