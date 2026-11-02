@@ -185,13 +185,13 @@ public class HomeController : ControllerBase
     public IActionResult Fares(int id)
     {
         var flight = _context.Flight.FirstOrDefault(i => i.FlightId == id);
+
         if (flight == null) return NotFound("No flight like that");
 
         var data = _context.FlightFare.Where(i => i.FlightId == id).ToList();
         return Ok(data);
     }
 
-    // NEW: Get all currently occupied seats for this flight
     [AllowAnonymous]
     [HttpGet("flights/{id}/seats")]
     public IActionResult FlightSeats(int id)
@@ -261,71 +261,90 @@ public class HomeController : ControllerBase
 
         decimal calculatedTotal = fare.CurrentPrice + (seatCount * seatFee);
 
-        var flight = _context.Flight.FirstOrDefault(i => i.FlightId == fare.FlightId);
-
-        var reservation = new Reservation
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+        try
         {
-            ConfirmationNumber = "ARS" + Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper(),
-            BookingDate = DateTime.Now.Date,
-            BookingTime = DateTime.Now.TimeOfDay,
-            ReservationStatus = "Confirmed",
-            HoldExpiration = null,
-            TripType = book.tripType == "round-trip" ? "Round Trip" : "One Way",
-            TotalAmount = calculatedTotal
-
-        };
-
-        _context.Reservation.Add(reservation);
-        await _context.SaveChangesAsync();
-
-        var passenger = new ReservationPassenger
-        {
-            ReservationId = reservation.ReservationId,
-            PassengerId = account.PassengerId.Value,
-            AdditionalCheckedBags = 0,
-            MealSelection = null
-        };
-        _context.ReservationPassenger.Add(passenger);
-        await _context.SaveChangesAsync(); // Save to get reservation_passenger_id
-
-        // Outbound Segment
-        var segment1 = new ReservationSegment
-        {
-            ReservationId = reservation.ReservationId,
-            FlightId = fare.FlightId,
-            FlightFareId = fare.FlightFareId,
-            SegmentNumber = 1,
-            SegmentStatus = "Booked",
-            FarePriceAtBooking = fare.CurrentPrice
-        };
-        _context.ReservationSegment.Add(segment1);
-        await _context.SaveChangesAsync(); // Save to get reservation_segment_id
-
-        // Handle Seat Assignments (Seat Update 2)
-        if (book.seats != null && book.seats.Count > 0)
-        {
-            foreach (var seatId in book.seats)
+                var reservation = new Reservation
             {
-                // Verify seat isn't taken
-                var isTaken = _context.SeatAssignment.Any(sa => sa.flight_id == fare.FlightId && sa.seat_id == seatId && sa.active_seat == 1);
-                if (isTaken) return BadRequest("One of the selected seats was just booked by someone else.");
+                ConfirmationNumber = "ARS" + Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper(),
+                BookingDate = DateTime.Now.Date,
+                BookingTime = DateTime.Now.TimeOfDay,
+                ReservationStatus = "Confirmed",
+                HoldExpiration = null,
+                TripType = book.tripType == "round-trip" ? "Round Trip" : "One Way",
+                TotalAmount = calculatedTotal
 
-                var assignment = new SeatAssignment
+            };
+
+            _context.Reservation.Add(reservation);
+            await _context.SaveChangesAsync();
+
+            var passenger = new ReservationPassenger
+            {
+                ReservationId = reservation.ReservationId,
+                PassengerId = account.PassengerId.Value,
+                AdditionalCheckedBags = 0,
+                MealSelection = null
+            };
+            _context.ReservationPassenger.Add(passenger);
+            await _context.SaveChangesAsync();
+
+            var segment1 = new ReservationSegment
+            {
+                ReservationId = reservation.ReservationId,
+                FlightId = fare.FlightId,
+                FlightFareId = fare.FlightFareId,
+                SegmentNumber = 1,
+                SegmentStatus = "Booked",
+                FarePriceAtBooking = fare.CurrentPrice
+            };
+            _context.ReservationSegment.Add(segment1);
+            await _context.SaveChangesAsync();
+
+            if (book.seats != null && book.seats.Count > 0)
+            {
+                foreach (var seatId in book.seats)
                 {
-                    reservation_segment_id = segment1.ReservationSegmentId,
-                    reservation_passenger_id = passenger.ReservationPassengerId,
-                    seat_id = seatId,
-                    flight_id = fare.FlightId,
-                    assignment_date_time = DateTime.Now,
-                    seat_fee = 25.00m, // Hardcoded seat fee for demo
-                    active_seat = 1
-                };
-                _context.SeatAssignment.Add(assignment);
-            }
-        }
+                    var isTaken = _context.SeatAssignment.Any(sa => sa.flight_id == fare.FlightId && sa.seat_id == seatId && sa.active_seat == 1);
 
-        await _context.SaveChangesAsync();
-        return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, totalAmount = reservation.TotalAmount });
+                if (isTaken)
+                {
+                    await transaction.RollbackAsync();
+                    return BadRequest(
+                        "One of the selected seats was just booked by someone else.");
+                }
+
+
+                    var assignment = new SeatAssignment
+                    {
+                        reservation_segment_id = segment1.ReservationSegmentId,
+                        reservation_passenger_id = passenger.ReservationPassengerId,
+                        seat_id = seatId,
+                        flight_id = fare.FlightId,
+                        assignment_date_time = DateTime.Now,
+                        seat_fee = 25.00m,
+                        active_seat = 1
+                    };
+                    _context.SeatAssignment.Add(assignment);
+                }
+            }
+
+            await _context.SaveChangesAsync();
+
+    await transaction.CommitAsync();
+
+    return Ok(new
+    {
+        reservationId = reservation.ReservationId,
+        confirmationNumber = reservation.ConfirmationNumber,
+        totalAmount = reservation.TotalAmount
+    });
+}
+catch (Exception)
+{
+    await transaction.RollbackAsync();
+    throw;
+}
     }
 
     [HttpPut("reservations/{id}/cancel")]
@@ -347,7 +366,6 @@ public class HomeController : ControllerBase
         var segments = _context.ReservationSegment.Where(i => i.ReservationId == id).ToList();
         if (segments.Any(i => i.SegmentStatus == "Flown")) return BadRequest("Cannot cancel a flown booking");
 
-        // STEP 1: Cancel segments FIRST to trigger inventory restore and bypass the SQL cancel check
         foreach (var segment in segments)
         {
             if (segment.SegmentStatus == "Booked")
@@ -359,7 +377,6 @@ public class HomeController : ControllerBase
         }
         await _context.SaveChangesAsync();
 
-        // STEP 2: Cancel the parent reservation
         reservation.ReservationStatus = "Cancelled";
         await _context.SaveChangesAsync();
 
