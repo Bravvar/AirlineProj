@@ -8,7 +8,7 @@ export default function UsernameInput () {
     }
 
     return (
-        <form  onSubmit="handleSubmit">
+        <form  onSubmit={handleSubmit}>
             <input className = "bg-dark text-white" name="query" />
             <button type="submit">Search</button>
         </form>

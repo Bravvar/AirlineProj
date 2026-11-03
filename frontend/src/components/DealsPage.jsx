@@ -11,7 +11,7 @@ const ALL_DEALS = [
   { title: 'Peru', desc: 'Tap to save $200 off tours to Machu Picchu', img: '/landscapes/peru.jpg', badge: 'VISIT PERU' },
 ];
 
-export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onSignOut }) {
+export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onSignOut, onToggleSidebar }) {
   const [showComingSoon, setShowComingSoon] = useState(false);
 
   useEffect(() => {
@@ -21,7 +21,6 @@ export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onS
   return (
     <div className="min-h-screen bg-white font-sans text-gray-900">
 
-      {/* Navbar */}
       <nav className="sticky top-0 z-50 bg-white border-b border-gray-100 px-8 py-4 flex justify-between items-center shadow-sm">
         <div className="cursor-pointer" onClick={() => onBackToHome('flights')}>
           <Logo />
@@ -32,9 +31,11 @@ export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onS
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
             My Trips
           </a>
+          
+          {/* ADDED PROFILE AVATAR HERE */}
           {user ? (
-            <button onClick={onSignOut} className="border border-blue-600 text-blue-600 font-semibold px-6 py-2 rounded-full hover:bg-blue-50 transition-all text-sm">
-              Sign Out
+            <button onClick={onToggleSidebar} className="w-10 h-10 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold shadow-md hover:scale-105 transition-transform cursor-pointer">
+              {user.email?.charAt(0).toUpperCase()}
             </button>
           ) : (
             <button onClick={onSignIn} className="border border-blue-600 text-blue-600 font-semibold px-6 py-2 rounded-full hover:bg-blue-50 transition-all text-sm">
@@ -44,7 +45,6 @@ export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onS
         </div>
       </nav>
 
-      {/* Secondary Nav (Tabs) - purely visual for the Deals page */}
       <div className="flex justify-center border-b border-gray-100 py-4 gap-8">
         <button onClick={() => onBackToHome('flights')} className="flex items-center gap-2 text-gray-500 hover:text-black font-medium transition-colors">
           <span>✈</span> Flights
@@ -57,14 +57,12 @@ export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onS
         </button>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-6xl mx-auto py-12 px-4">
         <div className="mb-10">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Deals for top destinations</h1>
           <p className="text-gray-500">Find the best offers on flights, hotels, and packages to your favorite destinations.</p>
         </div>
 
-        {/* Grid of Deals */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {ALL_DEALS.map((deal, idx) => (
             <div

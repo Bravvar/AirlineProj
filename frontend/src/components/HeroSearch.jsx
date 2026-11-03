@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { API_URL } from '../config';
+import SeatSelectionModal from './SeatSelectionModal';
+import CheckoutModal from './CheckoutModal';
 
 export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn }) {
   const currentTab = (activeTab === 'packages' || activeTab === 'deals') ? activeTab : 'flights';
@@ -19,6 +21,14 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   const [faresByFlight, setFaresByFlight] = useState({});
   const [bookingMessage, setBookingMessage] = useState('');
   const [bookingError, setBookingError] = useState('');
+  const [fallbackWarning, setFallbackWarning] = useState('');
+
+  // Seat & Checkout State
+  const [showSeatModal, setShowSeatModal] = useState(false);
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [selectedFlightFare, setSelectedFlightFare] = useState(null);
+  const [selectedSeats, setSelectedSeats] = useState([]);
+  const [checkoutTotal, setCheckoutTotal] = useState(0);
 
   // Airport autocomplete
   const [airports, setAirports] = useState(null);
@@ -32,16 +42,16 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   const fromRef = useRef(null);
   const toRef = useRef(null);
 
-  const BASE_DATE = { month: 9, year: 2026 };
+  const now = new Date();
+  const BASE_DATE = { month: now.getMonth(), year: now.getFullYear() };
 
-  // Clears any current search results or booking messages immediately
   const clearResults = () => {
     if (results !== null) setResults(null);
     if (bookingMessage) setBookingMessage('');
     if (bookingError) setBookingError('');
+    if (fallbackWarning) setFallbackWarning('');
   };
 
-  // Fetch airports on mount for autocomplete; falls back gracefully to plain text if unavailable
   useEffect(() => {
     let ignore = false;
     fetch(`${API_URL}/api/airports`)
@@ -50,45 +60,31 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         return r.json();
       })
       .then((data) => {
-        if (!ignore && Array.isArray(data)) {
-          setAirports(data);
-        }
+        if (!ignore && Array.isArray(data)) setAirports(data);
       })
       .catch(() => {
         if (!ignore) setAirports(null);
       });
-    return () => {
-      ignore = true;
-    };
+    return () => { ignore = true; };
   }, []);
 
-  // Handle outside clicks to close any open dropdown
   useEffect(() => {
     function handleClickOutside(event) {
-      if (
-        calendarRef.current && !calendarRef.current.contains(event.target) &&
-        dateTriggerRef.current && !dateTriggerRef.current.contains(event.target)
-      ) {
+      if (calendarRef.current && !calendarRef.current.contains(event.target) &&
+          dateTriggerRef.current && !dateTriggerRef.current.contains(event.target)) {
         setShowCalendar(false);
       }
-      if (
-        travelersRef.current && !travelersRef.current.contains(event.target) &&
-        travelersTriggerRef.current && !travelersTriggerRef.current.contains(event.target)
-      ) {
+      if (travelersRef.current && !travelersRef.current.contains(event.target) &&
+          travelersTriggerRef.current && !travelersTriggerRef.current.contains(event.target)) {
         setShowTravelers(false);
       }
-      if (fromRef.current && !fromRef.current.contains(event.target)) {
-        setShowFromDropdown(false);
-      }
-      if (toRef.current && !toRef.current.contains(event.target)) {
-        setShowToDropdown(false);
-      }
+      if (fromRef.current && !fromRef.current.contains(event.target)) setShowFromDropdown(false);
+      if (toRef.current && !toRef.current.contains(event.target)) setShowToDropdown(false);
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Filter airports matching query (code, city, or name), excluding the airport already selected in other box
   const getAirportMatches = (query, excludeCode) => {
     if (!airports || !Array.isArray(airports)) return [];
     const q = (query || '').trim().toLowerCase();
@@ -106,34 +102,14 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       return codeLower.includes(q) || city.includes(q) || name.includes(q);
     });
 
-    if (!q) {
-      return matches.sort((a, b) => {
-        const aCity = (a.city || a.City || '').toLowerCase();
-        const bCity = (b.city || b.City || '').toLowerCase();
-        return aCity.localeCompare(bCity);
-      });
-    }
+    if (!q) return matches.sort((a, b) => (a.city || '').localeCompare(b.city || ''));
 
     return matches.sort((a, b) => {
       const aCode = (a.airportCode || a.AirportCode || '').toLowerCase();
       const bCode = (b.airportCode || b.AirportCode || '').toLowerCase();
-      const aCity = (a.city || a.City || '').toLowerCase();
-      const bCity = (b.city || b.City || '').toLowerCase();
-
       if (aCode === q && bCode !== q) return -1;
       if (bCode === q && aCode !== q) return 1;
-
-      const aCodeStarts = aCode.startsWith(q);
-      const bCodeStarts = bCode.startsWith(q);
-      if (aCodeStarts && !bCodeStarts) return -1;
-      if (!aCodeStarts && bCodeStarts) return 1;
-
-      const aCityStarts = aCity.startsWith(q);
-      const bCityStarts = bCity.startsWith(q);
-      if (aCityStarts && !bCityStarts) return -1;
-      if (!aCityStarts && bCityStarts) return 1;
-
-      return aCity.localeCompare(bCity);
+      return (a.city || '').localeCompare(b.city || '');
     });
   };
 
@@ -196,20 +172,15 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
           const isStart = startDate && startDate.day === day && startDate.month === monthIndex && startDate.year === year;
           const isEnd = endDate && endDate.day === day && endDate.month === monthIndex && endDate.year === year;
-          const isBetween = startDate && endDate && tripType === 'round-trip' &&
-            new Date(year, monthIndex, day) > new Date(startDate.year, startDate.month, startDate.day) &&
-            new Date(year, monthIndex, day) < new Date(endDate.year, endDate.month, endDate.day);
-
+          
           let btnClasses = "h-10 w-10 mx-auto flex flex-col items-center justify-center rounded-xl text-sm font-medium transition-all ";
 
           if (isStart || isEnd) btnClasses += "bg-blue-600 text-white shadow-md cursor-pointer";
-          else if (isBetween) btnClasses += "bg-blue-50 text-blue-800 cursor-pointer hover:bg-blue-100";
           else btnClasses += "text-gray-800 hover:bg-gray-100 cursor-pointer";
 
           return (
             <div key={`${monthIndex}-${day}`} onClick={() => handleDateClick(day, monthIndex, year)} className={btnClasses}>
               <span>{day}</span>
-              {(isStart || isEnd) && <div className="w-1 h-1 bg-white rounded-full mt-0.5" />}
             </div>
           );
         })}
@@ -234,6 +205,12 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   const handleSearch = async () => {
     if (currentTab !== 'flights') return;
     setSearching(true);
+    setBookingMessage('');
+    setBookingError('');
+    setFallbackWarning('');
+    setResults(null);
+    setFaresByFlight({});
+
     const params = new URLSearchParams();
     if (from.trim()) params.set('origin', from.trim().toUpperCase());
     if (to.trim()) params.set('destination', to.trim().toUpperCase());
@@ -241,12 +218,31 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       const d = `${startDate.year}-${String(startDate.month + 1).padStart(2, '0')}-${String(startDate.day).padStart(2, '0')}`;
       params.set('date', d);
     }
+
+    const url = `${API_URL}/api/flights?${params.toString()}`;
+    
     try {
-      const res = await fetch(`${API_URL}/api/flights?${params.toString()}`);
+      const res = await fetch(url);
       const data = await res.json();
-      setResults(Array.isArray(data) ? data : []);
-    } catch {
+      
+      if (!res.ok) {
+        setBookingError(typeof data === 'string' ? data : 'Search failed.');
+        setResults([]);
+      } else {
+        const rows = Array.isArray(data) ? data : [];
+        setResults(rows);
+        
+        if (rows.length > 0 && params.has('date')) {
+          const iso = params.get('date');
+          const exact = rows.some((f) => String(f.departureDate).slice(0, 10) === iso);
+          if (!exact) {
+            setFallbackWarning(`No flights found on ${iso}. Showing the next available flights for this route instead.`);
+          }
+        }
+      }
+    } catch (err) {
       setResults([]);
+      setBookingError('Unable to reach the server.');
     }
     setSearching(false);
   };
@@ -262,7 +258,8 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     }
   };
 
-  const bookFare = async (fareId) => {
+  // STEP 1: User clicks "Book" on a fare -> Open Seat Map
+  const initiateBooking = (flight, fare) => {
     const token = sessionStorage.getItem('token');
     if (!token) {
       setBookingError('Please log in first to book a flight.');
@@ -271,20 +268,24 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     }
     setBookingError('');
     setBookingMessage('');
-    try {
-      const res = await fetch(`${API_URL}/api/reservations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ flightFareId: fareId }),
-      });
-      const text = await res.text();
-      if (!res.ok) { setBookingError(text || 'Booking failed'); return; }
-      const data = JSON.parse(text);
-      setBookingMessage(`Booked! Confirmation #${data.confirmationNumber || data.ConfirmationNumber} — see it in My Trips.`);
-      if (onBooked) onBooked();
-    } catch {
-      setBookingError('Booking failed');
-    }
+    setSelectedFlightFare({ flight, fare });
+    setShowSeatModal(true);
+  };
+
+  // STEP 2: User finishes picking seats -> Open Checkout
+  const handleSeatsSelected = (seats, totalPrice) => {
+    setSelectedSeats(seats);
+    setCheckoutTotal(totalPrice);
+    setShowSeatModal(false);
+    setShowCheckoutModal(true);
+  };
+
+  // STEP 3: User pays -> Create reservation via backend
+  const handlePaymentSuccess = (confirmationNumber) => {
+    setShowCheckoutModal(false);
+    setBookingMessage(`Successfully booked! Confirmation #${confirmationNumber} — see it in My Trips.`);
+    setFaresByFlight({}); // Refresh inventory
+    if (onBooked) onBooked();
   };
 
   const tabs = [
@@ -300,21 +301,16 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     </svg>
   );
 
-  const isAtEarliestMonth = monthOffset === 0;
-
   return (
     <div className="relative z-50 w-full max-w-5xl mx-auto flex flex-col items-center mt-4">
-
-      {/* Tabs */}
+      
       <div className="flex justify-center gap-1 mb-5 p-1.5 bg-white/20 backdrop-blur-md rounded-full border border-white/30 shadow-sm relative z-10">
         {tabs.map(tab => (
           <button
             key={tab.id}
             onClick={() => { clearResults(); setActiveTab(tab.id); }}
             className={`flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold transition-all cursor-pointer ${
-              currentTab === tab.id
-                ? 'bg-white text-gray-900 shadow-md scale-100'
-                : 'text-white hover:bg-white/20 scale-95 hover:scale-100'
+              currentTab === tab.id ? 'bg-white text-gray-900 shadow-md scale-100' : 'text-white hover:bg-white/20 scale-95 hover:scale-100'
             }`}
           >
             <span>{tab.icon}</span>
@@ -323,10 +319,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         ))}
       </div>
 
-      {/* Search Container - relative z-30 so all dropdowns paint above flight results */}
       <div className="w-full flex flex-col items-center relative z-30">
-
-        {/* Trip Type Toggles */}
         {currentTab === 'flights' && (
           <div className="flex gap-8 mb-4 ml-4 self-start">
             <label className="flex items-center gap-3 cursor-pointer group">
@@ -347,13 +340,9 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
           </div>
         )}
 
-        {/* Main Search Bar */}
         <div className="w-full bg-white rounded-full shadow-2xl flex items-center p-1.5 min-h-[64px] relative z-30">
-
-          {/* FLIGHTS TAB */}
           {currentTab === 'flights' && (
             <div className="flex w-full items-center">
-              {/* FROM INPUT & AUTOCOMPLETE */}
               <div ref={fromRef} className="flex-1 px-5 py-1 relative">
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">From</div>
                 <input
@@ -361,50 +350,27 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                   placeholder="Departure (e.g. JFK)"
                   value={from}
                   onChange={(e) => {
-                    setFrom(e.target.value);
-                    setShowFromDropdown(true);
-                    setShowToDropdown(false);
-                    setShowCalendar(false);
-                    setShowTravelers(false);
-                    clearResults();
+                    setFrom(e.target.value); setShowFromDropdown(true); setShowToDropdown(false);
+                    setShowCalendar(false); setShowTravelers(false); clearResults();
                   }}
                   onFocus={() => {
-                    setShowFromDropdown(true);
-                    setShowToDropdown(false);
-                    setShowCalendar(false);
-                    setShowTravelers(false);
-                    clearResults();
+                    setShowFromDropdown(true); setShowToDropdown(false);
+                    setShowCalendar(false); setShowTravelers(false); clearResults();
                   }}
                   className="w-full outline-none text-sm font-medium text-gray-900 placeholder-gray-400 bg-transparent"
                 />
-
-                {/* Dropdown for From */}
                 {showFromDropdown && airports && (
-                  <div className="absolute top-full mt-3 left-0 w-[340px] max-w-[90vw] bg-white rounded-2xl shadow-2xl p-2 z-[110] text-gray-800 border border-gray-100 max-h-[300px] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+                  <div className="absolute top-full mt-3 left-0 w-[340px] max-w-[90vw] bg-white rounded-2xl shadow-2xl p-2 z-[110] text-gray-800 border border-gray-100 max-h-[300px] overflow-y-auto">
                     {fromMatches.length === 0 ? (
                       <div className="p-3 text-xs text-gray-400 text-center">No matching airports</div>
                     ) : (
                       fromMatches.map((a) => (
-                        <div
-                          key={a.airportCode}
-                          onMouseDown={() => {
-                            setFrom(a.airportCode);
-                            setShowFromDropdown(false);
-                            clearResults();
-                          }}
-                          className="flex items-center justify-between p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors"
-                        >
+                        <div key={a.airportCode} onMouseDown={() => { setFrom(a.airportCode); setShowFromDropdown(false); clearResults(); }} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors">
                           <div className="flex flex-col min-w-0 pr-2">
-                            <span className="font-bold text-gray-900 text-sm truncate">
-                              {a.city}, {a.stateProvince || a.country}
-                            </span>
-                            <span className="text-xs text-gray-500 truncate">
-                              {a.airportName}
-                            </span>
+                            <span className="font-bold text-gray-900 text-sm truncate">{a.city}, {a.stateProvince || a.country}</span>
+                            <span className="text-xs text-gray-500 truncate">{a.airportName}</span>
                           </div>
-                          <span className="font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md text-xs border border-blue-100 flex-shrink-0">
-                            {a.airportCode}
-                          </span>
+                          <span className="font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md text-xs border border-blue-100 flex-shrink-0">{a.airportCode}</span>
                         </div>
                       ))
                     )}
@@ -412,24 +378,8 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                 )}
               </div>
 
-              {/* SWAP BUTTON */}
-              <button
-                type="button"
-                onClick={() => {
-                  const temp = from;
-                  setFrom(to);
-                  setTo(temp);
-                  setShowFromDropdown(false);
-                  setShowToDropdown(false);
-                  clearResults();
-                }}
-                className="text-gray-400 hover:text-gray-600 px-2 text-lg transition-colors cursor-pointer"
-                title="Swap departure and destination"
-              >
-                ⇄
-              </button>
+              <button type="button" onClick={() => { const temp = from; setFrom(to); setTo(temp); setShowFromDropdown(false); setShowToDropdown(false); clearResults(); }} className="text-gray-400 hover:text-gray-600 px-2 text-lg transition-colors cursor-pointer">⇄</button>
 
-              {/* TO INPUT & AUTOCOMPLETE */}
               <div ref={toRef} className="flex-1 px-5 py-1 relative">
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">To</div>
                 <input
@@ -437,50 +387,27 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                   placeholder="Destination (e.g. LAX)"
                   value={to}
                   onChange={(e) => {
-                    setTo(e.target.value);
-                    setShowToDropdown(true);
-                    setShowFromDropdown(false);
-                    setShowCalendar(false);
-                    setShowTravelers(false);
-                    clearResults();
+                    setTo(e.target.value); setShowToDropdown(true); setShowFromDropdown(false);
+                    setShowCalendar(false); setShowTravelers(false); clearResults();
                   }}
                   onFocus={() => {
-                    setShowToDropdown(true);
-                    setShowFromDropdown(false);
-                    setShowCalendar(false);
-                    setShowTravelers(false);
-                    clearResults();
+                    setShowToDropdown(true); setShowFromDropdown(false);
+                    setShowCalendar(false); setShowTravelers(false); clearResults();
                   }}
                   className="w-full outline-none text-sm font-medium text-gray-900 placeholder-gray-400 bg-transparent"
                 />
-
-                {/* Dropdown for To */}
                 {showToDropdown && airports && (
-                  <div className="absolute top-full mt-3 left-0 w-[340px] max-w-[90vw] bg-white rounded-2xl shadow-2xl p-2 z-[110] text-gray-800 border border-gray-100 max-h-[300px] overflow-y-auto animate-in fade-in zoom-in-95 duration-150">
+                  <div className="absolute top-full mt-3 left-0 w-[340px] max-w-[90vw] bg-white rounded-2xl shadow-2xl p-2 z-[110] text-gray-800 border border-gray-100 max-h-[300px] overflow-y-auto">
                     {toMatches.length === 0 ? (
                       <div className="p-3 text-xs text-gray-400 text-center">No matching airports</div>
                     ) : (
                       toMatches.map((a) => (
-                        <div
-                          key={a.airportCode}
-                          onMouseDown={() => {
-                            setTo(a.airportCode);
-                            setShowToDropdown(false);
-                            clearResults();
-                          }}
-                          className="flex items-center justify-between p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors"
-                        >
+                        <div key={a.airportCode} onMouseDown={() => { setTo(a.airportCode); setShowToDropdown(false); clearResults(); }} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors">
                           <div className="flex flex-col min-w-0 pr-2">
-                            <span className="font-bold text-gray-900 text-sm truncate">
-                              {a.city}, {a.stateProvince || a.country}
-                            </span>
-                            <span className="text-xs text-gray-500 truncate">
-                              {a.airportName}
-                            </span>
+                            <span className="font-bold text-gray-900 text-sm truncate">{a.city}, {a.stateProvince || a.country}</span>
+                            <span className="text-xs text-gray-500 truncate">{a.airportName}</span>
                           </div>
-                          <span className="font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md text-xs border border-blue-100 flex-shrink-0">
-                            {a.airportCode}
-                          </span>
+                          <span className="font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md text-xs border border-blue-100 flex-shrink-0">{a.airportCode}</span>
                         </div>
                       ))
                     )}
@@ -490,18 +417,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
               <div className="w-px h-10 bg-gray-200"></div>
 
-              {/* DATES TRIGGER */}
-              <div
-                ref={dateTriggerRef}
-                className="flex-1 px-5 py-1 cursor-pointer group date-trigger"
-                onClick={() => {
-                  setShowCalendar(!showCalendar);
-                  setShowTravelers(false);
-                  setShowFromDropdown(false);
-                  setShowToDropdown(false);
-                  clearResults();
-                }}
-              >
+              <div ref={dateTriggerRef} className="flex-1 px-5 py-1 cursor-pointer group date-trigger" onClick={() => { setShowCalendar(!showCalendar); setShowTravelers(false); setShowFromDropdown(false); setShowToDropdown(false); clearResults(); }}>
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">{tripType === 'round-trip' ? 'Dates' : 'Date'}</div>
                 <div className={`text-sm font-medium transition-colors ${startDate ? 'text-gray-900' : 'text-gray-400 group-hover:text-gray-600'}`}>
                   {startDate ? getDateDisplay() : (tripType === 'round-trip' ? 'Add dates' : 'Add date')}
@@ -510,18 +426,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
               <div className="w-px h-10 bg-gray-200"></div>
 
-              {/* TRAVELERS TRIGGER */}
-              <div
-                ref={travelersTriggerRef}
-                className="flex-1 px-5 py-1 cursor-pointer group"
-                onClick={() => {
-                  setShowTravelers(!showTravelers);
-                  setShowCalendar(false);
-                  setShowFromDropdown(false);
-                  setShowToDropdown(false);
-                  clearResults();
-                }}
-              >
+              <div ref={travelersTriggerRef} className="flex-1 px-5 py-1 cursor-pointer group" onClick={() => { setShowTravelers(!showTravelers); setShowCalendar(false); setShowFromDropdown(false); setShowToDropdown(false); clearResults(); }}>
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">Travelers</div>
                 <div className="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors">
                   {totalTravelers} {totalTravelers === 1 ? 'traveler' : 'travelers'}
@@ -530,47 +435,6 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
             </div>
           )}
 
-          {/* PACKAGES & DEALS TABS */}
-          {['packages', 'deals'].includes(currentTab) && (
-            <div className="flex w-full items-center">
-              <div className="flex-1 px-5 py-1">
-                <div className="text-xs text-gray-500 font-semibold mb-0.5">Where</div>
-                <input type="text" placeholder="Search destination" className="w-full outline-none text-sm font-medium text-gray-900 placeholder-gray-400 bg-transparent" />
-              </div>
-              <div className="w-px h-10 bg-gray-200"></div>
-              <div
-                ref={dateTriggerRef}
-                className="flex-1 px-5 py-1 cursor-pointer date-trigger"
-                onClick={() => {
-                  setShowCalendar(!showCalendar);
-                  setShowTravelers(false);
-                  setShowFromDropdown(false);
-                  setShowToDropdown(false);
-                  clearResults();
-                }}
-              >
-                <div className="text-xs text-gray-500 font-semibold mb-0.5">Dates</div>
-                <div className={`text-sm font-medium ${startDate ? 'text-gray-900' : 'text-gray-400'}`}>{getDateDisplay()}</div>
-              </div>
-              <div className="w-px h-10 bg-gray-200"></div>
-              <div
-                ref={travelersTriggerRef}
-                className="flex-1 px-5 py-1 cursor-pointer"
-                onClick={() => {
-                  setShowTravelers(!showTravelers);
-                  setShowCalendar(false);
-                  setShowFromDropdown(false);
-                  setShowToDropdown(false);
-                  clearResults();
-                }}
-              >
-                <div className="text-xs text-gray-500 font-semibold mb-0.5">Guests</div>
-                <div className="text-sm font-medium text-gray-900">{totalTravelers} {totalTravelers === 1 ? 'guest' : 'guests'}</div>
-              </div>
-            </div>
-          )}
-
-          {/* Search Button */}
           <div className="pr-1.5 pl-3">
             <button onClick={handleSearch} className="bg-[#0066ff] hover:bg-blue-700 transition-colors w-[50px] h-[50px] rounded-full flex items-center justify-center shadow-md hover:shadow-lg hover:scale-105 cursor-pointer">
               {searchIcon}
@@ -578,15 +442,11 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
           </div>
         </div>
 
-        {/* --- CALENDAR DROPDOWN (z-[100]) positioned directly under search bar --- */}
         {showCalendar && (
-          <div
-            ref={calendarRef}
-            className="absolute top-full mt-4 bg-white rounded-3xl shadow-2xl p-8 w-[740px] max-w-[95vw] z-[100] text-gray-800 border border-gray-100 animate-in fade-in slide-in-from-top-2 duration-200"
-          >
+          <div ref={calendarRef} className="absolute top-full mt-4 bg-white rounded-3xl shadow-2xl p-8 w-[740px] max-w-[95vw] z-[100] text-gray-800 border border-gray-100">
             <div className="flex justify-between items-center mb-6">
               <div className="flex-1 flex items-center justify-center gap-3">
-                <button onClick={() => setMonthOffset(prev => prev - 1)} disabled={isAtEarliestMonth} className={`p-1.5 rounded-full transition-colors ${isAtEarliestMonth ? 'text-gray-300 cursor-not-allowed' : 'hover:bg-gray-100 text-blue-600 cursor-pointer'}`}>
+                <button onClick={() => setMonthOffset(prev => prev - 1)} className="p-1.5 rounded-full hover:bg-gray-100 text-blue-600 transition-colors cursor-pointer">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
                 </button>
                 <h5 className="font-bold text-xl text-gray-900 w-44 text-center">{leftMonth.label}</h5>
@@ -613,16 +473,10 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
           </div>
         )}
 
-        {/* --- TRAVELERS DROPDOWN (z-[100]) positioned directly under search bar --- */}
         {showTravelers && (
-          <div ref={travelersRef} className="absolute top-full mt-4 right-0 bg-white rounded-3xl shadow-2xl p-8 w-[420px] max-w-[95vw] z-[100] text-gray-800 border border-gray-100 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div ref={travelersRef} className="absolute top-full mt-4 right-0 bg-white rounded-3xl shadow-2xl p-8 w-[420px] max-w-[95vw] z-[100] text-gray-800 border border-gray-100">
             <div className="flex flex-col gap-6">
-              {Object.entries({
-                adults: { label: 'Adults', sub: 'Age 12 or above' },
-                children: { label: 'Children', sub: 'Ages 2-11' },
-                infantsSeat: { label: 'Infants', sub: 'In seat' },
-                infantsLap: { label: 'Infants', sub: 'On lap' }
-              }).map(([key, info]) => (
+              {Object.entries({ adults: { label: 'Adults', sub: 'Age 12 or above' }, children: { label: 'Children', sub: 'Ages 2-11' }, infantsSeat: { label: 'Infants', sub: 'In seat' }, infantsLap: { label: 'Infants', sub: 'On lap' } }).map(([key, info]) => (
                 <div key={key} className="flex justify-between items-center">
                   <div>
                     <div className="font-bold text-lg text-gray-900">{info.label}</div>
@@ -641,19 +495,19 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         )}
       </div>
 
-      {/* --- FLIGHT RESULTS (relative z-10 so search bar and its dropdowns always paint on top) --- */}
       {currentTab === 'flights' && (searching || results !== null) && (
         <div className="w-full bg-white rounded-3xl shadow-2xl mt-4 p-6 text-gray-800 relative z-10">
-          {bookingMessage && (
-            <p className="bg-green-50 border border-green-200 text-green-800 font-semibold rounded-2xl px-4 py-3 mb-4">{bookingMessage}</p>
-          )}
-          {bookingError && (
-            <p className="bg-red-50 border border-red-200 text-red-700 font-semibold rounded-2xl px-4 py-3 mb-4">{bookingError}</p>
-          )}
+          {bookingMessage && <p className="bg-green-50 border border-green-200 text-green-800 font-semibold rounded-2xl px-4 py-3 mb-4">{bookingMessage}</p>}
+          {bookingError && <p className="bg-red-50 border border-red-200 text-red-700 font-semibold rounded-2xl px-4 py-3 mb-4">{bookingError}</p>}
+          {fallbackWarning && <p className="bg-amber-50 border border-amber-200 text-amber-800 font-semibold rounded-2xl px-4 py-3 mb-4">{fallbackWarning}</p>}
+          
           {searching ? (
             <p className="text-gray-500">Searching...</p>
           ) : results.length === 0 ? (
-            <p className="text-gray-500">No flights found. Try different airports or dates.</p>
+            <div className="text-gray-600 text-center py-6">
+              <p className="font-medium mb-1">No flights found for that route/date.</p>
+              <p className="text-sm text-gray-500">Try searching a major route like JFK to LAX.</p>
+            </div>
           ) : (
             <div className="flex flex-col gap-4">
               {results.map((f) => (
@@ -675,9 +529,9 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                         <div className="text-sm text-gray-500">No fares for this flight.</div>
                       ) : (
                         faresByFlight[f.flightId].map((fare) => (
-                          <div key={fare.flightFareId} className="text-sm text-gray-700 flex justify-between items-center">
-                            <span>${fare.currentPrice} — {fare.availableInventory} seats left</span>
-                            <button onClick={() => bookFare(fare.flightFareId)} className="text-blue-600 font-semibold hover:underline cursor-pointer">
+                          <div key={fare.flightFareId} className="text-sm text-gray-700 flex justify-between items-center bg-gray-50 rounded-xl px-3 py-2 mt-1">
+                            <span className="font-medium">${fare.currentPrice} <span className="text-gray-400 font-normal ml-1">({fare.availableInventory} seats left)</span></span>
+                            <button onClick={() => initiateBooking(f, fare)} className="bg-[#0066ff] text-white hover:bg-blue-700 px-4 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer">
                               Book
                             </button>
                           </div>
@@ -691,6 +545,30 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
           )}
         </div>
       )}
+
+      {/* MODALS */}
+      {selectedFlightFare && (
+        <SeatSelectionModal
+          show={showSeatModal}
+          onHide={() => setShowSeatModal(false)}
+          flightId={selectedFlightFare.flight.flightId}
+          farePrice={selectedFlightFare.fare.currentPrice}
+          onProceed={handleSeatsSelected}
+        />
+      )}
+
+      {selectedFlightFare && (
+        <CheckoutModal
+          show={showCheckoutModal}
+          onHide={() => setShowCheckoutModal(false)}
+          fareId={selectedFlightFare.fare.flightFareId}
+          totalPrice={checkoutTotal}
+          seats={selectedSeats}
+          tripType={tripType}
+          onSuccess={handlePaymentSuccess}
+        />
+      )}
+
     </div>
   );
 }

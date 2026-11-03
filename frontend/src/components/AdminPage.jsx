@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import Logo from './Logo';
 import { API_URL } from '../config';
+import StaffFlightManagement from './StaffFlightManagement';
 
 export default function AdminPage({ token, email, onBackToHome, onToggleSidebar }) {
   const [tab, setTab] = useState('overview');
@@ -37,7 +38,7 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
           <Logo />
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-sm font-semibold text-gray-500">{email} (Admin)</span>
+          {/* <--- REMOVED EMAIL TEXT FROM HERE ---> */}
           <button onClick={onToggleSidebar} className="w-10 h-10 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold shadow-md hover:scale-105 transition-transform cursor-pointer">
             {email.charAt(0).toUpperCase()}
           </button>
@@ -51,6 +52,7 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
           {[
             { id: 'overview', label: 'Dashboard' },
             { id: 'flights', label: 'Fleet & Fares' },
+            { id: 'management', label: 'Add & Cancel Flights' },
             { id: 'users', label: 'Users & Roles' },
           ].map(item => (
             <button
@@ -115,6 +117,10 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
               </div>
             ))}
           </div>
+        )}
+
+        {tab === 'management' && (
+          <StaffFlightManagement token={token} />
         )}
 
         {tab === 'users' && (

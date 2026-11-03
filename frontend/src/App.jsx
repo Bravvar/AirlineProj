@@ -56,6 +56,7 @@ export default function App() {
     if (pageId === 'deals') setCurrentPage('deals');
     if (pageId === 'admin') setCurrentPage('admin');
     if (pageId === 'employee') setCurrentPage('employee');
+    if (pageId === 'reports') setCurrentPage('reports');
     if (pageId === 'dashboard' || pageId === 'home') {
       setCurrentPage('home');
       setActiveTab('flights');
@@ -195,22 +196,15 @@ export default function App() {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
               My Trips
             </a>
-            <a href="#" onClick={(e) => { e.preventDefault(); setCurrentPage('reports'); }} className="text-white font-semibold hover:opacity-80 flex items-center gap-2 text-sm drop-shadow-sm transition-opacity">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
-              Reports
-            </a>
+            {auth.role === 'Supervisor' && (
+              <a href="#" onClick={(e) => { e.preventDefault(); setCurrentPage('reports'); }} className="text-white font-semibold hover:opacity-80 flex items-center gap-2 text-sm drop-shadow-sm transition-opacity">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+                Reports
+              </a>
+            )}
             
             {auth.token ? (
               <div className="flex items-center gap-4">
-                <span className="text-white font-semibold text-sm drop-shadow-sm">
-                  {auth.email} {auth.role ? `(${auth.role})` : ''}
-                </span>
-                <button
-                  onClick={handleLogout}
-                  className="text-white/80 hover:text-white font-semibold text-sm transition-colors cursor-pointer"
-                >
-                  Log Out
-                </button>
                 <button
                   onClick={() => setShowSidebar(true)}
                   title="Menu"

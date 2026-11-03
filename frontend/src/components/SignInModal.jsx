@@ -60,7 +60,7 @@ export default function SignInModal({ show, onHide }) {
           body: JSON.stringify({ email: username.trim(), password }),
         });
         const text = await res.text();
-        if (!res.ok) { setFormError(text || 'Login failed'); return; }
+        if (!res.ok) { setFormError(text || 'Credentials are incorrect'); return; }
         const data = JSON.parse(text);
         sessionStorage.setItem('token', data.token);
         sessionStorage.setItem('role', data.role);
@@ -88,7 +88,7 @@ export default function SignInModal({ show, onHide }) {
             password,
             firstName: firstName.trim(),
             lastName: lastName.trim(),
-            dateOfBirth,
+            dateOfBirth: `${dateOfBirth}T00:00:00`, // Format for C# DateTime
           }),
         });
         const text = await res.text();
@@ -273,13 +273,43 @@ export default function SignInModal({ show, onHide }) {
                 />
               </div>
 
-              {/* Remember Me & Forgot Password */}
+              {/* Remember Me */}
               <div className="flex justify-between items-center mt-1 px-1">
                 <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-500 font-medium">
                   <input type="checkbox" className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300" />
                   Remember me
                 </label>
-                <a href="#" onClick={(e) => e.preventDefault()} className="text-sm text-blue-600 font-semibold hover:underline">Forgot Password?</a>
+              </div>
+
+              {/* Demo Logins Box */}
+              <div className="bg-blue-50/80 border border-blue-200 rounded-2xl p-3.5 text-xs text-gray-700 mt-2">
+                <p className="font-bold text-blue-900 mb-1">Demo Accounts for Grading</p>
+                <p className="text-gray-600 mb-2 leading-relaxed">
+                  Log in with these, do not sign up for staff accounts (staff email domains cannot self-register). Password for all is <span className="font-mono font-bold text-gray-900">Airline123!</span>
+                </p>
+                <div className="flex flex-col gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => { setUsername('james.wilson@google.com'); setPassword('Airline123!'); }}
+                    className="text-left bg-white hover:bg-blue-100/60 border border-blue-200/80 rounded-xl px-2.5 py-1.5 transition-colors cursor-pointer"
+                  >
+                    <span className="font-bold text-blue-800">Member:</span> <span className="font-mono text-gray-800">james.wilson@google.com</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setUsername('jennifer.thomas@Coog10Employee.com'); setPassword('Airline123!'); }}
+                    className="text-left bg-white hover:bg-blue-100/60 border border-blue-200/80 rounded-xl px-2.5 py-1.5 transition-colors cursor-pointer"
+                  >
+                    <span className="font-bold text-purple-800">Employee:</span> <span className="font-mono text-gray-800">jennifer.thomas@Coog10Employee.com</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setUsername('robert.anderson@Coog10Admin.com'); setPassword('Airline123!'); }}
+                    className="text-left bg-white hover:bg-blue-100/60 border border-blue-200/80 rounded-xl px-2.5 py-1.5 transition-colors cursor-pointer"
+                  >
+                    <span className="font-bold text-indigo-800">Supervisor:</span> <span className="font-mono text-gray-800">robert.anderson@Coog10Admin.com</span>
+                  </button>
+                </div>
               </div>
             </>
           )}
