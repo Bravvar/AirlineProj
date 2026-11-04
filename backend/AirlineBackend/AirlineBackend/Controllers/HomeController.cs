@@ -13,7 +13,6 @@ using System.Text;
 public class HomeController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
-
     private readonly IConfiguration _config;
 
     public HomeController(ApplicationDbContext context, IConfiguration config)
@@ -84,6 +83,7 @@ public class HomeController : ControllerBase
         }
 
         int? passengerId = null;
+        Passenger createdPassenger = null;
 
         if (reg.passengerId != null)
         {
@@ -92,7 +92,6 @@ public class HomeController : ControllerBase
             {
                 return NotFound("No passenger found");
             }
-
             passengerId = reg.passengerId;
         }
         else if (!string.IsNullOrEmpty(reg.firstName) && !string.IsNullOrEmpty(reg.lastName) && reg.dateOfBirth != null)
@@ -101,22 +100,25 @@ public class HomeController : ControllerBase
             if (existing != null)
             {
                 passengerId = existing.PassengerId;
+                // Update phone if provided
+                if (!string.IsNullOrEmpty(reg.Phone)) existing.Phone = reg.Phone;
+                createdPassenger = existing;
             }
             else
             {
-                var created = new Passenger
+                createdPassenger = new Passenger
                 {
                     FirstName = reg.firstName,
                     LastName = reg.lastName,
                     DateOfBirth = reg.dateOfBirth.Value,
                     Email = reg.email,
-                    Phone = null,
+                    Phone = reg.Phone,
                     Address = null
                 };
 
-                _context.Passenger.Add(created);
+                _context.Passenger.Add(createdPassenger);
                 await _context.SaveChangesAsync();
-                passengerId = created.PassengerId;
+                passengerId = createdPassenger.PassengerId;
             }
         }
         else
@@ -125,6 +127,7 @@ public class HomeController : ControllerBase
             if (found != null)
             {
                 passengerId = found.PassengerId;
+                createdPassenger = found;
             }
             else
             {
@@ -132,19 +135,19 @@ public class HomeController : ControllerBase
                 var parts = name.Split('.', '_', '-');
                 var first = parts.Length > 0 && parts[0].Length > 0 ? char.ToUpper(parts[0][0]) + parts[0].Substring(1) : "New";
                 var last = parts.Length > 1 && parts[1].Length > 0 ? char.ToUpper(parts[1][0]) + parts[1].Substring(1) : "Passenger";
-                var created = new Passenger
+                createdPassenger = new Passenger
                 {
                     FirstName = first,
                     LastName = last,
                     DateOfBirth = new DateTime(1990, 1, 1),
                     Email = reg.email,
-                    Phone = null,
+                    Phone = reg.Phone,
                     Address = null
                 };
 
-                _context.Passenger.Add(created);
+                _context.Passenger.Add(createdPassenger);
                 await _context.SaveChangesAsync();
-                passengerId = created.PassengerId;
+                passengerId = createdPassenger.PassengerId;
             }
         }
 
@@ -159,6 +162,22 @@ public class HomeController : ControllerBase
 
         _context.UserAccount.Add(data);
         await _context.SaveChangesAsync();
+
+        // AUTOMATIC MEMBERSHIP ID GENERATION
+        if (createdPassenger != null && !_context.MembershipAccount.Any(m => m.PassengerId == createdPassenger.PassengerId))
+        {
+            var newMemberId = "MEM-" + (100000 + createdPassenger.PassengerId).ToString();
+            var membership = new MembershipAccount
+            {
+                PassengerId = createdPassenger.PassengerId,
+                MembershipNumber = newMemberId,
+                EnrollmentDate = DateTime.Now.Date,
+                PointsBalance = 0,
+                MembershipStatus = "Active"
+            };
+            _context.MembershipAccount.Add(membership);
+            await _context.SaveChangesAsync();
+        }
 
         return Ok("Account created");
     }
@@ -187,26 +206,33 @@ public class HomeController : ControllerBase
     {
         var data = _context.Flight.AsQueryable();
 
+        // Flexible Origin Search (Code, City, State)
         if (!string.IsNullOrEmpty(origin))
         {
             var codes = AirportCodesFor(origin);
-            if (codes.Count == 0)
+            if (codes.Count > 0)
             {
+                data = data.Where(i => codes.Contains(i.OriginAirportCode));
+            }
+            else
+            {
+                // Fallback if no airport matches the string
                 return Ok(new List<Flight>());
             }
-
-            data = data.Where(i => codes.Contains(i.OriginAirportCode));
         }
 
+        // Flexible Destination Search (Code, City, State)
         if (!string.IsNullOrEmpty(destination))
         {
             var codes = AirportCodesFor(destination);
-            if (codes.Count == 0)
+            if (codes.Count > 0)
+            {
+                data = data.Where(i => codes.Contains(i.DestinationAirportCode));
+            }
+            else
             {
                 return Ok(new List<Flight>());
             }
-
-            data = data.Where(i => codes.Contains(i.DestinationAirportCode));
         }
 
         if (!string.IsNullOrEmpty(date) && DateTime.TryParse(date, out var day))
@@ -214,14 +240,25 @@ public class HomeController : ControllerBase
             data = data.Where(i => i.DepartureDate == day.Date);
         }
 
-        return Ok(data.ToList());
+        // If no search params at all, return all flights (or maybe a limit)
+        if (string.IsNullOrEmpty(origin) && string.IsNullOrEmpty(destination) && string.IsNullOrEmpty(date))
+        {
+            return Ok(data.OrderBy(i => i.DepartureDate).Take(50).ToList());
+        }
+
+        return Ok(data.OrderBy(i => i.DepartureDate).ToList());
     }
 
     private List<string> AirportCodesFor(string value)
     {
         var v = value.Trim();
         var expanded = ExpandState(v);
-        var rows = _context.Database.SqlQueryRaw<AirportCodeRow>("SELECT airport_code AS airportCode FROM Airport WHERE airport_code = {0} OR city = {0} OR state_province = {0} OR state_province = {1}", v, expanded).ToList();
+        
+        // Search by exact code, city, state, or state abbreviation
+        var rows = _context.Database.SqlQueryRaw<AirportCodeRow>(
+            "SELECT airport_code AS airportCode FROM Airport WHERE airport_code = {0} OR city = {0} OR state_province = {0} OR state_province = {1}", 
+            v, expanded).ToList();
+            
         return rows.Select(i => i.AirportCode).Distinct().ToList();
     }
 
@@ -229,24 +266,11 @@ public class HomeController : ControllerBase
     {
         var states = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            { "TX", "Texas" },
-            { "NY", "New York" },
-            { "CA", "California" },
-            { "GA", "Georgia" },
-            { "IL", "Illinois" },
-            { "CO", "Colorado" },
-            { "WA", "Washington" },
-            { "FL", "Florida" },
-            { "MA", "Massachusetts" },
-            { "AZ", "Arizona" },
-            { "NC", "North Carolina" },
-            { "NJ", "New Jersey" },
-            { "LA", "Louisiana" },
-            { "TN", "Tennessee" },
-            { "MO", "Missouri" },
-            { "MS", "Mississippi" },
-            { "AK", "Alaska" },
-            { "NV", "Nevada" }
+            { "TX", "Texas" }, { "NY", "New York" }, { "CA", "California" }, { "GA", "Georgia" },
+            { "IL", "Illinois" }, { "CO", "Colorado" }, { "WA", "Washington" }, { "FL", "Florida" },
+            { "MA", "Massachusetts" }, { "AZ", "Arizona" }, { "NC", "North Carolina" }, { "NJ", "New Jersey" },
+            { "LA", "Louisiana" }, { "TN", "Tennessee" }, { "MO", "Missouri" }, { "MS", "Mississippi" },
+            { "AK", "Alaska" }, { "NV", "Nevada" }
         };
 
         if (states.TryGetValue(value, out var full))
@@ -555,7 +579,9 @@ public class HomeController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        await _context.Database.ExecuteSqlRawAsync("UPDATE SeatAssignment SET active_seat = 0 WHERE reservation_segment_id IN (SELECT reservation_segment_id FROM ReservationSegment WHERE reservation_id = {0})", id);
+        // BUG FIX: Removed the line that set active_seat = 0. 
+        // The database trigger `trg_segment_release_seats` handles setting it to NULL, 
+        // which respects the CHECK constraint that only allows 1 or NULL.
 
         return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount });
     }
@@ -849,7 +875,7 @@ public class HomeController : ControllerBase
 }
 
 public record Payload(string email, string password);
-public record RegisterPayload(string email, string password, int? passengerId, string? firstName, string? lastName, DateTime? dateOfBirth);
+public record RegisterPayload(string email, string password, int? passengerId, string? firstName, string? lastName, string? Phone, DateTime? dateOfBirth);
 public record BookingPayload(int flightFareId, int? returnFareId, List<int>? seats);
 public record ModifyPayload(string? phone, string? address, string? mealSelection, int? additionalCheckedBags);
 public record AddFlightPayload(string flightNumber, string origin, string destination, int aircraftId, DateTime departure, DateTime arrival);

@@ -25,6 +25,7 @@ export default function SignInModal({ show, onHide }) {
   const [lastName, setLastName] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
@@ -36,6 +37,7 @@ export default function SignInModal({ show, onHide }) {
     setLastName('');
     setDateOfBirth('');
     setEmail('');
+    setPhone('');
     setUsername('');
     setPassword('');
     setFormError('');
@@ -47,7 +49,6 @@ export default function SignInModal({ show, onHide }) {
     onHide();
   };
 
-  // Send login / signup to the backend
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
@@ -74,6 +75,13 @@ export default function SignInModal({ show, onHide }) {
         setFormError('Please fill in First Name, Last Name, and Date of Birth.');
         return;
       }
+      // Phone Validation: must be exactly 10 digits (no letters)
+      const phoneRegex = /^[0-9]{10}$/;
+      if (!phoneRegex.test(phone)) {
+        setFormError('Please enter a valid 10-digit phone number (digits only).');
+        return;
+      }
+
       const lowerEmail = email.trim().toLowerCase();
       if (lowerEmail.endsWith('@coog10admin.com') || lowerEmail.endsWith('@coog10employee.com')) {
         setFormError('This email domain is reserved for staff accounts.');
@@ -88,7 +96,8 @@ export default function SignInModal({ show, onHide }) {
             password,
             firstName: firstName.trim(),
             lastName: lastName.trim(),
-            dateOfBirth: `${dateOfBirth}T00:00:00`, // Format for C# DateTime
+            phone: phone.trim(),
+            dateOfBirth: `${dateOfBirth}T00:00:00`, 
           }),
         });
         const text = await res.text();
@@ -105,7 +114,6 @@ export default function SignInModal({ show, onHide }) {
 
   if (!show) return null;
 
-  // Handle typing restrictions
   const handleNameChange = (setter) => (e) => {
     const value = e.target.value;
     if (/^[a-zA-Z\s'-]*$/.test(value)) {
@@ -120,6 +128,14 @@ export default function SignInModal({ show, onHide }) {
     }
   };
 
+  const handlePhoneChange = (e) => {
+    const value = e.target.value;
+    // Only allow digits and max 10 characters
+    if (/^\d*$/.test(value) && value.length <= 10) {
+      setPhone(value);
+    }
+  };
+
   const handleUsernameChange = (e) => {
     const value = e.target.value;
     if (/^[a-zA-Z0-9@._-]*$/.test(value)) {
@@ -127,10 +143,7 @@ export default function SignInModal({ show, onHide }) {
     }
   };
 
-  // Email Validation (Basic check for @ and .)
   const isEmailValid = email.includes('@') && email.includes('.');
-
-  // Password Validation Logic
   const isLengthValid = password.length >= 8;
   const hasUppercase = /[A-Z]/.test(password);
   const hasSymbol = /[^A-Za-z0-9]/.test(password);
@@ -138,9 +151,7 @@ export default function SignInModal({ show, onHide }) {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      {/* Modal Box */}
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-[440px] p-7 relative animate-in zoom-in-95 duration-200">
-        {/* Close Button */}
         <button onClick={handleClose} className="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-3xl leading-none transition-colors cursor-pointer">&times;</button>
         
         <h3 className="text-2xl font-bold text-gray-900 mb-6 text-center">
@@ -148,10 +159,8 @@ export default function SignInModal({ show, onHide }) {
         </h3>
         
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          {/* SIGN UP SPECIFIC FIELDS */}
           {view === 'signup' && (
             <>
-              {/* First Name & Last Name in one row */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-xs font-semibold text-gray-600 mb-1 block">First Name</label>
@@ -175,7 +184,6 @@ export default function SignInModal({ show, onHide }) {
                 </div>
               </div>
 
-              {/* Date of Birth */}
               <div>
                 <label className="text-xs font-semibold text-gray-600 mb-1 block">Date of Birth</label>
                 <input 
@@ -186,7 +194,6 @@ export default function SignInModal({ show, onHide }) {
                 />
               </div>
 
-              {/* Email */}
               <div>
                 <label className="text-xs font-semibold text-gray-600 mb-1 block">Email</label>
                 <div className="relative">
@@ -212,7 +219,23 @@ export default function SignInModal({ show, onHide }) {
                 </div>
               </div>
 
-              {/* Password */}
+              {/* NEW PHONE NUMBER FIELD */}
+              <div>
+                <label className="text-xs font-semibold text-gray-600 mb-1 block">Phone Number</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" /></svg>
+                  </div>
+                  <input 
+                    type="tel" 
+                    placeholder="e.g. 7135550199" 
+                    value={phone}
+                    onChange={handlePhoneChange}
+                    className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl pl-11 pr-4 py-2.5 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all placeholder-gray-400 text-sm" 
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="text-xs font-semibold text-gray-600 mb-1 block">Password</label>
                 <div className="relative">
@@ -231,7 +254,6 @@ export default function SignInModal({ show, onHide }) {
                 </div>
               </div>
 
-              {/* Password Strength Indicators */}
               {password.length > 0 && (
                 <div className="flex flex-col gap-1 px-2 mt-0.5 mb-1">
                   <ValidationIndicator isValid={isLengthValid} text="At least 8 characters long" />
@@ -242,10 +264,8 @@ export default function SignInModal({ show, onHide }) {
             </>
           )}
 
-          {/* LOGIN SPECIFIC FIELDS */}
           {view === 'login' && (
             <>
-              {/* Username / Email */}
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
@@ -259,7 +279,6 @@ export default function SignInModal({ show, onHide }) {
                 />
               </div>
 
-              {/* Password */}
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                   <svg className="w-5 h-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" /></svg>
@@ -273,7 +292,6 @@ export default function SignInModal({ show, onHide }) {
                 />
               </div>
 
-              {/* Remember Me */}
               <div className="flex justify-between items-center mt-1 px-1">
                 <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-500 font-medium">
                   <input type="checkbox" className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300" />
@@ -281,7 +299,6 @@ export default function SignInModal({ show, onHide }) {
                 </label>
               </div>
 
-              {/* Demo Logins Box */}
               <div className="bg-blue-50/80 border border-blue-200 rounded-2xl p-3.5 text-xs text-gray-700 mt-2">
                 <p className="font-bold text-blue-900 mb-1">Demo Accounts for Grading</p>
                 <p className="text-gray-600 mb-2 leading-relaxed">
@@ -321,21 +338,19 @@ export default function SignInModal({ show, onHide }) {
             <p className="bg-green-50 border border-green-200 text-green-800 font-semibold rounded-2xl px-4 py-3 text-sm text-center">{formNotice}</p>
           )}
 
-          {/* Submit Button */}
           <button 
             type="submit"
             className={`w-full font-bold py-3 rounded-2xl mt-1 transition-all shadow-md hover:shadow-lg cursor-pointer ${
-              view === 'signup' && (!isPasswordValid || !isEmailValid || !firstName.trim() || !lastName.trim() || !dateOfBirth)
+              view === 'signup' && (!isPasswordValid || !isEmailValid || !firstName.trim() || !lastName.trim() || !dateOfBirth || phone.length !== 10)
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
                 : 'bg-[#0066ff] hover:bg-blue-700 text-white'
             }`}
-            disabled={view === 'signup' && (!isPasswordValid || !isEmailValid || !firstName.trim() || !lastName.trim() || !dateOfBirth)}
+            disabled={view === 'signup' && (!isPasswordValid || !isEmailValid || !firstName.trim() || !lastName.trim() || !dateOfBirth || phone.length !== 10)}
           >
             {view === 'login' ? 'Log In' : 'Sign Up'}
           </button>
         </form>
 
-        {/* Toggle View Link */}
         <p className="text-center text-sm text-gray-600 mt-5 font-medium">
           {view === 'login' ? (
             <>

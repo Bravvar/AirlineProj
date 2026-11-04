@@ -4,7 +4,8 @@ import SeatSelectionModal from './SeatSelectionModal';
 import CheckoutModal from './CheckoutModal';
 
 export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn }) {
-  const currentTab = (activeTab === 'packages' || activeTab === 'deals') ? activeTab : 'flights';
+  // REMOVED 'packages' from allowed tabs. Only flights and deals exist.
+  const currentTab = (activeTab === 'deals') ? activeTab : 'flights';
 
   const [tripType, setTripType] = useState('round-trip');
   const [showCalendar, setShowCalendar] = useState(false);
@@ -23,14 +24,12 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   const [bookingError, setBookingError] = useState('');
   const [fallbackWarning, setFallbackWarning] = useState('');
 
-  // Seat & Checkout State
   const [showSeatModal, setShowSeatModal] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [selectedFlightFare, setSelectedFlightFare] = useState(null);
   const [selectedSeats, setSelectedSeats] = useState([]);
   const [checkoutTotal, setCheckoutTotal] = useState(0);
 
-  // Airport autocomplete
   const [airports, setAirports] = useState(null);
   const [showFromDropdown, setShowFromDropdown] = useState(false);
   const [showToDropdown, setShowToDropdown] = useState(false);
@@ -102,7 +101,8 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       return codeLower.includes(q) || city.includes(q) || name.includes(q);
     });
 
-    if (!q) return matches.sort((a, b) => (a.city || '').localeCompare(b.city || ''));
+    // Sort by priority
+    if (!q) return matches.sort((a, b) => (a.city || '').localeCompare(b.city || '')).slice(0, 6);
 
     return matches.sort((a, b) => {
       const aCode = (a.airportCode || a.AirportCode || '').toLowerCase();
@@ -110,7 +110,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       if (aCode === q && bCode !== q) return -1;
       if (bCode === q && aCode !== q) return 1;
       return (a.city || '').localeCompare(b.city || '');
-    });
+    }).slice(0, 6); // LIMIT TO 6 MOST RELEVANT
   };
 
   const fromMatches = getAirportMatches(from, to);
@@ -258,7 +258,6 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     }
   };
 
-  // STEP 1: User clicks "Book" on a fare -> Open Seat Map
   const initiateBooking = (flight, fare) => {
     const token = sessionStorage.getItem('token');
     if (!token) {
@@ -272,7 +271,6 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     setShowSeatModal(true);
   };
 
-  // STEP 2: User finishes picking seats -> Open Checkout
   const handleSeatsSelected = (seats, totalPrice) => {
     setSelectedSeats(seats);
     setCheckoutTotal(totalPrice);
@@ -280,17 +278,16 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     setShowCheckoutModal(true);
   };
 
-  // STEP 3: User pays -> Create reservation via backend
   const handlePaymentSuccess = (confirmationNumber) => {
     setShowCheckoutModal(false);
     setBookingMessage(`Successfully booked! Confirmation #${confirmationNumber} — see it in My Trips.`);
-    setFaresByFlight({}); // Refresh inventory
+    setFaresByFlight({}); 
     if (onBooked) onBooked();
   };
 
+  // REMOVED PACKAGES TAB
   const tabs = [
     { id: 'flights', label: 'Flights', icon: '✈' },
-    { id: 'packages', label: 'Packages', icon: '🧳' },
     { id: 'deals', label: 'Deals', icon: '🏷' },
   ];
 
@@ -347,7 +344,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">From</div>
                 <input
                   type="text"
-                  placeholder="Departure (e.g. JFK)"
+                  placeholder="City or Airport"
                   value={from}
                   onChange={(e) => {
                     setFrom(e.target.value); setShowFromDropdown(true); setShowToDropdown(false);
@@ -384,7 +381,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">To</div>
                 <input
                   type="text"
-                  placeholder="Destination (e.g. LAX)"
+                  placeholder="City or Airport"
                   value={to}
                   onChange={(e) => {
                     setTo(e.target.value); setShowToDropdown(true); setShowFromDropdown(false);
@@ -505,8 +502,8 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
             <p className="text-gray-500">Searching...</p>
           ) : results.length === 0 ? (
             <div className="text-gray-600 text-center py-6">
-              <p className="font-medium mb-1">No flights found for that route/date.</p>
-              <p className="text-sm text-gray-500">Try searching a major route like JFK to LAX.</p>
+              <p className="font-medium mb-1">No flights found.</p>
+              <p className="text-sm text-gray-500">Try adjusting your origin, destination, or date.</p>
             </div>
           ) : (
             <div className="flex flex-col gap-4">
@@ -546,7 +543,6 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         </div>
       )}
 
-      {/* MODALS */}
       {selectedFlightFare && (
         <SeatSelectionModal
           show={showSeatModal}

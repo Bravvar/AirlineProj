@@ -9,6 +9,7 @@ import ReportsPage from './components/ReportsPage';
 import AdminPage from './components/AdminPage';
 import EmployeePage from './components/EmployeePage';
 import SideBar from './components/SideBar';
+import RefundConfirmationPage from './components/RefundConfirmationPage';
 
 const BACKGROUNDS = [
   { src: '/landscapes/europe.jpg', name: 'The Alps, Europe' },
@@ -24,6 +25,9 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState('home');
   const [bgIndex, setBgIndex] = useState(0);
   
+  // State to hold refund details for the confirmation page
+  const [refundDetails, setRefundDetails] = useState(null);
+
   const [auth, setAuth] = useState(() => ({
     token: sessionStorage.getItem('token'),
     role: sessionStorage.getItem('role'),
@@ -131,10 +135,23 @@ export default function App() {
           onSignIn={() => setShowSignIn(true)}
           onSignOut={handleLogout}
           onToggleSidebar={() => setShowSidebar(true)}
+          onRefundSuccess={(details) => {
+            setRefundDetails(details);
+            setCurrentPage('refund');
+          }}
         />
         {modal}
         {sidebar}
       </>
+    );
+  }
+
+  if (currentPage === 'refund' && refundDetails) {
+    return (
+      <RefundConfirmationPage
+        details={refundDetails}
+        onBackToTrips={() => setCurrentPage('trips')}
+      />
     );
   }
 
@@ -176,9 +193,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-white font-sans p-4">
-      {/* Hero Outer Container - relative with NO overflow-hidden so dropdowns are never clipped */}
       <div className="relative h-[calc(100vh-2rem)] min-h-[700px] flex flex-col">
-        {/* Background & Gradient Wrapper with rounded corners and overflow-hidden */}
         <div className="absolute inset-0 rounded-[2.5rem] overflow-hidden shadow-2xl pointer-events-none z-0">
           <div
             className="w-full h-full bg-cover bg-center transition-all duration-1000 ease-in-out"
@@ -188,7 +203,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Navigation Bar */}
         <nav className="relative z-20 flex justify-between items-center px-10 py-6">
           <Logo />
           <div className="flex items-center gap-6">
@@ -221,7 +235,6 @@ export default function App() {
           </div>
         </nav>
 
-        {/* Hero Search Section - relative z-30 so dropdowns paint above background and sections below */}
         <div className="relative z-30 flex-grow flex flex-col justify-center items-center px-4 w-full">
           <HeroSearch
             activeTab={activeTab}
@@ -230,7 +243,6 @@ export default function App() {
           />
         </div>
 
-        {/* Bottom Landscape Label - pointer-events-none so it doesn't block clicks on dropdowns */}
         <div className="relative z-10 flex justify-end px-10 pb-10 pointer-events-none">
           <div className="flex items-center">
             <span

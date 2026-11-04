@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Logo from './Logo';
 import { API_URL } from '../config';
 
-function BookingCard({ booking, token, onRefresh, segments, onLoadSegments }) {
+function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, onRefundSuccess }) {
   const [showModify, setShowModify] = useState(false);
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
@@ -34,8 +34,14 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments }) {
         setLoadingCancel(false);
         return;
       }
-      setSuccessMsg('Reservation cancelled successfully.');
-      onRefresh();
+      
+      // Trigger refund confirmation page
+      onRefundSuccess({
+        confirmationNumber: booking.confirmationNumber,
+        totalAmount: booking.totalAmount,
+        phone: 'the phone number on file' // Or fetch actual phone from user profile
+      });
+      
     } catch {
       setErrorMsg('Unable to connect to server.');
     } finally {
@@ -184,7 +190,7 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments }) {
                 <label className="text-xs font-semibold text-gray-600 mb-1 block">Phone</label>
                 <input
                   type="text"
-                  placeholder="e.g. 713-555-0199"
+                  placeholder="e.g. 7135550199"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500"
@@ -211,7 +217,7 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments }) {
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-gray-600 mb-1 block">Extra Checked Bags</label>
+                <label className="text-xs font-semibold text-gray-600 mb-1 block">Extra Checked Bags ($30 each)</label>
                 <input
                   type="number"
                   min="0"
@@ -250,7 +256,7 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments }) {
   );
 }
 
-export default function MyTripsPage({ token, email, onBackToHome, onReports, onSignIn, onSignOut, onToggleSidebar }) {
+export default function MyTripsPage({ token, email, onBackToHome, onReports, onSignIn, onSignOut, onToggleSidebar, onRefundSuccess }) {
   const [bookings, setBookings] = useState(null);
   const [segmentsById, setSegmentsById] = useState({});
   const [loadError, setLoadError] = useState('');
@@ -354,7 +360,6 @@ export default function MyTripsPage({ token, email, onBackToHome, onReports, onS
             My Trips
           </span>
           
-          {/* ADDED PROFILE AVATAR HERE */}
           {token ? (
             <button onClick={onToggleSidebar} className="w-10 h-10 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold shadow-md hover:scale-105 transition-transform cursor-pointer ml-2">
               {email?.charAt(0).toUpperCase()}
@@ -408,6 +413,7 @@ export default function MyTripsPage({ token, email, onBackToHome, onReports, onS
                     onRefresh={fetchBookings}
                     segments={segmentsById[b.reservationId]}
                     onLoadSegments={loadSegments}
+                    onRefundSuccess={onRefundSuccess}
                   />
                 ))}
               </div>
