@@ -533,39 +533,49 @@ public class HomeController : ControllerBase
         if (mod.phone != null && mod.phone.Any(char.IsLetter))
             return BadRequest("Phone number must contain digits only");
 
-        var passenger = _context.Passenger.FirstOrDefault(i => i.PassengerId == account.PassengerId);
-        if (passenger != null)
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+        try
         {
-            if (mod.phone != null) passenger.Phone = mod.phone;
-        }
+            var passenger = _context.Passenger.FirstOrDefault(i => i.PassengerId == account.PassengerId);
+            if (passenger != null)
+            {
+                if (mod.phone != null) passenger.Phone = mod.phone;
+            }
 
-        if (mod.mealSelection != null) link.MealSelection = mod.mealSelection;
+            if (mod.mealSelection != null) link.MealSelection = mod.mealSelection;
 
-        decimal bagFee = 0;
-        int oldBags = link.AdditionalCheckedBags;
-        if (mod.additionalCheckedBags != null)
-        {
-            link.AdditionalCheckedBags = mod.additionalCheckedBags.Value;
-            int delta = mod.additionalCheckedBags.Value - oldBags;
-            if (delta > 0) bagFee = delta * 30m; 
-        }
+            decimal bagFee = 0;
+            int oldBags = link.AdditionalCheckedBags;
+            if (mod.additionalCheckedBags != null)
+            {
+                link.AdditionalCheckedBags = mod.additionalCheckedBags.Value;
+                int delta = mod.additionalCheckedBags.Value - oldBags;
+                if (delta > 0) bagFee = delta * 30m; 
+            }
 
-        await _context.SaveChangesAsync();
-
-        if (bagFee > 0)
-        {
-            var paymentReference = "BAG" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper();
-            await _context.Database.ExecuteSqlRawAsync(
-                "INSERT INTO Payment (reservation_id, employee_id, payment_date_time, amount, payment_method, payment_status, transaction_reference, transaction_type) VALUES ({0}, NULL, {1}, {2}, 'Card (demo)', 'Successful', {3}, 'Payment')",
-                reservation.ReservationId, DateTime.Now, bagFee, paymentReference);
-
-            reservation.TotalAmount += bagFee;
             await _context.SaveChangesAsync();
+
+            if (bagFee > 0)
+            {
+                var paymentReference = "BAG" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper();
+                await _context.Database.ExecuteSqlRawAsync(
+                    "INSERT INTO Payment (reservation_id, employee_id, payment_date_time, amount, payment_method, payment_status, transaction_reference, transaction_type) VALUES ({0}, NULL, {1}, {2}, 'Card (demo)', 'Successful', {3}, 'Payment')",
+                    reservation.ReservationId, DateTime.Now, bagFee, paymentReference);
+
+                reservation.TotalAmount += bagFee;
+                await _context.SaveChangesAsync();
+            }
+
+            await transaction.CommitAsync();
+            return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount, bagFee });
         }
-
-        return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount, bagFee });
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            return StatusCode(500, "Internal Server Error: " + ex.Message);
+        }
     }
-
+    
     [HttpGet("reports")]
     public IActionResult Reports()
     {
