@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { API_URL } from '../config';
 
-export default function CheckoutModal({ show, onHide, fareId, totalPrice, seats, tripType, onSuccess }) {
+export default function CheckoutModal({ show, onHide, fareId, returnFareId, totalPrice, seats, tripType, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -20,7 +20,7 @@ export default function CheckoutModal({ show, onHide, fareId, totalPrice, seats,
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ 
           flightFareId: fareId, 
-          returnFareId: null, // Set to null if you haven't implemented return flight selection yet
+          returnFareId: returnFareId ?? null,
           seats: seats
         }),
       });

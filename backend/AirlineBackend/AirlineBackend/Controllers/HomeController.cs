@@ -49,11 +49,12 @@ public class HomeController : ControllerBase
         if (log == null || string.IsNullOrEmpty(log.email)) return BadRequest("Invalid request");
 
         var data = _context.UserAccount.FirstOrDefault(i => i.Email == log.email);
-        if (data == null) return NotFound("Credentials are incorrect");
+        // Return the same message for both missing user and wrong password (no user enumeration)
+        if (data == null) return Unauthorized("Credentials are incorrect");
 
         if (!BCrypt.Net.BCrypt.Verify(log.password, data.PasswordHash))
         {
-            return NotFound("Credentials are incorrect");
+            return Unauthorized("Credentials are incorrect");
         }
 
         var tokenString = GenerateJSONWebToken(data);
@@ -179,7 +180,11 @@ public class HomeController : ControllerBase
         var expanded = ExpandState(v);
         
         var rows = _context.Airport
-            .Where(a => a.AirportCode == v || a.City == v || a.StateProvince == v || a.StateProvince == expanded)
+            .Where(a => a.AirportCode == v 
+                     || a.City == v 
+                     || a.StateProvince == v 
+                     || a.StateProvince == expanded
+                     || a.AirportName.Contains(v))
             .Select(a => a.AirportCode)
             .ToList();
             
@@ -308,7 +313,38 @@ public class HomeController : ControllerBase
         if (userId == null) return Unauthorized();
 
         var account = _context.UserAccount.FirstOrDefault(i => i.UserAccountId == int.Parse(userId));
-        if (account == null || account.PassengerId == null) return BadRequest("Account has no passenger");
+        if (account == null) return BadRequest("Account not found");
+
+        // Allow staff to book: ensure a passenger record exists
+        int passengerId;
+        if (account.PassengerId != null)
+        {
+            passengerId = account.PassengerId.Value;
+        }
+        else if (account.EmployeeId != null)
+        {
+            var emp = _context.Employee.FirstOrDefault(e => e.EmployeeId == account.EmployeeId);
+            if (emp == null) return BadRequest("Employee record not found");
+            // Create a passenger record for this employee
+            var p = new Passenger
+            {
+                FirstName = emp.FirstName,
+                LastName = emp.LastName,
+                DateOfBirth = emp.DateOfBirth ?? new DateTime(1990, 1, 1),
+                Email = emp.Email,
+                Phone = emp.Phone,
+                Address = null
+            };
+            _context.Passenger.Add(p);
+            await _context.SaveChangesAsync();
+            account.PassengerId = p.PassengerId;
+            await _context.SaveChangesAsync();
+            passengerId = p.PassengerId;
+        }
+        else
+        {
+            return BadRequest("Account has no passenger");
+        }
 
         var fare = _context.FlightFare.FirstOrDefault(i => i.FlightFareId == book.flightFareId);
         if (fare == null) return NotFound("No fare like that");
@@ -356,7 +392,7 @@ public class HomeController : ControllerBase
             var passenger = new ReservationPassenger
             {
                 ReservationId = reservation.ReservationId,
-                PassengerId = account.PassengerId.Value,
+                PassengerId = passengerId,
                 AdditionalCheckedBags = 0,
                 MealSelection = null
             };
@@ -439,20 +475,33 @@ public class HomeController : ControllerBase
         var segments = _context.ReservationSegment.Where(i => i.ReservationId == id).ToList();
         if (segments.Any(i => i.SegmentStatus == "Flown")) return BadRequest("Cannot cancel a flown booking");
 
-        reservation.ReservationStatus = "Cancelled";
-
-        foreach (var segment in segments)
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+        try
         {
-            if (segment.SegmentStatus != "Cancelled")
+            // IMPORTANT: Cancel segments FIRST so the trg_reservation_cancel_check trigger
+            // does not block the reservation update (it checks for 'Booked' segments).
+            foreach (var segment in segments)
             {
-                segment.SegmentStatus = "Cancelled";
-                segment.CancellationDateTime = DateTime.Now;
-                segment.CancellationReason = "Cancelled by passenger";
+                if (segment.SegmentStatus != "Cancelled")
+                {
+                    segment.SegmentStatus = "Cancelled";
+                    segment.CancellationDateTime = DateTime.Now;
+                    segment.CancellationReason = "Cancelled by passenger";
+                }
             }
-        }
+            await _context.SaveChangesAsync();
 
-        await _context.SaveChangesAsync();
-        return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount });
+            reservation.ReservationStatus = "Cancelled";
+            await _context.SaveChangesAsync();
+
+            await transaction.CommitAsync();
+            return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount });
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            return StatusCode(500, "Internal Server Error: " + ex.Message);
+        }
     }
 
     [HttpPut("reservations/{id}")]
@@ -472,9 +521,11 @@ public class HomeController : ControllerBase
 
         if (reservation.ReservationStatus == "Cancelled") return BadRequest("Cannot modify a cancelled booking");
 
-        if (mod.additionalCheckedBags != null && (mod.additionalCheckedBags < 0 || mod.additionalCheckedBags > 5))
-            return BadRequest("Extra checked bags must be between 0 and 5");
+        // Bag limit 2 to 10 per feedback
+        if (mod.additionalCheckedBags != null && (mod.additionalCheckedBags < 2 || mod.additionalCheckedBags > 10))
+            return BadRequest("Extra checked bags must be between 2 and 10");
 
+        // Phone digits-only (no letters)
         if (mod.phone != null && mod.phone.Any(char.IsLetter))
             return BadRequest("Phone number must contain digits only");
 
@@ -482,40 +533,43 @@ public class HomeController : ControllerBase
         if (passenger != null)
         {
             if (mod.phone != null) passenger.Phone = mod.phone;
-            if (mod.address != null) passenger.Address = mod.address;
+            // Address removed from form (feedback)
         }
 
         if (mod.mealSelection != null) link.MealSelection = mod.mealSelection;
-        if (mod.additionalCheckedBags != null) link.AdditionalCheckedBags = mod.additionalCheckedBags.Value;
 
+        decimal bagFee = 0;
+        int oldBags = link.AdditionalCheckedBags;
         if (mod.additionalCheckedBags != null)
         {
-            var segments = _context.ReservationSegment.Where(i => i.ReservationId == id).ToList();
-            var seatFees = _context.SeatAssignment
-                .Join(_context.ReservationSegment, sa => sa.ReservationSegmentId, rs => rs.ReservationSegmentId, (sa, rs) => new { sa, rs })
-                .Where(x => x.rs.ReservationId == id && x.sa.ActiveSeat == 1)
-                .Sum(x => x.sa.SeatFee);
-            
-            reservation.TotalAmount = segments.Sum(i => i.FarePriceAtBooking) + seatFees + 30 * mod.additionalCheckedBags.Value;
+            link.AdditionalCheckedBags = mod.additionalCheckedBags.Value;
+            int delta = mod.additionalCheckedBags.Value - oldBags;
+            if (delta > 0) bagFee = delta * 30m; // $30 per extra bag
         }
 
         await _context.SaveChangesAsync();
 
-        if (mod.additionalCheckedBags != null)
+        if (bagFee > 0)
         {
-            var payments = _context.Payment.Where(p => p.ReservationId == id).ToList();
-            foreach(var p in payments) { p.Amount = reservation.TotalAmount; }
+            // Charge the fee
+            var paymentReference = "BAG" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper();
+            await _context.Database.ExecuteSqlRawAsync(
+                "INSERT INTO Payment (reservation_id, employee_id, payment_date_time, amount, payment_method, payment_status, transaction_reference, transaction_type) VALUES ({0}, NULL, {1}, {2}, 'Card (demo)', 'Successful', {3}, 'Payment')",
+                reservation.ReservationId, DateTime.Now, bagFee, paymentReference);
+
+            reservation.TotalAmount += bagFee;
             await _context.SaveChangesAsync();
         }
 
-        return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount });
+        return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount, bagFee });
     }
 
     [HttpGet("reports")]
     public IActionResult Reports()
     {
+        // Reports are for Supervisors only (feedback: members should not see reports)
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
-        if (role != "Employee" && role != "Supervisor") return StatusCode(403, "Reports are for staff only");
+        if (role != "Supervisor") return StatusCode(403, "Reports are for Supervisors only");
 
         var report1 = _context.Database.SqlQueryRaw<Report1Row>(@"SELECT f.flight_number AS FlightNumber, f.origin_airport_code AS Origin, f.destination_airport_code AS Destination, COUNT(DISTINCT t.ticket_id) AS TicketsSold, COALESCE(SUM(DISTINCT t.total_fare_paid), 0.00) AS Revenue FROM Flight f LEFT JOIN ReservationSegment rs ON rs.flight_id = f.flight_id LEFT JOIN Ticket t ON t.reservation_id = rs.reservation_id AND t.ticket_status <> 'Cancelled' GROUP BY f.flight_id, f.flight_number, f.origin_airport_code, f.destination_airport_code ORDER BY revenue DESC").ToList();
 
@@ -535,6 +589,7 @@ public class HomeController : ControllerBase
     [HttpGet("queries")]
     public IActionResult Queries(string? confirmation)
     {
+        // Queries for staff only
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (role != "Employee" && role != "Supervisor") return StatusCode(403, "Queries are for staff only");
 

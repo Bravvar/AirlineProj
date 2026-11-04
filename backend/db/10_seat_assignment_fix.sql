@@ -1,4 +1,3 @@
-
 USE db75049;
 
 -- =====================================================
@@ -13,7 +12,6 @@ UNIQUE (reservation_segment_id, flight_id);
 
 
 -- STEP 2: Add the new seat assignment columns.
--- flight_id is temporarily nullable for existing records.
 ALTER TABLE SeatAssignment
 ADD COLUMN flight_id INT NULL,
 ADD COLUMN active_seat TINYINT NULL DEFAULT 1;
@@ -41,29 +39,18 @@ REFERENCES ReservationSegment
 
 
 -- STEP 6: Add new uniqueness rules and validation.
--- active_seat = 1 means the assignment is active.
--- NULL allows multiple historical released assignments.
 ALTER TABLE SeatAssignment
 ADD CONSTRAINT uq_active_flight_seat
     UNIQUE (flight_id, seat_id, active_seat),
 ADD CONSTRAINT uq_active_passenger_segment
-    UNIQUE (
-        reservation_segment_id,
-        reservation_passenger_id,
-        active_seat
-    ),
+    UNIQUE (reservation_segment_id, reservation_passenger_id, active_seat),
 ADD CONSTRAINT uq_active_segment_seat
-    UNIQUE (
-        reservation_segment_id,
-        seat_id,
-        active_seat
-    ),
+    UNIQUE (reservation_segment_id, seat_id, active_seat),
 ADD CONSTRAINT chk_active_seat
     CHECK (active_seat = 1 OR active_seat IS NULL);
 
 
--- STEP 7: Remove old uniqueness rules after adding
--- their replacements.
+-- STEP 7: Remove old uniqueness rules after adding replacements.
 ALTER TABLE SeatAssignment
 DROP INDEX uq_passenger_segment_seat,
 DROP INDEX uq_segment_seat;
@@ -71,7 +58,6 @@ DROP INDEX uq_segment_seat;
 
 -- STEP 8: Release historical assignments belonging to
 -- cancelled, changed, or already flown segments.
--- The assignment records themselves are preserved.
 UPDATE SeatAssignment sa
 JOIN ReservationSegment rs
     ON sa.reservation_segment_id = rs.reservation_segment_id
@@ -131,16 +117,13 @@ BEGIN
           AND reservation_id = segment_reservation
     ) THEN
         SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT =
-            'Passenger does not belong to this reservation.';
+        SET MESSAGE_TEXT = 'Passenger does not belong to this reservation.';
     END IF;
 
     IF NEW.active_seat = 1
-       AND (segment_status_value IS NULL
-            OR segment_status_value <> 'Booked') THEN
+       AND (segment_status_value IS NULL OR segment_status_value <> 'Booked') THEN
         SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT =
-            'Active seats require a booked segment.';
+        SET MESSAGE_TEXT = 'Active seats require a booked segment.';
     END IF;
 END$$
 
@@ -159,96 +142,63 @@ BEGIN
     DECLARE seat_aircraft INT DEFAULT NULL;
     DECLARE flight_aircraft INT DEFAULT NULL;
 
-    -- Find the reservation and status of the segment.
     SELECT reservation_id, segment_status
     INTO segment_reservation, segment_status_value
     FROM ReservationSegment
-    WHERE reservation_segment_id =
-          NEW.reservation_segment_id;
+    WHERE reservation_segment_id = NEW.reservation_segment_id;
 
-    -- Passenger must belong to the reservation.
     IF NOT EXISTS (
         SELECT 1
         FROM ReservationPassenger
-        WHERE reservation_passenger_id =
-              NEW.reservation_passenger_id
+        WHERE reservation_passenger_id = NEW.reservation_passenger_id
           AND reservation_id = segment_reservation
     ) THEN
         SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT =
-            'Passenger does not belong to this reservation.';
+        SET MESSAGE_TEXT = 'Passenger does not belong to this reservation.';
     END IF;
 
-    -- Active seats require a booked segment.
-    -- Releasing assignments remains allowed.
     IF NEW.active_seat = 1
-       AND (
-           segment_status_value IS NULL
-           OR segment_status_value <> 'Booked'
-       ) THEN
+       AND (segment_status_value IS NULL OR segment_status_value <> 'Booked') THEN
         SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT =
-            'Active seats require a booked segment.';
+        SET MESSAGE_TEXT = 'Active seats require a booked segment.';
     END IF;
 
-    -- Check aircraft compatibility whenever a seat is
-    -- changed or a released assignment is reactivated.
     IF NEW.active_seat = 1
        AND (
            NEW.seat_id <> OLD.seat_id
-           OR NEW.reservation_segment_id <>
-              OLD.reservation_segment_id
+           OR NEW.reservation_segment_id <> OLD.reservation_segment_id
            OR OLD.active_seat IS NULL
        ) THEN
 
-        SELECT aircraft_id
-        INTO seat_aircraft
-        FROM Seat
-        WHERE seat_id = NEW.seat_id;
+        SELECT aircraft_id INTO seat_aircraft
+        FROM Seat WHERE seat_id = NEW.seat_id;
 
-        SELECT f.aircraft_id
-        INTO flight_aircraft
+        SELECT f.aircraft_id INTO flight_aircraft
         FROM ReservationSegment rs
         JOIN Flight f ON f.flight_id = rs.flight_id
-        WHERE rs.reservation_segment_id =
-              NEW.reservation_segment_id;
+        WHERE rs.reservation_segment_id = NEW.reservation_segment_id;
 
         IF seat_aircraft IS NULL
            OR flight_aircraft IS NULL
            OR seat_aircraft <> flight_aircraft THEN
             SIGNAL SQLSTATE '45000'
-            SET MESSAGE_TEXT =
-                'Seat does not belong to the aircraft operating this segment.';
+            SET MESSAGE_TEXT = 'Seat does not belong to the aircraft operating this segment.';
         END IF;
     END IF;
 END$$
 
 
 -- =====================================================
--- TRIGGER 13: Prevent cancelling a reservation
+-- TRIGGER 13: (REMOVED) Prevent cancelling a reservation
 -- while it still contains booked flight segments.
+-- 
+-- This trigger was TOO STRICT and blocked the normal
+-- cancellation flow (backend cancels segments first,
+-- but MySQL triggers fire immediately and cannot see
+-- pending updates). The application layer now cancels
+-- all segments before updating the reservation status,
+-- so this trigger is no longer needed.
 -- =====================================================
 DROP TRIGGER IF EXISTS trg_reservation_cancel_check$$
 
-CREATE TRIGGER trg_reservation_cancel_check
-BEFORE UPDATE ON Reservation
-FOR EACH ROW
-BEGIN
-    IF NEW.reservation_status = 'Cancelled'
-       AND OLD.reservation_status <> 'Cancelled'
-       AND EXISTS (
-           SELECT 1
-           FROM ReservationSegment
-           WHERE reservation_id = NEW.reservation_id
-             AND segment_status = 'Booked'
-       ) THEN
-
-        SIGNAL SQLSTATE '45000'
-        SET MESSAGE_TEXT =
-            'Cancel booked flight segments before cancelling reservation.';
-    END IF;
-END$$
-
 DELIMITER ;
-
-

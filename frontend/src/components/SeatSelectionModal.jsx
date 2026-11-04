@@ -20,10 +20,13 @@ export default function SeatSelectionModal({ show, onHide, flightId, farePrice, 
 
   if (!show) return null;
 
-  const SEAT_FEE = 25.00; // Flat fee for seats
+  const SEAT_FEE = 25.00;
   
-  // Generate a fake grid of seats for the UI (Rows 1-10, Cols A-F)
-  const rows = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const sections = [
+    { name: 'Business Class', rows: [1, 2] },
+    { name: 'Premium Economy', rows: [3, 4, 5] },
+    { name: 'Economy', rows: [6, 7, 8, 9, 10] },
+  ];
   const cols = ['A', 'B', 'C', 'D', 'E', 'F'];
 
   const toggleSeat = (seatId, isOccupied) => {
@@ -43,7 +46,7 @@ export default function SeatSelectionModal({ show, onHide, flightId, farePrice, 
         <button onClick={onHide} className="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-3xl leading-none transition-colors cursor-pointer">&times;</button>
         
         <h3 className="text-2xl font-bold text-gray-900 mb-2">Select your seats</h3>
-        <p className="text-gray-500 text-sm mb-6">Price per seat: ${SEAT_FEE.toFixed(2)}</p>
+        <p className="text-gray-500 text-sm mb-6">Price per seat: ${SEAT_FEE.toFixed(2)} · Blue = available · Gray = taken</p>
 
         <div className="flex-grow overflow-y-auto pr-2 mb-6">
           {loading ? (
@@ -54,54 +57,61 @@ export default function SeatSelectionModal({ show, onHide, flightId, farePrice, 
                 FRONT OF AIRCRAFT
               </div>
               
-              <div className="flex flex-col gap-3">
-                {rows.map(row => (
-                  <div key={row} className="flex gap-4 items-center">
-                    <span className="w-6 text-right text-sm text-gray-400 font-mono">{row}</span>
-                    <div className="flex gap-2">
-                      {cols.slice(0, 3).map(col => {
-                        const seatId = (row * 10) + cols.indexOf(col); // Fake seatId logic
-                        const isOccupied = occupiedSeats.includes(seatId);
-                        const isSelected = selectedSeats.includes(seatId);
-                        return (
-                          <button
-                            key={col}
-                            onClick={() => toggleSeat(seatId, isOccupied)}
-                            className={`w-10 h-10 rounded-xl border flex items-center justify-center text-xs font-bold transition-all ${
-                              isOccupied ? 'bg-gray-200 border-gray-300 text-gray-400 cursor-not-allowed' :
-                              isSelected ? 'bg-blue-600 border-blue-700 text-white shadow-md' :
-                              'bg-white border-blue-200 text-blue-600 hover:border-blue-400'
-                            }`}
-                          >
-                            {col}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div className="w-6"></div> {/* Aisle */}
-                    <div className="flex gap-2">
-                      {cols.slice(3).map(col => {
-                        const seatId = (row * 10) + cols.indexOf(col);
-                        const isOccupied = occupiedSeats.includes(seatId);
-                        const isSelected = selectedSeats.includes(seatId);
-                        return (
-                          <button
-                            key={col}
-                            onClick={() => toggleSeat(seatId, isOccupied)}
-                            className={`w-10 h-10 rounded-xl border flex items-center justify-center text-xs font-bold transition-all ${
-                              isOccupied ? 'bg-gray-200 border-gray-300 text-gray-400 cursor-not-allowed' :
-                              isSelected ? 'bg-blue-600 border-blue-700 text-white shadow-md' :
-                              'bg-white border-blue-200 text-blue-600 hover:border-blue-400'
-                            }`}
-                          >
-                            {col}
-                          </button>
-                        );
-                      })}
-                    </div>
+              {sections.map((section) => (
+                <div key={section.name} className="w-full mb-6">
+                  <div className="text-center text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 bg-gray-100 rounded-full py-1 px-4 inline-block mx-auto">
+                    {section.name}
                   </div>
-                ))}
-              </div>
+                  <div className="flex flex-col gap-3">
+                    {section.rows.map(row => (
+                      <div key={row} className="flex gap-4 items-center justify-center">
+                        <span className="w-6 text-right text-sm text-gray-400 font-mono">{row}</span>
+                        <div className="flex gap-2">
+                          {cols.slice(0, 3).map(col => {
+                            const seatId = (row * 10) + cols.indexOf(col);
+                            const isOccupied = occupiedSeats.includes(seatId);
+                            const isSelected = selectedSeats.includes(seatId);
+                            return (
+                              <button
+                                key={col}
+                                onClick={() => toggleSeat(seatId, isOccupied)}
+                                className={`w-10 h-10 rounded-xl border flex items-center justify-center text-xs font-bold transition-all ${
+                                  isOccupied ? 'bg-gray-300 border-gray-400 text-gray-500 cursor-not-allowed' :
+                                  isSelected ? 'bg-blue-600 border-blue-700 text-white shadow-md' :
+                                  'bg-blue-50 border-blue-300 text-blue-700 hover:border-blue-500'
+                                }`}
+                              >
+                                {col}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="w-6"></div>
+                        <div className="flex gap-2">
+                          {cols.slice(3).map(col => {
+                            const seatId = (row * 10) + cols.indexOf(col);
+                            const isOccupied = occupiedSeats.includes(seatId);
+                            const isSelected = selectedSeats.includes(seatId);
+                            return (
+                              <button
+                                key={col}
+                                onClick={() => toggleSeat(seatId, isOccupied)}
+                                className={`w-10 h-10 rounded-xl border flex items-center justify-center text-xs font-bold transition-all ${
+                                  isOccupied ? 'bg-gray-300 border-gray-400 text-gray-500 cursor-not-allowed' :
+                                  isSelected ? 'bg-blue-600 border-blue-700 text-white shadow-md' :
+                                  'bg-blue-50 border-blue-300 text-blue-700 hover:border-blue-500'
+                                }`}
+                              >
+                                {col}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
