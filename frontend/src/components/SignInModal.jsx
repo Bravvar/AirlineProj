@@ -76,9 +76,9 @@ export default function SignInModal({ show, onHide }) {
         return;
       }
       // Phone Validation: must be exactly 10 digits (no letters)
-      const phoneRegex = /^[0-9]{10}$/;
-      if (!phoneRegex.test(phone)) {
-        setFormError('Please enter a valid 10-digit phone number (digits only).');
+      const phoneDigits = phone.replace(/\D/g, '');
+      if (phoneDigits.length !== 10) {
+        setFormError('Please enter a valid 10-digit phone number.');
         return;
       }
 
@@ -96,7 +96,7 @@ export default function SignInModal({ show, onHide }) {
             password,
             firstName: firstName.trim(),
             lastName: lastName.trim(),
-            phone: phone.trim(),
+            phone: phoneDigits,
             dateOfBirth: `${dateOfBirth}T00:00:00`, 
           }),
         });
@@ -129,11 +129,18 @@ export default function SignInModal({ show, onHide }) {
   };
 
   const handlePhoneChange = (e) => {
-    const value = e.target.value;
-    // Only allow digits and max 10 characters
-    if (/^\d*$/.test(value) && value.length <= 10) {
-      setPhone(value);
+    let value = e.target.value.replace(/\D/g, '');
+    if (value.length > 10) value = value.substring(0, 10);
+    
+    // Format as (XXX) XXX-XXXX
+    if (value.length > 6) {
+      value = `(${value.substring(0, 3)}) ${value.substring(3, 6)}-${value.substring(6)}`;
+    } else if (value.length > 3) {
+      value = `(${value.substring(0, 3)}) ${value.substring(3)}`;
+    } else if (value.length > 0) {
+      value = `(${value}`;
     }
+    setPhone(value);
   };
 
   const handleUsernameChange = (e) => {
@@ -148,6 +155,7 @@ export default function SignInModal({ show, onHide }) {
   const hasUppercase = /[A-Z]/.test(password);
   const hasSymbol = /[^A-Za-z0-9]/.test(password);
   const isPasswordValid = isLengthValid && hasUppercase && hasSymbol;
+  const isPhoneValid = phone.replace(/\D/g, '').length === 10;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -219,7 +227,6 @@ export default function SignInModal({ show, onHide }) {
                 </div>
               </div>
 
-              {/* NEW PHONE NUMBER FIELD */}
               <div>
                 <label className="text-xs font-semibold text-gray-600 mb-1 block">Phone Number</label>
                 <div className="relative">
@@ -228,10 +235,14 @@ export default function SignInModal({ show, onHide }) {
                   </div>
                   <input 
                     type="tel" 
-                    placeholder="e.g. 7135550199" 
+                    placeholder="(713) 555-0199" 
                     value={phone}
                     onChange={handlePhoneChange}
-                    className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl pl-11 pr-4 py-2.5 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all placeholder-gray-400 text-sm" 
+                    className={`w-full bg-gray-50 border text-gray-900 font-medium rounded-2xl pl-11 pr-4 py-2.5 outline-none transition-all placeholder-gray-400 text-sm ${
+                      isPhoneValid
+                        ? 'border-green-400 focus:border-green-500 focus:ring-2 focus:ring-green-100 bg-green-50/30' 
+                        : 'border-gray-200 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+                    }`}
                   />
                 </div>
               </div>
@@ -341,11 +352,11 @@ export default function SignInModal({ show, onHide }) {
           <button 
             type="submit"
             className={`w-full font-bold py-3 rounded-2xl mt-1 transition-all shadow-md hover:shadow-lg cursor-pointer ${
-              view === 'signup' && (!isPasswordValid || !isEmailValid || !firstName.trim() || !lastName.trim() || !dateOfBirth || phone.length !== 10)
+              view === 'signup' && (!isPasswordValid || !isEmailValid || !firstName.trim() || !lastName.trim() || !dateOfBirth || !isPhoneValid)
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
                 : 'bg-[#0066ff] hover:bg-blue-700 text-white'
             }`}
-            disabled={view === 'signup' && (!isPasswordValid || !isEmailValid || !firstName.trim() || !lastName.trim() || !dateOfBirth || phone.length !== 10)}
+            disabled={view === 'signup' && (!isPasswordValid || !isEmailValid || !firstName.trim() || !lastName.trim() || !dateOfBirth || !isPhoneValid)}
           >
             {view === 'login' ? 'Log In' : 'Sign Up'}
           </button>

@@ -4,8 +4,29 @@ import { API_URL } from '../config';
 export default function CheckoutModal({ show, onHide, fareId, returnFareId, totalPrice, seats, tripType, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  const [cardNumber, setCardNumber] = useState('');
+  const [expiry, setExpiry] = useState('');
+  const [cvc, setCvc] = useState('');
+  const [name, setName] = useState('');
 
   if (!show) return null;
+
+  const handleCardNumberChange = (e) => {
+    let value = e.target.value.replace(/\D/g, '');
+    value = value.substring(0, 16);
+    value = value.replace(/(\d{4})(?=\d)/g, '$1 ');
+    setCardNumber(value);
+  };
+
+  const handleExpiryChange = (e) => {
+    let value = e.target.value.replace(/\D/g, '');
+    if (value.length > 4) value = value.substring(0, 4);
+    if (value.length > 2) {
+      value = value.substring(0, 2) + '/' + value.substring(2);
+    }
+    setExpiry(value);
+  };
 
   const handlePayment = async (e) => {
     e.preventDefault();
@@ -57,20 +78,36 @@ export default function CheckoutModal({ show, onHide, fareId, returnFareId, tota
         <form onSubmit={handlePayment} className="flex flex-col gap-4">
           <div>
             <label className="text-xs font-semibold text-gray-600 mb-1 block">Cardholder Name</label>
-            <input type="text" required placeholder="John Doe" className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl px-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+            <input type="text" required placeholder="John Doe" value={name} onChange={e => setName(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl px-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
           </div>
           <div>
             <label className="text-xs font-semibold text-gray-600 mb-1 block">Card Number</label>
-            <input type="text" required placeholder="0000 0000 0000 0000" maxLength="19" className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl px-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+            <input 
+              type="text" 
+              required 
+              placeholder="0000 0000 0000 0000" 
+              value={cardNumber}
+              onChange={handleCardNumberChange}
+              maxLength="19" 
+              className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl px-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100" 
+            />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-semibold text-gray-600 mb-1 block">Expiry</label>
-              <input type="text" required placeholder="MM/YY" maxLength="5" className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl px-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+              <input 
+                type="text" 
+                required 
+                placeholder="MM/YY" 
+                value={expiry}
+                onChange={handleExpiryChange}
+                maxLength="5" 
+                className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl px-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100" 
+              />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-600 mb-1 block">CVC</label>
-              <input type="text" required placeholder="123" maxLength="4" className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl px-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+              <input type="text" required placeholder="123" value={cvc} onChange={e => setCvc(e.target.value.replace(/\D/g, ''))} maxLength="4" className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl px-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
             </div>
           </div>
           

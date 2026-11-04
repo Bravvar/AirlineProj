@@ -68,7 +68,7 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, onRe
     }
 
     const body = {};
-    if (phone.trim()) body.phone = phone.trim();
+    if (phone.trim()) body.phone = phone.trim().replace(/\D/g, '');
     if (mealSelection.trim()) body.mealSelection = mealSelection.trim();
     if (additionalCheckedBags !== '') {
       const bags = parseInt(additionalCheckedBags, 10);
@@ -111,8 +111,18 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, onRe
   };
 
   const handlePhoneChange = (e) => {
-    const v = e.target.value;
-    if (/^\d*$/.test(v) && v.length <= 10) setPhone(v);
+    let value = e.target.value.replace(/\D/g, '');
+    if (value.length > 10) value = value.substring(0, 10);
+    
+    // Format as (XXX) XXX-XXXX
+    if (value.length > 6) {
+      value = `(${value.substring(0, 3)}) ${value.substring(3, 6)}-${value.substring(6)}`;
+    } else if (value.length > 3) {
+      value = `(${value.substring(0, 3)}) ${value.substring(3)}`;
+    } else if (value.length > 0) {
+      value = `(${value}`;
+    }
+    setPhone(value);
   };
 
   return (
@@ -211,11 +221,10 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, onRe
             <h4 className="text-sm font-bold text-gray-900">Modify Reservation {booking.confirmationNumber}</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-semibold text-gray-600 mb-1 block">Phone (digits only)</label>
+                <label className="text-xs font-semibold text-gray-600 mb-1 block">Phone</label>
                 <input
                   type="text"
-                  inputMode="numeric"
-                  placeholder="e.g. 7135550199"
+                  placeholder="(713) 555-0199"
                   value={phone}
                   onChange={handlePhoneChange}
                   className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500"

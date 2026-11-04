@@ -209,6 +209,20 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
   const handleSearch = async () => {
     if (currentTab !== 'flights') return;
+
+    if (!from.trim() || !to.trim()) {
+      setBookingError('Please enter both origin and destination.');
+      return;
+    }
+    if (!startDate) {
+      setBookingError('Please select a departure date.');
+      return;
+    }
+    if (tripType === 'round-trip' && !endDate) {
+      setBookingError('Please select a return date for a round-trip.');
+      return;
+    }
+
     setSearching(true);
     setBookingMessage('');
     setBookingError('');
@@ -532,7 +546,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       </div>
 
       {currentTab === 'flights' && (searching || results !== null) && (
-        <div className="w-full bg-white rounded-3xl shadow-2xl mt-4 p-6 text-gray-800 relative z-10">
+        <div className="w-full bg-white rounded-3xl shadow-2xl mt-4 p-6 text-gray-800 relative z-10 max-h-[500px] overflow-y-auto">
           {bookingMessage && <p className="bg-green-50 border border-green-200 text-green-800 font-semibold rounded-2xl px-4 py-3 mb-4">{bookingMessage}</p>}
           {bookingError && <p className="bg-red-50 border border-red-200 text-red-700 font-semibold rounded-2xl px-4 py-3 mb-4">{bookingError}</p>}
           {fallbackWarning && <p className="bg-amber-50 border border-amber-200 text-amber-800 font-semibold rounded-2xl px-4 py-3 mb-4">{fallbackWarning}</p>}

@@ -49,7 +49,6 @@ public class HomeController : ControllerBase
         if (log == null || string.IsNullOrEmpty(log.email)) return BadRequest("Invalid request");
 
         var data = _context.UserAccount.FirstOrDefault(i => i.Email == log.email);
-        // Return generic message to prevent username enumeration
         if (data == null) return Unauthorized("Credentials are incorrect");
 
         if (!BCrypt.Net.BCrypt.Verify(log.password, data.PasswordHash))
@@ -366,9 +365,11 @@ public class HomeController : ControllerBase
         }
 
         var seatIds = book.seats ?? new List<int>();
-        if (seatIds.Count > 1) return BadRequest("Only one seat can be selected per passenger.");
+        // Note: The UI currently only allows 1 seat per booking (1 passenger).
+        // We handle the first seat for the outbound flight.
+        int? selectedSeatId = seatIds.Count > 0 ? seatIds[0] : (int?)null;
 
-        var seatFeeTotal = seatIds.Count * 25;
+        decimal seatFeeTotal = selectedSeatId.HasValue ? 25 : 0;
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
         try
@@ -406,10 +407,12 @@ public class HomeController : ControllerBase
                 FarePriceAtBooking = fare.CurrentPrice
             };
             _context.ReservationSegment.Add(segment);
+            await _context.SaveChangesAsync(); // Save to generate SegmentId
 
+            ReservationSegment? returnSegment = null;
             if (returnFare != null)
             {
-                var returnSegment = new ReservationSegment
+                returnSegment = new ReservationSegment
                 {
                     ReservationId = reservation.ReservationId,
                     FlightId = returnFare.FlightId,
@@ -419,22 +422,28 @@ public class HomeController : ControllerBase
                     FarePriceAtBooking = returnFare.CurrentPrice
                 };
                 _context.ReservationSegment.Add(returnSegment);
+                await _context.SaveChangesAsync(); // Save to generate SegmentId
             }
 
-            await _context.SaveChangesAsync();
-
-            foreach (var seatId in seatIds)
+            // Handle Seat Assignment
+            if (selectedSeatId.HasValue)
             {
-                var seatAircraft = _context.Seat.FirstOrDefault(s => s.SeatId == seatId);
+                var seatAircraft = _context.Seat.FirstOrDefault(s => s.SeatId == selectedSeatId);
                 if (seatAircraft == null) { await transaction.RollbackAsync(); return BadRequest("Seat does not exist."); }
-                if (seatAircraft.AircraftId != flight.AircraftId) { await transaction.RollbackAsync(); return BadRequest("Seat is not on this flight."); }
+                
+                // Verify seat belongs to outbound flight aircraft
+                if (seatAircraft.AircraftId != flight.AircraftId) 
+                { 
+                    await transaction.RollbackAsync(); 
+                    return BadRequest("Seat is not on this flight."); 
+                }
 
-                var taken = _context.SeatAssignment.Any(sa => sa.FlightId == fare.FlightId && sa.SeatId == seatId && sa.ActiveSeat == 1);
+                var taken = _context.SeatAssignment.Any(sa => sa.FlightId == fare.FlightId && sa.SeatId == selectedSeatId && sa.ActiveSeat == 1);
                 if (taken) { await transaction.RollbackAsync(); return BadRequest("That seat was just taken."); }
 
                 await _context.Database.ExecuteSqlRawAsync(
                     "INSERT INTO SeatAssignment (reservation_segment_id, reservation_passenger_id, seat_id, flight_id, assignment_date_time, seat_fee, active_seat) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, 1)", 
-                    segment.ReservationSegmentId, passenger.ReservationPassengerId, seatId, fare.FlightId, DateTime.Now, 25);
+                    segment.ReservationSegmentId, passenger.ReservationPassengerId, selectedSeatId, fare.FlightId, DateTime.Now, 25);
             }
 
             var paymentReference = "PAY" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper();
@@ -575,11 +584,10 @@ public class HomeController : ControllerBase
             return StatusCode(500, "Internal Server Error: " + ex.Message);
         }
     }
-    
+
     [HttpGet("reports")]
     public IActionResult Reports()
     {
-        // Reports are for Supervisors only
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (role != "Supervisor") return StatusCode(403, "Reports are for Supervisors only");
 
