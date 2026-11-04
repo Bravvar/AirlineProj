@@ -20,7 +20,7 @@ export default function CheckoutModal({ show, onHide, fareId, totalPrice, seats,
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ 
           flightFareId: fareId, 
-          tripType: tripType, 
+          returnFareId: null, // Set to null if you haven't implemented return flight selection yet
           seats: seats
         }),
       });

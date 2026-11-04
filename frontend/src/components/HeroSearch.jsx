@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { API_URL } from '../config';
 import SeatSelectionModal from './SeatSelectionModal';
 import CheckoutModal from './CheckoutModal';
+import TabToggle from './TabToggle'; // Import the new component
 
 export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn }) {
-  // REMOVED 'packages' from allowed tabs. Only flights and deals exist.
   const currentTab = (activeTab === 'deals') ? activeTab : 'flights';
 
   const [tripType, setTripType] = useState('round-trip');
@@ -101,7 +101,6 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       return codeLower.includes(q) || city.includes(q) || name.includes(q);
     });
 
-    // Sort by priority
     if (!q) return matches.sort((a, b) => (a.city || '').localeCompare(b.city || '')).slice(0, 6);
 
     return matches.sort((a, b) => {
@@ -110,7 +109,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       if (aCode === q && bCode !== q) return -1;
       if (bCode === q && aCode !== q) return 1;
       return (a.city || '').localeCompare(b.city || '');
-    }).slice(0, 6); // LIMIT TO 6 MOST RELEVANT
+    }).slice(0, 6);
   };
 
   const fromMatches = getAirportMatches(from, to);
@@ -285,12 +284,6 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     if (onBooked) onBooked();
   };
 
-  // REMOVED PACKAGES TAB
-  const tabs = [
-    { id: 'flights', label: 'Flights', icon: '✈' },
-    { id: 'deals', label: 'Deals', icon: '🏷' },
-  ];
-
   const searchIcon = (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <circle cx="11" cy="11" r="7" stroke="white" strokeWidth="2.5"/>
@@ -301,19 +294,9 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   return (
     <div className="relative z-50 w-full max-w-5xl mx-auto flex flex-col items-center mt-4">
       
-      <div className="flex justify-center gap-1 mb-5 p-1.5 bg-white/20 backdrop-blur-md rounded-full border border-white/30 shadow-sm relative z-10">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => { clearResults(); setActiveTab(tab.id); }}
-            className={`flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold transition-all cursor-pointer ${
-              currentTab === tab.id ? 'bg-white text-gray-900 shadow-md scale-100' : 'text-white hover:bg-white/20 scale-95 hover:scale-100'
-            }`}
-          >
-            <span>{tab.icon}</span>
-            <span>{tab.label}</span>
-          </button>
-        ))}
+      {/* REPLACED HARDCODED TOGGLE WITH COMPONENT */}
+      <div className="mb-5">
+        <TabToggle activeTab={currentTab} setActiveTab={setActiveTab} isDarkBackground={true} />
       </div>
 
       <div className="w-full flex flex-col items-center relative z-30">
