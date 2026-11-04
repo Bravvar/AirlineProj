@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Logo from './Logo';
 import { API_URL } from '../config';
 
@@ -98,7 +98,27 @@ function formatCell(row, key) {
   return String(val);
 }
 
-function ReportTable({ def, rows, search, visibleColumns }) {
+function useClickOutside(ref, handler) {
+  useEffect(() => {
+    const listener = (event) => {
+      if (!ref.current || ref.current.contains(event.target)) return;
+      handler(event);
+    };
+    document.addEventListener("mousedown", listener);
+    document.addEventListener("touchstart", listener);
+    return () => {
+      document.removeEventListener("mousedown", listener);
+      document.removeEventListener("touchstart", listener);
+    };
+  }, [ref, handler]);
+}
+
+function ReportTable({ def, rows, search, hiddenColumns, toggleColumn }) {
+  const [showColumns, setShowColumns] = useState(false);
+  const dropdownRef = useRef(null);
+  
+  useClickOutside(dropdownRef, () => setShowColumns(false));
+
   const filteredRows = useMemo(() => {
     if (!search.trim()) return rows;
     const q = search.trim().toLowerCase();
@@ -110,20 +130,58 @@ function ReportTable({ def, rows, search, visibleColumns }) {
     );
   }, [rows, search, def.columns]);
 
-  const cols = def.columns.filter((c) => visibleColumns.includes(c.key));
+  const cols = def.columns.filter((c) => !hiddenColumns.has(c.key));
 
   return (
-    <div className="bg-white rounded-3xl shadow border border-gray-200 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/60 flex flex-wrap justify-between items-center gap-2">
+    <div className="bg-white rounded-3xl shadow border border-gray-200 overflow-visible">
+      <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/60 flex flex-wrap justify-between items-center gap-4 rounded-t-3xl">
         <div>
           <h2 className="text-lg font-bold text-gray-900">{def.title}</h2>
           <p className="text-xs text-gray-500 mt-0.5">{filteredRows.length} {filteredRows.length === 1 ? 'record' : 'records'}{search ? ' (filtered)' : ''}</p>
         </div>
-        <span className="text-xs font-mono uppercase bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-semibold border border-blue-100">
-          {def.key}
-        </span>
+        
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-mono uppercase bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-semibold border border-blue-100">
+            {def.key}
+          </span>
+          
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setShowColumns(!showColumns)}
+              className="flex items-center gap-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 px-3 py-1.5 rounded-lg shadow-sm transition-colors"
+            >
+              <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
+              Columns
+            </button>
+            
+            {showColumns && (
+              <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 z-[100] p-2 animate-in fade-in zoom-in-95 duration-100">
+                <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-2 pt-1">
+                  Toggle Columns
+                </div>
+                {def.columns.map((c) => {
+                  const isHidden = hiddenColumns.has(c.key);
+                  return (
+                    <label key={c.key} className="flex items-center gap-3 px-2 py-1.5 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={!isHidden}
+                        onChange={() => toggleColumn(def.key, c.key)}
+                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                      />
+                      <span className={`text-sm ${isHidden ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
+                        {c.label}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
-      <div className="overflow-x-auto">
+
+      <div className="overflow-x-auto rounded-b-3xl">
         <table className="w-full text-left border-collapse text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50/30 text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -163,7 +221,7 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
   const [errorMsg, setErrorMsg] = useState('');
   const [activeTab, setActiveTab] = useState('all');
   const [search, setSearch] = useState('');
-  const [hiddenColumns, setHiddenColumns] = useState({}); // { reportKey: Set of hidden column keys }
+  const [hiddenColumns, setHiddenColumns] = useState({}); 
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
@@ -210,7 +268,6 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
     ? REPORT_DEFINITIONS
     : REPORT_DEFINITIONS.filter((r) => r.key === activeTab);
 
-  // Members should not see reports — show access denied
   if (token && role !== 'Supervisor') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -285,7 +342,6 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
               </button>
             </div>
 
-            {/* Global search */}
             <div className="bg-white rounded-3xl border border-gray-200 p-4 mb-6">
               <input
                 type="text"
@@ -333,29 +389,16 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
                 const rawRows = reportsData ? (reportsData[def.key] || reportsData[def.key.toLowerCase()] || reportsData[def.key.toUpperCase()]) : null;
                 const rows = Array.isArray(rawRows) ? rawRows : [];
                 const hidden = hiddenColumns[def.key] || new Set();
-                const visibleColumns = def.columns.map((c) => c.key).filter((k) => !hidden.has(k));
 
                 return (
-                  <div key={def.key}>
-                    <ReportTable def={def} rows={rows} search={search} visibleColumns={visibleColumns} />
-                    {/* Column toggle */}
-                    <div className="mt-2 flex flex-wrap items-center gap-2 px-2">
-                      <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Columns:</span>
-                      {def.columns.map((c) => (
-                        <button
-                          key={c.key}
-                          onClick={() => toggleColumn(def.key, c.key)}
-                          className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors ${
-                            hidden.has(c.key)
-                              ? 'bg-gray-100 text-gray-400 border-gray-200 line-through'
-                              : 'bg-blue-50 text-blue-700 border-blue-200'
-                          }`}
-                        >
-                          {c.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <ReportTable 
+                    key={def.key} 
+                    def={def} 
+                    rows={rows} 
+                    search={search} 
+                    hiddenColumns={hidden} 
+                    toggleColumn={toggleColumn} 
+                  />
                 );
               })}
             </div>

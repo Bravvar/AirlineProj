@@ -24,10 +24,9 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   const [bookingError, setBookingError] = useState('');
   const [fallbackWarning, setFallbackWarning] = useState('');
 
-  // Return trip state
   const [returnResults, setReturnResults] = useState(null);
   const [returnSearching, setReturnSearching] = useState(false);
-  const [selectedOutboundFare, setSelectedOutboundFare] = useState(null); // { flight, fare }
+  const [selectedOutboundFare, setSelectedOutboundFare] = useState(null);
 
   const [showSeatModal, setShowSeatModal] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
@@ -285,7 +284,6 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     setReturnSearching(false);
   };
 
-  // User clicks "Book" on an outbound fare
   const initiateBooking = (flight, fare, isReturn = false) => {
     const token = sessionStorage.getItem('token');
     if (!token) {
@@ -297,18 +295,15 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     setBookingMessage('');
 
     if (!isReturn && tripType === 'round-trip') {
-      // Store outbound selection and prompt return selection
       setSelectedOutboundFare({ flight, fare });
       handleReturnSearch();
       return;
     }
 
-    // For one-way or return selection, proceed to seat + checkout
     setSelectedFlightFare({ flight, fare, returnFare: isReturn ? fare : null, outboundFare: selectedOutboundFare?.fare });
     setShowSeatModal(true);
   };
 
-  // When user selects a return fare
   const selectReturnFare = (returnFlight, returnFare) => {
     if (!selectedOutboundFare) return;
     setSelectedFlightFare({
@@ -589,7 +584,6 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
             </div>
           )}
 
-          {/* Return flight selection */}
           {selectedOutboundFare && tripType === 'round-trip' && (
             <div className="mt-6 pt-6 border-t border-gray-100">
               <h3 className="text-lg font-bold text-gray-900 mb-4">

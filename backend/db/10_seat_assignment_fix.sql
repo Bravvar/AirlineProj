@@ -66,15 +66,12 @@ WHERE rs.segment_status IN ('Cancelled', 'Changed', 'Flown');
 
 
 -- =====================================================
--- FOUR ADDITIONAL BUSINESS RULE TRIGGERS
+-- ADDITIONAL BUSINESS RULE TRIGGERS
 -- =====================================================
 
 DELIMITER $$
 
--- =====================================================
 -- TRIGGER 10: Release seats when a segment is cancelled
--- or changed, while keeping assignment history.
--- =====================================================
 DROP TRIGGER IF EXISTS trg_segment_release_seats$$
 
 CREATE TRIGGER trg_segment_release_seats
@@ -93,9 +90,7 @@ BEGIN
 END$$
 
 
--- =====================================================
 -- TRIGGER 11: Validate new seat assignments.
--- =====================================================
 DROP TRIGGER IF EXISTS trg_seat_assignment_validate_insert$$
 
 CREATE TRIGGER trg_seat_assignment_validate_insert
@@ -128,9 +123,7 @@ BEGIN
 END$$
 
 
--- =====================================================
 -- TRIGGER 12: Validate updates to seat assignments.
--- =====================================================
 DROP TRIGGER IF EXISTS trg_seat_assignment_validate_update$$
 
 CREATE TRIGGER trg_seat_assignment_validate_update
@@ -187,18 +180,8 @@ BEGIN
     END IF;
 END$$
 
-
--- =====================================================
--- TRIGGER 13: (REMOVED) Prevent cancelling a reservation
--- while it still contains booked flight segments.
--- 
--- This trigger was TOO STRICT and blocked the normal
--- cancellation flow (backend cancels segments first,
--- but MySQL triggers fire immediately and cannot see
--- pending updates). The application layer now cancels
--- all segments before updating the reservation status,
--- so this trigger is no longer needed.
--- =====================================================
+-- TRIGGER 13: REMOVED. The strict cancellation trigger is dropped to allow 
+-- the backend to safely process cancellations within a transaction.
 DROP TRIGGER IF EXISTS trg_reservation_cancel_check$$
 
 DELIMITER ;

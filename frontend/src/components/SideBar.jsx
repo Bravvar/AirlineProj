@@ -28,7 +28,6 @@ export default function SideBar({ show, onHide, auth, onLogout, onNavigate }) {
     menuItems = [
       { id: 'dashboard', label: 'Flight Search', icon: homeIcon },
       { id: 'employee', label: 'Flight & Passengers', icon: 'M12 19l9 2-9-18-9 18 9-2zm0 0v-8' },
-      { id: 'queries', label: 'Database Queries', icon: 'M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
     ];
   } else {
     roleTitle = 'My Account';

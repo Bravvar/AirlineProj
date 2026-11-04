@@ -49,7 +49,7 @@ public class HomeController : ControllerBase
         if (log == null || string.IsNullOrEmpty(log.email)) return BadRequest("Invalid request");
 
         var data = _context.UserAccount.FirstOrDefault(i => i.Email == log.email);
-        // Return the same message for both missing user and wrong password (no user enumeration)
+        // Return generic message to prevent username enumeration
         if (data == null) return Unauthorized("Credentials are incorrect");
 
         if (!BCrypt.Net.BCrypt.Verify(log.password, data.PasswordHash))
@@ -115,7 +115,6 @@ public class HomeController : ControllerBase
         _context.UserAccount.Add(data);
         await _context.SaveChangesAsync();
 
-        // AUTOMATIC MEMBERSHIP ID GENERATION
         if (createdPassenger != null && !_context.MembershipAccount.Any(m => m.PassengerId == createdPassenger.PassengerId))
         {
             var newMemberId = "MEM-" + (100000 + createdPassenger.PassengerId).ToString();
@@ -325,7 +324,6 @@ public class HomeController : ControllerBase
         {
             var emp = _context.Employee.FirstOrDefault(e => e.EmployeeId == account.EmployeeId);
             if (emp == null) return BadRequest("Employee record not found");
-            // Create a passenger record for this employee
             var p = new Passenger
             {
                 FirstName = emp.FirstName,
@@ -478,8 +476,7 @@ public class HomeController : ControllerBase
         await using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
-            // IMPORTANT: Cancel segments FIRST so the trg_reservation_cancel_check trigger
-            // does not block the reservation update (it checks for 'Booked' segments).
+            // Cancel segments first.
             foreach (var segment in segments)
             {
                 if (segment.SegmentStatus != "Cancelled")
@@ -491,11 +488,18 @@ public class HomeController : ControllerBase
             }
             await _context.SaveChangesAsync();
 
+            // Then cancel the reservation
             reservation.ReservationStatus = "Cancelled";
             await _context.SaveChangesAsync();
 
             await transaction.CommitAsync();
-            return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount });
+            
+            return Ok(new { 
+                reservationId = reservation.ReservationId, 
+                confirmationNumber = reservation.ConfirmationNumber, 
+                reservationStatus = reservation.ReservationStatus, 
+                totalAmount = reservation.TotalAmount 
+            });
         }
         catch (Exception ex)
         {
@@ -533,7 +537,6 @@ public class HomeController : ControllerBase
         if (passenger != null)
         {
             if (mod.phone != null) passenger.Phone = mod.phone;
-            // Address removed from form (feedback)
         }
 
         if (mod.mealSelection != null) link.MealSelection = mod.mealSelection;
@@ -544,14 +547,13 @@ public class HomeController : ControllerBase
         {
             link.AdditionalCheckedBags = mod.additionalCheckedBags.Value;
             int delta = mod.additionalCheckedBags.Value - oldBags;
-            if (delta > 0) bagFee = delta * 30m; // $30 per extra bag
+            if (delta > 0) bagFee = delta * 30m; 
         }
 
         await _context.SaveChangesAsync();
 
         if (bagFee > 0)
         {
-            // Charge the fee
             var paymentReference = "BAG" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper();
             await _context.Database.ExecuteSqlRawAsync(
                 "INSERT INTO Payment (reservation_id, employee_id, payment_date_time, amount, payment_method, payment_status, transaction_reference, transaction_type) VALUES ({0}, NULL, {1}, {2}, 'Card (demo)', 'Successful', {3}, 'Payment')",
@@ -567,7 +569,7 @@ public class HomeController : ControllerBase
     [HttpGet("reports")]
     public IActionResult Reports()
     {
-        // Reports are for Supervisors only (feedback: members should not see reports)
+        // Reports are for Supervisors only
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (role != "Supervisor") return StatusCode(403, "Reports are for Supervisors only");
 
@@ -589,7 +591,6 @@ public class HomeController : ControllerBase
     [HttpGet("queries")]
     public IActionResult Queries(string? confirmation)
     {
-        // Queries for staff only
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (role != "Employee" && role != "Supervisor") return StatusCode(403, "Queries are for staff only");
 

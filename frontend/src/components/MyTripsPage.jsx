@@ -22,14 +22,23 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, onRe
     setErrorMsg('');
     setSuccessMsg('');
     setLoadingCancel(true);
+    
     try {
       const res = await fetch(`${API_URL}/api/reservations/${booking.reservationId}/cancel`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}` },
       });
+      
       const text = await res.text();
+      
       if (!res.ok) {
-        setErrorMsg(text || 'Could not cancel reservation.');
+        let errMessage = text;
+        try {
+          const parsed = JSON.parse(text);
+          errMessage = parsed.message || parsed.title || text;
+        } catch { /* use raw text */ }
+        
+        setErrorMsg(errMessage || 'Could not cancel reservation.');
         setLoadingCancel(false);
         return;
       }
@@ -40,8 +49,9 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, onRe
         phone: 'the phone number on file'
       });
       
-    } catch {
-      setErrorMsg('Unable to connect to server.');
+    } catch (err) {
+      console.error("Cancel error:", err);
+      setErrorMsg('Unable to connect to server. Please check your connection.');
     } finally {
       setLoadingCancel(false);
     }

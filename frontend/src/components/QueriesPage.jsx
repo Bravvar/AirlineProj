@@ -145,7 +145,6 @@ export default function QueriesPage({ token, email, role, onBackToHome, onMyTrip
               <p className="text-gray-500 text-sm">Predefined SQL queries for operations and auditing.</p>
             </div>
 
-            {/* Search / filter */}
             <div className="bg-white rounded-3xl border border-gray-200 p-4 mb-6 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
               <input
                 type="text"
