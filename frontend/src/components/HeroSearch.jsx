@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { API_URL } from '../config';
 import CheckoutModal from './CheckoutModal';
+import SeatSelectionModal from './SeatSelectionModal';
 import TabToggle from './TabToggle';
 
 export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn }) {
@@ -29,9 +30,11 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   const [showAllReturn, setShowAllReturn] = useState(false);
   const [selectedOutboundFare, setSelectedOutboundFare] = useState(null);
 
+  const [showSeatModal, setShowSeatModal] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [selectedFlightFare, setSelectedFlightFare] = useState(null);
   const [checkoutTotal, setCheckoutTotal] = useState(0);
+  const [selectedSeatsForCheckout, setSelectedSeatsForCheckout] = useState([]);
 
   const [airports, setAirports] = useState(null);
   const [routes, setRoutes] = useState(null);
@@ -39,7 +42,6 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   const [showToDropdown, setShowToDropdown] = useState(false);
 
   const RESULTS_LIMIT = 10;
-
   const userRole = sessionStorage.getItem('role');
   const isStaff = userRole === 'Employee' || userRole === 'Supervisor';
 
@@ -137,7 +139,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
   useEffect(() => {
     function handleClickOutsideResults(event) {
-      if (showCheckoutModal) return;
+      if (showCheckoutModal || showSeatModal) return;
       if (!resultsPanelRef.current) return;
       if (resultsPanelRef.current.contains(event.target)) return;
       if (results === null && returnResults === null) return;
@@ -154,7 +156,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
     document.addEventListener('mousedown', handleClickOutsideResults);
     return () => document.removeEventListener('mousedown', handleClickOutsideResults);
-  }, [results, returnResults, showCheckoutModal]);
+  }, [results, returnResults, showCheckoutModal, showSeatModal]);
 
   const distinctOrigins = routes ? new Set(routes.map((r) => r.origin)) : null;
   const distinctDestinations = routes ? new Set(routes.map((r) => r.destination)) : null;
@@ -225,11 +227,8 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
     let allowedCodes = null;
     if (routes && routes.length > 0) {
-      if (filterType === 'from') {
-        allowedCodes = validOriginsForTo;
-      } else if (filterType === 'to') {
-        allowedCodes = validDestinationsForFrom;
-      }
+      if (filterType === 'from') allowedCodes = validOriginsForTo;
+      else if (filterType === 'to') allowedCodes = validDestinationsForFrom;
     }
 
     const matches = airports.filter((a) => {
@@ -388,6 +387,18 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         const rows = Array.isArray(data) ? data : [];
         setResults(rows);
 
+        // FIX: Automatically fetch fares for all returned flights
+        if (rows.length > 0) {
+          const faresPromises = rows.map((flight) => fetch(`${API_URL}/api/flights/${flight.flightId}/fares`).then(r => r.json()).catch(() => []));
+          const faresResults = await Promise.all(faresPromises);
+          
+          const newFaresByFlight = {};
+          rows.forEach((flight, index) => {
+            newFaresByFlight[flight.flightId] = Array.isArray(faresResults[index]) ? faresResults[index] : [];
+          });
+          setFaresByFlight(newFaresByFlight);
+        }
+
         if (rows.length > 0 && params.has('date')) {
           const iso = params.get('date');
           const exact = rows.some((f) => String(f.departureDate).slice(0, 10) === iso);
@@ -428,7 +439,22 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     try {
       const res = await fetch(`${API_URL}/api/flights?${params.toString()}`);
       const data = await res.json();
-      setReturnResults(Array.isArray(data) ? data : []);
+      const rows = Array.isArray(data) ? data : [];
+      setReturnResults(rows);
+
+      // FIX: Automatically fetch fares for all return flights
+      if (rows.length > 0) {
+        const faresPromises = rows.map((flight) => fetch(`${API_URL}/api/flights/${flight.flightId}/fares`).then(r => r.json()).catch(() => []));
+        const faresResults = await Promise.all(faresPromises);
+        
+        setFaresByFlight(prev => {
+          const newFares = { ...prev };
+          rows.forEach((flight, index) => {
+            newFares[flight.flightId] = Array.isArray(faresResults[index]) ? faresResults[index] : [];
+          });
+          return newFares;
+        });
+      }
     } catch {
       setReturnResults([]);
     }
@@ -465,16 +491,16 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
     const returnFareObj = isReturn ? fare : null;
     const outboundFareObj = selectedOutboundFare?.fare || fare;
-    const totalPrice = (outboundFareObj?.currentPrice || 0) + (returnFareObj ? returnFareObj.currentPrice : 0);
-
+    
     setSelectedFlightFare({
       flight,
       fare: outboundFareObj,
       returnFare: returnFareObj,
       outboundFare: outboundFareObj,
     });
-    setCheckoutTotal(totalPrice);
-    setShowCheckoutModal(true);
+    
+    setSelectedSeatsForCheckout([]);
+    setShowSeatModal(true);
   };
 
   const selectReturnFare = (returnFlight, returnFare) => {
@@ -484,7 +510,6 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       return;
     }
     const outboundFareObj = selectedOutboundFare.fare;
-    const totalPrice = (outboundFareObj?.currentPrice || 0) + (returnFare?.currentPrice || 0);
 
     setSelectedFlightFare({
       flight: selectedOutboundFare.flight,
@@ -492,17 +517,40 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       returnFlight,
       returnFare,
     });
-    setCheckoutTotal(totalPrice);
+    
+    setSelectedSeatsForCheckout([]);
+    setShowSeatModal(true);
+  };
+
+  const handleSeatsSelected = (seats, totalWithSeats) => {
+    setSelectedSeatsForCheckout(seats);
+    setCheckoutTotal(totalWithSeats);
+    setShowSeatModal(false);
     setShowCheckoutModal(true);
   };
 
-  const handlePaymentSuccess = (confirmationNumber) => {
+  const handlePaymentSuccess = (confirmationNumber, bookingDetails) => {
     setShowCheckoutModal(false);
-    setBookingMessage(`Successfully booked! Confirmation #${confirmationNumber} — see it in My Trips.`);
+    setBookingMessage(`Successfully booked! Confirmation #${confirmationNumber}`);
     setFaresByFlight({});
     setSelectedOutboundFare(null);
     setReturnResults(null);
-    if (onBooked) onBooked();
+    
+    if (onBooked) {
+      onBooked({
+        passengerName: sessionStorage.getItem('email')?.split('@')[0] || 'Passenger',
+        email: sessionStorage.getItem('email'),
+        confirmationNumber: confirmationNumber,
+        totalAmount: checkoutTotal,
+        flightNumber: bookingDetails?.flightNumber || 'FL-123',
+        origin: bookingDetails?.origin || from,
+        destination: bookingDetails?.destination || to,
+        departureTime: bookingDetails?.departureTime || '08:00 AM',
+        arrivalTime: bookingDetails?.arrivalTime || '11:15 AM',
+        duration: '3h 15m',
+        stops: 'Non-stop'
+      });
+    }
   };
 
   const searchIcon = (
@@ -523,7 +571,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   };
 
   return (
-    <div className="relative z-50 w-full max-w-5xl mx-auto flex flex-col items-center mt-4">
+    <div className="relative z-[60] w-full max-w-5xl mx-auto flex flex-col items-center mt-4">
 
       <div className="mb-5">
         <TabToggle activeTab={currentTab} setActiveTab={setActiveTab} isDarkBackground={true} />
@@ -652,197 +700,224 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
           </div>
         </div>
 
-        {showCalendar && (
-          <div ref={calendarRef} className="absolute top-full mt-4 bg-white rounded-3xl shadow-2xl p-8 w-[740px] max-w-[95vw] z-[100] text-gray-800 border border-gray-100">
-            <button onClick={() => setShowCalendar(false)} aria-label="Close calendar" className="absolute top-4 right-4 w-8 h-8 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-900 flex items-center justify-center text-xl leading-none cursor-pointer z-10">×</button>
-            <div className="flex justify-between items-center mb-6">
-              <div className="flex-1 flex items-center justify-center gap-3">
-                <button onClick={() => setMonthOffset(prev => prev - 1)} className="p-1.5 rounded-full hover:bg-gray-100 text-blue-600 transition-colors cursor-pointer">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-                </button>
-                <h5 className="font-bold text-xl text-gray-900 w-44 text-center">{leftMonth.label}</h5>
+        {currentTab === 'flights' && showCalendar && (
+          <div ref={calendarRef} className="absolute top-full mt-2 left-0 w-full max-w-3xl bg-white rounded-3xl shadow-2xl p-6 z-[100] text-gray-800 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex justify-between items-center mb-4 px-2">
+              <button
+                onClick={() => setMonthOffset(monthOffset - 1)}
+                disabled={monthOffset <= 0}
+                className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center disabled:opacity-30 transition-colors cursor-pointer"
+              >
+                ←
+              </button>
+              <div className="flex gap-16 font-semibold text-gray-900">
+                <span>{leftMonth.label}</span>
+                <span>{rightMonth.label}</span>
               </div>
-              <div className="flex-1 flex items-center justify-center gap-3">
-                <h5 className="font-bold text-xl text-gray-900 w-44 text-center">{rightMonth.label}</h5>
-                <button onClick={() => setMonthOffset(prev => prev + 1)} className="p-1.5 rounded-full hover:bg-gray-100 text-blue-600 transition-colors cursor-pointer">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-                </button>
+              <button
+                onClick={() => setMonthOffset(monthOffset + 1)}
+                className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                →
+              </button>
+            </div>
+            <div className="flex gap-8">
+              <div className="flex-1">
+                {renderMonth(leftMonth.month, leftMonth.year)}
+              </div>
+              <div className="flex-1">
+                {renderMonth(rightMonth.month, rightMonth.year)}
               </div>
             </div>
-            <div className="w-full h-px bg-gray-100 mb-6"></div>
-            <div className="flex flex-col sm:flex-row gap-8">
-              <div className="flex-1">{renderMonth(leftMonth.month, leftMonth.year)}</div>
-              <div className="flex-1">{renderMonth(rightMonth.month, rightMonth.year)}</div>
-            </div>
-            <div className="flex justify-end items-center mt-6 pt-5 border-t border-gray-100">
-              {(startDate || endDate) ? (
-                <button onClick={() => { setStartDate(null); setEndDate(null); clearResults(); }} className="text-sm font-semibold text-blue-600 hover:text-blue-800 transition-colors bg-blue-50 hover:bg-blue-100 px-5 py-2.5 rounded-xl whitespace-nowrap cursor-pointer">
-                  Clear Dates
-                </button>
-              ) : <div className="h-[42px]"></div>}
+            <div className="flex justify-end mt-4 pt-4 border-t border-gray-100">
+              <button onClick={() => setShowCalendar(false)} className="text-sm font-semibold text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-lg cursor-pointer">
+                Done
+              </button>
             </div>
           </div>
         )}
 
-        {showTravelers && (
-          <div ref={travelersRef} className="absolute top-full mt-4 right-0 bg-white rounded-3xl shadow-2xl p-8 w-[420px] max-w-[95vw] z-[100] text-gray-800 border border-gray-100">
-            <button onClick={() => setShowTravelers(false)} aria-label="Close travelers" className="absolute top-4 right-4 w-8 h-8 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-900 flex items-center justify-center text-xl leading-none cursor-pointer z-10">×</button>
-            <div className="flex flex-col gap-6">
-              {Object.entries({ adults: { label: 'Adults', sub: 'Age 12 or above' }, children: { label: 'Children', sub: 'Ages 2-11' }, infantsSeat: { label: 'Infants', sub: 'In seat' }, infantsLap: { label: 'Infants', sub: 'On lap' } }).map(([key, info]) => (
-                <div key={key} className="flex justify-between items-center">
+        {currentTab === 'flights' && showTravelers && (
+          <div ref={travelersRef} className="absolute top-full mt-2 right-0 w-[340px] bg-white rounded-3xl shadow-2xl p-6 z-[100] text-gray-800 animate-in fade-in slide-in-from-top-2 duration-200 border border-gray-100">
+            <div className="flex flex-col gap-5">
+              {[
+                { id: 'adults', label: 'Adults', sub: 'Age 12+' },
+                { id: 'children', label: 'Children', sub: 'Age 2-11' },
+                { id: 'infantsSeat', label: 'Infants (in seat)', sub: 'Under 2' },
+                { id: 'infantsLap', label: 'Infants (on lap)', sub: 'Under 2' },
+              ].map((type) => (
+                <div key={type.id} className="flex items-center justify-between">
                   <div>
-                    <div className="font-bold text-lg text-gray-900">{info.label}</div>
-                    <div className="text-sm text-gray-500 font-medium">{info.sub}</div>
+                    <div className="font-semibold text-gray-900 text-sm">{type.label}</div>
+                    <div className="text-xs text-gray-500">{type.sub}</div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <button onClick={() => updateTraveler(key, 'subtract')} className={`w-10 h-10 rounded-full border flex items-center justify-center transition-colors text-xl font-light cursor-pointer ${travelers[key] === 0 || (key === 'adults' && travelers.adults <= 1) ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-gray-300 text-gray-600 hover:border-gray-400'}`}>—</button>
-                    <span className="w-6 text-center font-medium text-lg">{travelers[key]}</span>
-                    <button onClick={() => updateTraveler(key, 'add')} className="w-10 h-10 rounded-full border border-gray-300 text-gray-600 hover:border-gray-400 flex items-center justify-center transition-colors text-xl font-light cursor-pointer">+</button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => updateTraveler(type.id, 'remove')}
+                      disabled={travelers[type.id] <= 0}
+                      className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:border-gray-400 disabled:opacity-30 transition-colors cursor-pointer"
+                    >
+                      -
+                    </button>
+                    <span className="w-4 text-center font-semibold text-gray-900">{travelers[type.id]}</span>
+                    <button
+                      onClick={() => updateTraveler(type.id, 'add')}
+                      className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:border-gray-400 transition-colors cursor-pointer"
+                    >
+                      +
+                    </button>
                   </div>
                 </div>
               ))}
             </div>
-            <div className="text-sm text-gray-500 mt-8 pt-6 border-t border-gray-100">You can search for up to 9 travelers</div>
+            <div className="flex justify-end mt-6 pt-4 border-t border-gray-100">
+              <button onClick={() => setShowTravelers(false)} className="text-sm font-semibold text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-lg cursor-pointer">
+                Done
+              </button>
+            </div>
           </div>
         )}
       </div>
 
       {currentTab === 'flights' && (searching || results !== null) && (
         <div ref={resultsPanelRef} className="w-full bg-white rounded-3xl shadow-2xl mt-4 p-6 text-gray-800 relative z-10 max-h-[500px] overflow-y-auto">
-          <div className="sticky top-0 z-20 flex justify-end pointer-events-none">
-            <button onClick={clearResults} aria-label="Close search results" className="pointer-events-auto w-8 h-8 rounded-full bg-white shadow hover:bg-gray-100 text-gray-500 hover:text-gray-900 flex items-center justify-center text-xl leading-none cursor-pointer flex-shrink-0">×</button>
+          <div className="flex justify-between items-center mb-4 sticky top-0 bg-white z-20 pb-2">
+            <h3 className="text-lg font-bold text-gray-900">Flight Results</h3>
+            {searching && <span className="text-sm text-gray-500 animate-pulse">Searching...</span>}
           </div>
 
-          {bookingMessage && <p className="bg-green-50 border border-green-200 text-green-800 font-semibold rounded-2xl px-4 py-3 mb-4">{bookingMessage}</p>}
-          {bookingError && <p className="bg-red-50 border border-red-200 text-red-700 font-semibold rounded-2xl px-4 py-3 mb-4">{bookingError}</p>}
-          {fallbackWarning && <p className="bg-amber-50 border border-amber-200 text-amber-800 font-semibold rounded-2xl px-4 py-3 mb-4">{fallbackWarning}</p>}
+          {bookingError && (
+            <p className="bg-red-50 border border-red-200 text-red-700 font-semibold rounded-2xl px-4 py-3 text-sm mb-4">
+              {bookingError}
+            </p>
+          )}
+          {bookingMessage && (
+            <p className="bg-green-50 border border-green-200 text-green-800 font-semibold rounded-2xl px-4 py-3 text-sm mb-4">
+              {bookingMessage}
+            </p>
+          )}
+          {fallbackWarning && (
+            <p className="bg-amber-50 border border-amber-200 text-amber-800 font-semibold rounded-2xl px-4 py-3 text-sm mb-4">
+              {fallbackWarning}
+            </p>
+          )}
 
           {searching ? (
-            <p className="text-gray-500">Searching...</p>
-          ) : results.length === 0 ? (
-            <div className="text-gray-600 text-center py-6">
-              <p className="font-medium mb-1">No flights found.</p>
-              <p className="text-sm text-gray-500">Try adjusting your origin, destination, or date.</p>
-            </div>
-          ) : selectedOutboundFare && tripType === 'round-trip' ? (
-            <div className="flex flex-col gap-4">
-              <div className="border border-blue-200 bg-blue-50 rounded-2xl p-4">
-                <div className="flex justify-between items-start gap-4">
-                  <div className="min-w-0">
-                    <div className="text-[11px] font-bold text-blue-700 uppercase tracking-wide mb-1">Outbound selected</div>
-                    <div className="font-bold text-gray-900 truncate">
-                      {selectedOutboundFare.flight.flightNumber} — {selectedOutboundFare.flight.originAirportCode} → {selectedOutboundFare.flight.destinationAirportCode}
-                    </div>
-                    <div className="text-sm text-gray-600 mt-1">
-                      Departs {String(selectedOutboundFare.flight.departureDate).slice(0, 10)} {selectedOutboundFare.flight.departureTime} · ${selectedOutboundFare.fare.currentPrice}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">{fareDescriptor(selectedOutboundFare.fare)}</div>
-                  </div>
-                  <button onClick={handleChangeOutbound} className="text-blue-600 font-semibold text-sm hover:underline cursor-pointer flex-shrink-0">Change</button>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="text-lg font-bold text-gray-900 mb-4">
-                  Select Return Flight ({to} → {from})
-                </h3>
-                {returnSearching ? (
-                  <p className="text-gray-500">Searching return flights...</p>
-                ) : !returnResults || returnResults.length === 0 ? (
-                  <p className="text-gray-500 text-sm">No return flights found{endDate ? ` for ${endDate.year}-${String(endDate.month + 1).padStart(2, '0')}-${String(endDate.day).padStart(2, '0')}` : ' for this route'}.</p>
-                ) : (
-                  <div className="flex flex-col gap-4">
-                    {(showAllReturn ? returnResults : returnResults.slice(0, RESULTS_LIMIT)).map((f) => (
-                      <div key={f.flightId} className="border border-gray-100 rounded-2xl p-4">
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <div className="font-bold text-gray-900">{f.flightNumber} — {f.originAirportCode} → {f.destinationAirportCode}</div>
-                            <div className="text-sm text-gray-500">
-                              Departs {String(f.departureDate).slice(0, 10)} {f.departureTime} — {f.flightStatus}
-                            </div>
-                          </div>
-                          <button onClick={() => loadFares(f.flightId)} className="text-blue-600 font-semibold text-sm hover:underline cursor-pointer">
-                            View fares
-                          </button>
+             <div className="py-10 text-center text-gray-500">Loading flights...</div>
+          ) : results && results.length === 0 ? (
+            <div className="py-10 text-center text-gray-500">No flights found for this route and date.</div>
+          ) : results && results.length > 0 && (
+            <div className="flex flex-col gap-3">
+              {(showAllOutbound ? results : results.slice(0, RESULTS_LIMIT)).map((flight) => {
+                const departureTime = flight.departureTime ? String(flight.departureTime).substring(0, 5) : '';
+                const arrivalTime = flight.arrivalTime ? String(flight.arrivalTime).substring(0, 5) : '';
+                const depDate = String(flight.departureDate).slice(0, 10);
+                
+                return (
+                  <div key={flight.flightId} className="border border-gray-100 rounded-2xl p-4 flex flex-col gap-3 hover:shadow-md transition-shadow bg-white">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-gray-900">{flight.originAirportCode} → {flight.destinationAirportCode}</span>
+                          <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">{flight.flightNumber}</span>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                            flight.flightStatus === 'Cancelled' ? 'bg-red-50 text-red-700' :
+                            flight.flightStatus === 'Delayed' ? 'bg-amber-50 text-amber-700' :
+                            'bg-green-50 text-green-700'
+                          }`}>{flight.flightStatus}</span>
                         </div>
-                        {faresByFlight[f.flightId] && (
-                          <div className="mt-3 flex flex-col gap-1">
-                            {faresByFlight[f.flightId].length === 0 ? (
-                              <div className="text-sm text-gray-500">No fares for this flight.</div>
-                            ) : (
-                              faresByFlight[f.flightId].map((fare) => (
-                                <div key={fare.flightFareId} className="text-sm text-gray-700 flex justify-between items-center bg-gray-50 rounded-xl px-3 py-2 mt-1">
-                                  <div className="flex flex-col">
-                                    <span className="font-medium">${fare.currentPrice} <span className="text-gray-400 font-normal ml-1">({fare.availableInventory} seats left)</span></span>
-                                    <span className="text-xs text-gray-500 mt-0.5">{fareDescriptor(fare)}</span>
+                        <div className="text-sm text-gray-500 mt-1">
+                          {depDate} | {departureTime} - {arrivalTime}
+                        </div>
+                      </div>
+                      {selectedOutboundFare?.flight.flightId === flight.flightId && (
+                        <span className="text-xs font-semibold text-blue-600">Selected</span>
+                      )}
+                    </div>
+
+                    {selectedOutboundFare?.flight.flightId !== flight.flightId && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {(faresByFlight[flight.flightId] || []).length > 0 ? (
+                          faresByFlight[flight.flightId].map((fare) => (
+                            <button
+                              key={fare.flightFareId}
+                              onClick={() => initiateBooking(flight, fare)}
+                              disabled={isStaff}
+                              title={isStaff ? 'Staff accounts cannot book flights.' : undefined}
+                              className="flex flex-col items-start border border-gray-200 rounded-xl px-4 py-2 hover:border-blue-500 hover:bg-blue-50 transition-colors text-left group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-gray-200 disabled:hover:bg-transparent"
+                            >
+                              <span className="text-sm font-bold text-gray-900 group-hover:text-blue-700">${fare.currentPrice}</span>
+                              <span className="text-xs text-gray-500">{fare.cabinName} - {fare.fareClassName}</span>
+                              <span className="text-[10px] text-gray-400 mt-0.5">{fareDescriptor(fare)}</span>
+                              {isStaff && (<span className="text-[10px] text-gray-400 mt-0.5">Staff can't book</span>)}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="text-xs text-gray-400 py-2">No fares available for this flight.</div>
+                        )}
+                      </div>
+                    )}
+
+                    {selectedOutboundFare?.flight.flightId === flight.flightId && returnResults !== null && (
+                      <div className="mt-3 bg-gray-50 rounded-xl p-3 border border-gray-200">
+                        <div className="flex justify-between items-center mb-2">
+                          <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wide">Select Return Flight</h4>
+                          <button onClick={handleChangeOutbound} className="text-xs text-blue-600 font-semibold hover:underline">Change Outbound</button>
+                        </div>
+                        {returnSearching ? (
+                          <div className="text-xs text-gray-500 py-2">Searching for return flights...</div>
+                        ) : returnResults.length === 0 ? (
+                          <div className="text-xs text-gray-500 py-2">No return flights found for this route and date.</div>
+                        ) : (
+                          <div className="flex flex-col gap-2">
+                            {(showAllReturn ? returnResults : returnResults.slice(0, RESULTS_LIMIT)).map((rFlight) => {
+                              const rDepTime = rFlight.departureTime ? String(rFlight.departureTime).substring(0, 5) : '';
+                              const rArrTime = rFlight.arrivalTime ? String(rFlight.arrivalTime).substring(0, 5) : '';
+                              const rDepDate = String(rFlight.departureDate).slice(0, 10);
+                              
+                              return (
+                                <div key={rFlight.flightId} className="bg-white border border-gray-200 rounded-lg p-2 flex flex-col gap-1">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-xs font-bold text-gray-800">{rFlight.originAirportCode} → {rFlight.destinationAirportCode}</span>
+                                    <span className="text-xs text-gray-500">{rDepDate} | {rDepTime} - {rArrTime}</span>
                                   </div>
-                                  {isStaff ? (
-                                    <span className="text-xs text-gray-400 font-medium">Staff can't book</span>
-                                  ) : (
-                                    <button onClick={() => selectReturnFare(f, fare)} className="bg-[#0066ff] text-white hover:bg-blue-700 px-4 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer">
-                                      Select
-                                    </button>
-                                  )}
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {(faresByFlight[rFlight.flightId] || []).length > 0 ? (
+                                      faresByFlight[rFlight.flightId].map((rFare) => (
+                                        <button
+                                          key={rFare.flightFareId}
+                                          onClick={() => selectReturnFare(rFlight, rFare)}
+                                          disabled={isStaff}
+                                          title={isStaff ? 'Staff accounts cannot book flights.' : undefined}
+                                          className="text-left border border-blue-200 bg-blue-50 rounded-md px-2 py-1 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-50"
+                                        >
+                                          <div className="text-xs font-bold text-blue-800">${rFare.currentPrice} <span className="font-normal text-blue-600">- {rFare.cabinName}</span></div>
+                                          <div className="text-[9px] text-gray-500 mt-0.5">{fareDescriptor(rFare)}</div>
+                                          {isStaff && (<div className="text-[9px] text-gray-400 mt-0.5">Staff can't book</div>)}
+                                        </button>
+                                      ))
+                                    ) : (
+                                      <div className="text-[10px] text-gray-400 py-1">No fares available.</div>
+                                    )}
+                                  </div>
                                 </div>
-                              ))
+                              );
+                            })}
+                            {returnResults.length > RESULTS_LIMIT && (
+                              <button onClick={() => setShowAllReturn(!showAllReturn)} className="text-xs text-blue-600 font-semibold text-center mt-2 hover:underline">
+                                {showAllReturn ? 'Show Less' : `Show All (${returnResults.length})`}
+                              </button>
                             )}
                           </div>
                         )}
                       </div>
-                    ))}
-                    {returnResults.length > RESULTS_LIMIT && (
-                      <button onClick={() => setShowAllReturn((v) => !v)} className="text-blue-600 font-semibold text-sm hover:underline cursor-pointer self-start">
-                        {showAllReturn ? 'Show fewer flights' : `Show all ${returnResults.length} flights`}
-                      </button>
                     )}
                   </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-4">
-              <h3 className="text-lg font-bold text-gray-900">Outbound Flights</h3>
-              {(showAllOutbound ? results : results.slice(0, RESULTS_LIMIT)).map((f) => (
-                <div key={f.flightId} className="border border-gray-100 rounded-2xl p-4">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <div className="font-bold text-gray-900">{f.flightNumber} — {f.originAirportCode} → {f.destinationAirportCode}</div>
-                      <div className="text-sm text-gray-500">
-                        Departs {String(f.departureDate).slice(0, 10)} {f.departureTime} — Arrives {String(f.arrivalDate).slice(0, 10)} {f.arrivalTime} — {f.flightStatus}
-                      </div>
-                    </div>
-                    <button onClick={() => loadFares(f.flightId)} className="text-blue-600 font-semibold text-sm hover:underline cursor-pointer">
-                      View fares
-                    </button>
-                  </div>
-                  {faresByFlight[f.flightId] && (
-                    <div className="mt-3 flex flex-col gap-1">
-                      {faresByFlight[f.flightId].length === 0 ? (
-                        <div className="text-sm text-gray-500">No fares for this flight.</div>
-                      ) : (
-                        faresByFlight[f.flightId].map((fare) => (
-                          <div key={fare.flightFareId} className="text-sm text-gray-700 flex justify-between items-center bg-gray-50 rounded-xl px-3 py-2 mt-1">
-                            <div className="flex flex-col">
-                              <span className="font-medium">${fare.currentPrice} <span className="text-gray-400 font-normal ml-1">({fare.availableInventory} seats left)</span></span>
-                              <span className="text-xs text-gray-500 mt-0.5">{fareDescriptor(fare)}</span>
-                            </div>
-                            {isStaff ? (
-                              <span className="text-xs text-gray-400 font-medium">Staff can't book</span>
-                            ) : (
-                              <button onClick={() => initiateBooking(f, fare)} className="bg-[#0066ff] text-white hover:bg-blue-700 px-4 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer">
-                                Book
-                              </button>
-                            )}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
               {results.length > RESULTS_LIMIT && (
-                <button onClick={() => setShowAllOutbound((v) => !v)} className="text-blue-600 font-semibold text-sm hover:underline cursor-pointer self-start">
-                  {showAllOutbound ? 'Show fewer flights' : `Show all ${results.length} flights`}
+                <button onClick={() => setShowAllOutbound(!showAllOutbound)} className="text-sm text-blue-600 font-semibold text-center mt-2 hover:underline">
+                  {showAllOutbound ? 'Show Less' : `Show All (${results.length})`}
                 </button>
               )}
             </div>
@@ -851,15 +926,26 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       )}
 
       {selectedFlightFare && (
-        <CheckoutModal
-          show={showCheckoutModal}
-          onHide={() => setShowCheckoutModal(false)}
-          fareId={selectedFlightFare.fare.flightFareId}
-          returnFareId={selectedFlightFare.returnFare?.flightFareId ?? null}
-          totalPrice={checkoutTotal}
-          tripType={tripType}
-          onSuccess={handlePaymentSuccess}
-        />
+        <>
+          <SeatSelectionModal
+            show={showSeatModal}
+            onHide={() => setShowSeatModal(false)}
+            flightId={selectedFlightFare.flight.flightId}
+            farePrice={selectedFlightFare.fare.currentPrice + (selectedFlightFare.returnFare?.currentPrice || 0)}
+            onProceed={handleSeatsSelected}
+          />
+          
+          <CheckoutModal
+            show={showCheckoutModal}
+            onHide={() => setShowCheckoutModal(false)}
+            fareId={selectedFlightFare.fare.flightFareId}
+            returnFareId={selectedFlightFare.returnFare?.flightFareId ?? null}
+            totalPrice={checkoutTotal}
+            selectedSeats={selectedSeatsForCheckout}
+            tripType={tripType}
+            onSuccess={handlePaymentSuccess}
+          />
+        </>
       )}
 
     </div>
