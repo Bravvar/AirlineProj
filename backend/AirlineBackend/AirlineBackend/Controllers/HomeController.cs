@@ -220,8 +220,14 @@ public class HomeController : ControllerBase
     [HttpGet("flights/{id}/seats")]
     public IActionResult FlightSeats(int id)
     {
-        var data = _context.Database.SqlQueryRaw<int>("SELECT seat_id FROM SeatAssignment WHERE flight_id = {0} AND active_seat = 1", id).ToList();
-        return Ok(data);
+        // Fetch the seat numbers (strings) of all active assignments for the flight
+        var occupiedSeats = _context.Database.SqlQueryRaw<string>(@"
+            SELECT s.seat_number 
+            FROM SeatAssignment sa
+         JOIN Seat s ON s.seat_id = sa.seat_id
+        WHERE sa.flight_id = {0} AND sa.active_seat = 1", id).ToList();
+        
+     return Ok(occupiedSeats);
     }
 
     [AllowAnonymous]
@@ -308,163 +314,195 @@ public class HomeController : ControllerBase
         return Ok(data);
     }
 
+    // UPDATED: Full implementation for booking seats
     [HttpPost("reservations")]
-    public async Task<IActionResult> CreateReservation([FromBody] BookingPayload book)
+public async Task<IActionResult> CreateReservation([FromBody] BookingPayload book)
+{
+    var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    if (userId == null) return Unauthorized();
+
+    var account = _context.UserAccount.FirstOrDefault(i => i.UserAccountId == int.Parse(userId));
+    if (account == null) return BadRequest("Account not found");
+
+    int passengerId;
+    if (account.PassengerId != null)
     {
-        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (userId == null) return Unauthorized();
-
-        var account = _context.UserAccount.FirstOrDefault(i => i.UserAccountId == int.Parse(userId));
-        if (account == null) return BadRequest("Account not found");
-
-
-        int passengerId;
-        if (account.PassengerId != null)
+        passengerId = account.PassengerId.Value;
+    }
+    else if (account.EmployeeId != null)
+    {
+        var emp = _context.Database.SqlQueryRaw<EmployeeRow>("SELECT first_name AS FirstName, last_name AS LastName, date_of_birth AS DateOfBirth, email AS Email, phone AS Phone FROM Employee WHERE employee_id = {0}", account.EmployeeId).FirstOrDefault();
+        if (emp == null) return BadRequest("Employee record not found");
+        var p = new Passenger
         {
-            passengerId = account.PassengerId.Value;
-        }
-        else if (account.EmployeeId != null)
+            FirstName = emp.FirstName,
+            LastName = emp.LastName,
+            DateOfBirth = emp.DateOfBirth ?? new DateTime(1990, 1, 1),
+            Email = emp.Email,
+            Phone = emp.Phone,
+            Address = null
+        };
+        _context.Passenger.Add(p);
+        await _context.SaveChangesAsync();
+        account.PassengerId = p.PassengerId;
+        await _context.SaveChangesAsync();
+        passengerId = p.PassengerId;
+    }
+    else
+    {
+        return BadRequest("Account has no passenger");
+    }
+
+    var fare = _context.FlightFare.FirstOrDefault(i => i.FlightFareId == book.flightFareId);
+    if (fare == null) return NotFound("No fare like that");
+    if (fare.AvailableInventory <= 0) return BadRequest("No seats left");
+
+    var flight = _context.Flight.FirstOrDefault(i => i.FlightId == fare.FlightId);
+    if (flight == null) return NotFound("No flight like that");
+    if (flight.FlightStatus == "Cancelled") return BadRequest("Flight is cancelled");
+
+    FlightFare? returnFare = null;
+    Flight? returnFlight = null;
+    if (book.returnFareId != null)
+    {
+        returnFare = _context.FlightFare.FirstOrDefault(i => i.FlightFareId == book.returnFareId);
+        if (returnFare == null) return NotFound("No return fare like that");
+        if (returnFare.AvailableInventory <= 0) return BadRequest("No seats left on return flight");
+
+        returnFlight = _context.Flight.FirstOrDefault(i => i.FlightId == returnFare.FlightId);
+        if (returnFlight == null) return NotFound("No return flight like that");
+        if (returnFlight.FlightStatus == "Cancelled") return BadRequest("Return flight is cancelled");
+    }
+
+    // Process Seats
+    var requestedSeatStrings = book.seats ?? new List<string>();
+    var validSeatIds = new List<int>();
+    decimal seatFeeTotal = 0;
+
+    if (requestedSeatStrings.Any())
+    {
+        // 1. Get all seat records for this specific aircraft
+        var aircraftSeats = _context.Seat.Where(s => s.AircraftId == flight.AircraftId).ToList();
+        
+        // 2. Map the requested string names (e.g., "A1") to actual database IDs
+        foreach (var seatStr in requestedSeatStrings)
         {
-            var emp = _context.Database.SqlQueryRaw<EmployeeRow>("SELECT first_name AS FirstName, last_name AS LastName, date_of_birth AS DateOfBirth, email AS Email, phone AS Phone FROM Employee WHERE employee_id = {0}", account.EmployeeId).FirstOrDefault();
-            if (emp == null) return BadRequest("Employee record not found");
-            var p = new Passenger
+            var seat = aircraftSeats.FirstOrDefault(s => s.SeatNumber == seatStr);
+            if (seat != null)
             {
-                FirstName = emp.FirstName,
-                LastName = emp.LastName,
-                DateOfBirth = emp.DateOfBirth ?? new DateTime(1990, 1, 1),
-                Email = emp.Email,
-                Phone = emp.Phone,
-                Address = null
-            };
-            _context.Passenger.Add(p);
-            await _context.SaveChangesAsync();
-            account.PassengerId = p.PassengerId;
-            await _context.SaveChangesAsync();
-            passengerId = p.PassengerId;
-        }
-        else
-        {
-            return BadRequest("Account has no passenger");
-        }
-
-        var fare = _context.FlightFare.FirstOrDefault(i => i.FlightFareId == book.flightFareId);
-        if (fare == null) return NotFound("No fare like that");
-        if (fare.AvailableInventory <= 0) return BadRequest("No seats left");
-
-        var flight = _context.Flight.FirstOrDefault(i => i.FlightId == fare.FlightId);
-        if (flight == null) return NotFound("No flight like that");
-        if (flight.FlightStatus == "Cancelled") return BadRequest("Flight is cancelled");
-
-        FlightFare? returnFare = null;
-        Flight? returnFlight = null;
-        if (book.returnFareId != null)
-        {
-            returnFare = _context.FlightFare.FirstOrDefault(i => i.FlightFareId == book.returnFareId);
-            if (returnFare == null) return NotFound("No return fare like that");
-            if (returnFare.AvailableInventory <= 0) return BadRequest("No seats left on return flight");
-
-            returnFlight = _context.Flight.FirstOrDefault(i => i.FlightId == returnFare.FlightId);
-            if (returnFlight == null) return NotFound("No return flight like that");
-            if (returnFlight.FlightStatus == "Cancelled") return BadRequest("Return flight is cancelled");
-        }
-
-        var seatIds = book.seats ?? new List<int>();
-
-
-        int? selectedSeatId = seatIds.Count > 0 ? seatIds[0] : (int?)null;
-
-        decimal seatFeeTotal = selectedSeatId.HasValue ? 25 : 0;
-
-        await using var transaction = await _context.Database.BeginTransactionAsync();
-        try
-        {
-            var reservation = new Reservation
-            {
-                ConfirmationNumber = "ARS" + Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper(),
-                BookingDate = DateTime.Today,
-                BookingTime = DateTime.Now.TimeOfDay,
-                ReservationStatus = "Confirmed",
-                HoldExpiration = null,
-                TripType = returnFare == null ? "One Way" : "Round Trip",
-                TotalAmount = fare.CurrentPrice + (returnFare == null ? 0 : returnFare.CurrentPrice) + seatFeeTotal
-            };
-
-            _context.Reservation.Add(reservation);
-            await _context.SaveChangesAsync();
-
-            var passenger = new ReservationPassenger
-            {
-                ReservationId = reservation.ReservationId,
-                PassengerId = passengerId,
-                AdditionalCheckedBags = 0,
-                MealSelection = null
-            };
-            _context.ReservationPassenger.Add(passenger);
-
-            var segment = new ReservationSegment
-            {
-                ReservationId = reservation.ReservationId,
-                FlightId = fare.FlightId,
-                FlightFareId = fare.FlightFareId,
-                SegmentNumber = 1,
-                SegmentStatus = "Booked",
-                FarePriceAtBooking = fare.CurrentPrice
-            };
-            _context.ReservationSegment.Add(segment);
-            await _context.SaveChangesAsync();
-
-            ReservationSegment? returnSegment = null;
-            if (returnFare != null)
-            {
-                returnSegment = new ReservationSegment
-                {
-                    ReservationId = reservation.ReservationId,
-                    FlightId = returnFare.FlightId,
-                    FlightFareId = returnFare.FlightFareId,
-                    SegmentNumber = 2,
-                    SegmentStatus = "Booked",
-                    FarePriceAtBooking = returnFare.CurrentPrice
-                };
-                _context.ReservationSegment.Add(returnSegment);
-                await _context.SaveChangesAsync();
+                validSeatIds.Add(seat.SeatId);
             }
-
-
-            if (selectedSeatId.HasValue)
-            {
-                var seatAircraftIds = _context.Database.SqlQueryRaw<int>("SELECT aircraft_id FROM Seat WHERE seat_id = {0}", selectedSeatId).ToList();
-                if (seatAircraftIds.Count == 0) { await transaction.RollbackAsync(); return BadRequest("Seat does not exist."); }
-
-
-                if (seatAircraftIds[0] != flight.AircraftId)
-                {
-                    await transaction.RollbackAsync();
-                    return BadRequest("Seat is not on this flight.");
-                }
-
-                var taken = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM SeatAssignment WHERE flight_id = {0} AND seat_id = {1} AND active_seat = 1", fare.FlightId, selectedSeatId).FirstOrDefault() > 0;
-                if (taken) { await transaction.RollbackAsync(); return BadRequest("That seat was just taken."); }
-
-                await _context.Database.ExecuteSqlRawAsync(
-                    "INSERT INTO SeatAssignment (reservation_segment_id, reservation_passenger_id, seat_id, flight_id, assignment_date_time, seat_fee, active_seat) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, 1)",
-                    segment.ReservationSegmentId, passenger.ReservationPassengerId, selectedSeatId, fare.FlightId, DateTime.Now, 25);
-            }
-
-            var paymentReference = "PAY" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper();
-            await _context.Database.ExecuteSqlRawAsync(
-                "INSERT INTO Payment (reservation_id, employee_id, payment_date_time, amount, payment_method, payment_status, transaction_reference, transaction_type) VALUES ({0}, NULL, {1}, {2}, 'Card (demo)', 'Successful', {3}, 'Payment')",
-                reservation.ReservationId, DateTime.Now, reservation.TotalAmount, paymentReference);
-
-            await transaction.CommitAsync();
-
-            return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount });
         }
-        catch (Exception ex)
+
+        // 3. Check if any requested seats are already taken
+        if (validSeatIds.Any())
         {
-            await transaction.RollbackAsync();
-            return StatusCode(500, "Internal Server Error: " + ex.Message);
+            var alreadyTaken = _context.Database.SqlQueryRaw<int>(@"
+                SELECT seat_id 
+                FROM SeatAssignment 
+                WHERE flight_id = {0} AND active_seat = 1 AND seat_id IN ({1})", 
+                flight.FlightId, string.Join(",", validSeatIds)).ToList();
+
+            if (alreadyTaken.Any())
+            {
+                return BadRequest("One or more selected seats have just been taken. Please select different seats.");
+            }
+            
+            seatFeeTotal = validSeatIds.Count * 25.00m;
         }
     }
+
+    await using var transaction = await _context.Database.BeginTransactionAsync();
+    try
+    {
+        var reservation = new Reservation
+        {
+            ConfirmationNumber = "ARS" + Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper(),
+            BookingDate = DateTime.Today,
+            BookingTime = DateTime.Now.TimeOfDay,
+            ReservationStatus = "Confirmed",
+            HoldExpiration = null,
+            TripType = returnFare == null ? "One Way" : "Round Trip",
+            TotalAmount = fare.CurrentPrice + (returnFare == null ? 0 : returnFare.CurrentPrice) + seatFeeTotal
+        };
+
+        _context.Reservation.Add(reservation);
+        await _context.SaveChangesAsync();
+
+        var passenger = new ReservationPassenger
+        {
+            ReservationId = reservation.ReservationId,
+            PassengerId = passengerId,
+            AdditionalCheckedBags = 0,
+            MealSelection = null
+        };
+        _context.ReservationPassenger.Add(passenger);
+
+        var segment = new ReservationSegment
+        {
+            ReservationId = reservation.ReservationId,
+            FlightId = fare.FlightId,
+            FlightFareId = fare.FlightFareId,
+            SegmentNumber = 1,
+            SegmentStatus = "Booked",
+            FarePriceAtBooking = fare.CurrentPrice
+        };
+        _context.ReservationSegment.Add(segment);
+        await _context.SaveChangesAsync();
+
+        ReservationSegment? returnSegment = null;
+        if (returnFare != null)
+        {
+            returnSegment = new ReservationSegment
+            {
+                ReservationId = reservation.ReservationId,
+                FlightId = returnFare.FlightId,
+                FlightFareId = returnFare.FlightFareId,
+                SegmentNumber = 2,
+                SegmentStatus = "Booked",
+                FarePriceAtBooking = returnFare.CurrentPrice
+            };
+            _context.ReservationSegment.Add(returnSegment);
+            await _context.SaveChangesAsync();
+        }
+
+        // Assign Seats
+        if (validSeatIds.Any())
+        {
+            foreach (var sId in validSeatIds)
+            {
+                await _context.Database.ExecuteSqlRawAsync(
+                    "INSERT INTO SeatAssignment (reservation_segment_id, reservation_passenger_id, seat_id, flight_id, assignment_date_time, seat_fee, active_seat) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, 1)",
+                    segment.ReservationSegmentId, passenger.ReservationPassengerId, sId, fare.FlightId, DateTime.Now, 25);
+            }
+        }
+
+        var paymentReference = "PAY" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper();
+        await _context.Database.ExecuteSqlRawAsync(
+            "INSERT INTO Payment (reservation_id, employee_id, payment_date_time, amount, payment_method, payment_status, transaction_reference, transaction_type) VALUES ({0}, NULL, {1}, {2}, 'Card (demo)', 'Successful', {3}, 'Payment')",
+            reservation.ReservationId, DateTime.Now, reservation.TotalAmount, paymentReference);
+
+        await transaction.CommitAsync();
+
+        // Return full details for the Payment Confirmation page
+        return Ok(new { 
+            reservationId = reservation.ReservationId, 
+            confirmationNumber = reservation.ConfirmationNumber, 
+            reservationStatus = reservation.ReservationStatus, 
+            totalAmount = reservation.TotalAmount,
+            flightNumber = flight.FlightNumber,
+            origin = flight.OriginAirportCode,
+            destination = flight.DestinationAirportCode,
+            departureTime = flight.DepartureTime.ToString(@"hh\:mm"),
+            arrivalTime = flight.ArrivalTime.ToString(@"hh\:mm")
+        });
+    }
+    catch (Exception ex)
+    {
+        await transaction.RollbackAsync();
+        return StatusCode(500, "Internal Server Error: " + ex.Message);
+    }
+}
 
     [HttpPut("reservations/{id}/cancel")]
     public async Task<IActionResult> CancelReservation(int id)
@@ -489,7 +527,6 @@ public class HomeController : ControllerBase
         await using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
-
             foreach (var segment in segments)
             {
                 if (segment.SegmentStatus != "Cancelled")
@@ -500,7 +537,6 @@ public class HomeController : ControllerBase
                 }
             }
             await _context.SaveChangesAsync();
-
 
             reservation.ReservationStatus = "Cancelled";
             await _context.SaveChangesAsync();
@@ -539,10 +575,8 @@ public class HomeController : ControllerBase
 
         if (reservation.ReservationStatus == "Cancelled") return BadRequest("Cannot modify a cancelled booking");
 
-
         if (mod.additionalCheckedBags != null && (mod.additionalCheckedBags < 0 || mod.additionalCheckedBags > 5))
             return BadRequest("Extra checked bags must be between 0 and 5");
-
 
         if (mod.phone != null && mod.phone.Any(char.IsLetter))
             return BadRequest("Phone number must contain digits only");
@@ -803,9 +837,10 @@ public class HomeController : ControllerBase
     }
 }
 
+// --- UPDATED RECORD TYPES ---
 public record Payload(string email, string password);
 public record RegisterPayload(string email, string password, int? passengerId, string? firstName, string? lastName, string? Phone, DateTime? dateOfBirth);
-public record BookingPayload(int flightFareId, int? returnFareId, List<int>? seats);
+public record BookingPayload(int flightFareId, int? returnFareId, List<string>? seats); // Changed to List<string> for seat IDs like "A1"
 public record ModifyPayload(string? phone, string? address, string? mealSelection, int? additionalCheckedBags);
 public record AddFlightPayload(string flightNumber, string origin, string destination, int aircraftId, DateTime departure, DateTime arrival);
 public record AddFarePayload(int cabinClassId, int fareClassId, decimal price, int allocatedCapacity);
