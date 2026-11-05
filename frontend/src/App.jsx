@@ -7,6 +7,7 @@ import DealsPage from './components/DealsPage';
 import MyTripsPage from './components/MyTripsPage';
 import ReportsPage from './components/ReportsPage';
 import QueriesPage from './components/QueriesPage';
+import TriggersPage from './components/TriggersPage';
 import AdminPage from './components/AdminPage';
 import EmployeePage from './components/EmployeePage';
 import SideBar from './components/SideBar';
@@ -62,6 +63,7 @@ export default function App() {
     if (pageId === 'employee') setCurrentPage('employee');
     if (pageId === 'reports') setCurrentPage('reports');
     if (pageId === 'queries') setCurrentPage('queries');
+    if (pageId === 'triggers') setCurrentPage('triggers');
     if (pageId === 'dashboard' || pageId === 'home') {
       setCurrentPage('home');
       setActiveTab('flights');
@@ -189,6 +191,25 @@ export default function App() {
           onSignIn={() => setShowSignIn(true)}
           onSignOut={handleLogout}
           onToggleSidebar={() => setShowSidebar(true)}
+        />
+        {modal}
+        {sidebar}
+      </>
+    );
+  }
+
+  if (currentPage === 'triggers') {
+    return (
+      <>
+        <TriggersPage
+          token={auth.token}
+          email={auth.email}
+          role={auth.role}
+          onBackToHome={goHome}
+          onMyTrips={() => setCurrentPage('trips')}
+          onReports={() => setCurrentPage('reports')}
+          onSignIn={() => setShowSignIn(true)}
+          onSignOut={handleLogout}
         />
         {modal}
         {sidebar}
