@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { API_URL } from '../config';
 
-export default function CheckoutModal({ show, onHide, fareId, returnFareId, totalPrice, onSuccess }) {
+export default function CheckoutModal({ show, onHide, fareId, returnFareId, totalPrice, selectedSeats = [], onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
@@ -49,6 +49,7 @@ export default function CheckoutModal({ show, onHide, fareId, returnFareId, tota
     try {
       const body = {
         flightFareId: fareId,
+        seats: selectedSeats,
       };
       if (returnFareId) {
         body.returnFareId = returnFareId;
@@ -63,6 +64,7 @@ export default function CheckoutModal({ show, onHide, fareId, returnFareId, tota
       
       const text = await res.text();
       clearTimeout(timeoutId);
+      
       if (!res.ok) {
         let cleanMessage = 'Payment failed. Please check your details.';
         try {
@@ -79,13 +81,19 @@ export default function CheckoutModal({ show, onHide, fareId, returnFareId, tota
       }
       
       const data = JSON.parse(text);
-      onSuccess(data.confirmationNumber);
-    } catch (err) {
+      onSuccess(data.confirmationNumber, {
+        flightNumber: data.flightNumber || 'FL-123',
+        origin: data.origin || 'JFK',
+        destination: data.destination || 'LAX',
+        departureTime: data.departureTime || '08:00 AM',
+        arrivalTime: data.arrivalTime || '11:15 AM'
+      });
+    } catch (error) {
       clearTimeout(timeoutId);
-      if (err && err.name === 'AbortError') {
+      if (error && error.name === 'AbortError') {
         setError('The booking is taking longer than usual. Please try again.');
       } else {
-        setError('Unable to connect to server.');
+        setError('An error occurred while processing the payment.');
       }
       setLoading(false);
     }

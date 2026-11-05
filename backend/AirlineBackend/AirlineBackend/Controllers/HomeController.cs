@@ -220,8 +220,13 @@ public class HomeController : ControllerBase
     [HttpGet("flights/{id}/seats")]
     public IActionResult FlightSeats(int id)
     {
-        var data = _context.Database.SqlQueryRaw<int>("SELECT seat_id FROM SeatAssignment WHERE flight_id = {0} AND active_seat = 1", id).ToList();
-        return Ok(data);
+        var occupiedSeats = _context.Database.SqlQueryRaw<string>(@"
+            SELECT s.seat_number 
+            FROM SeatAssignment sa
+            JOIN Seat s ON s.seat_id = sa.seat_id
+            WHERE sa.flight_id = {0} AND sa.active_seat = 1", id).ToList();
+        
+        return Ok(occupiedSeats);
     }
 
     [AllowAnonymous]
@@ -317,7 +322,6 @@ public class HomeController : ControllerBase
         var account = _context.UserAccount.FirstOrDefault(i => i.UserAccountId == int.Parse(userId));
         if (account == null) return BadRequest("Account not found");
 
-
         int passengerId;
         if (account.PassengerId != null)
         {
@@ -368,12 +372,43 @@ public class HomeController : ControllerBase
             if (returnFlight.FlightStatus == "Cancelled") return BadRequest("Return flight is cancelled");
         }
 
-        var seatIds = book.seats ?? new List<int>();
+        // Process Seats
+        var requestedSeatStrings = book.seats ?? new List<string>();
+        var validSeatIds = new List<int>();
+        decimal seatFeeTotal = 0;
 
+        if (requestedSeatStrings.Any())
+        {
+            // 1. Get all seat records for this specific aircraft
+            var aircraftSeats = _context.Seat.Where(s => s.AircraftId == flight.AircraftId).ToList();
+            
+            // 2. Map the requested string names (e.g., "A1") to actual database IDs
+            foreach (var seatStr in requestedSeatStrings)
+            {
+                var seat = aircraftSeats.FirstOrDefault(s => s.SeatNumber == seatStr);
+                if (seat != null)
+                {
+                    validSeatIds.Add(seat.SeatId);
+                }
+            }
 
-        int? selectedSeatId = seatIds.Count > 0 ? seatIds[0] : (int?)null;
+            // 3. Check if any requested seats are already taken
+            if (validSeatIds.Any())
+            {
+                var alreadyTaken = _context.Database.SqlQueryRaw<int>(@"
+                    SELECT seat_id 
+                    FROM SeatAssignment 
+                    WHERE flight_id = {0} AND active_seat = 1 AND seat_id IN ({1})", 
+                    flight.FlightId, string.Join(",", validSeatIds)).ToList();
 
-        decimal seatFeeTotal = selectedSeatId.HasValue ? 25 : 0;
+                if (alreadyTaken.Any())
+                {
+                    return BadRequest("One or more selected seats have just been taken. Please select different seats.");
+                }
+                
+                seatFeeTotal = validSeatIds.Count * 25.00m;
+            }
+        }
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
         try
@@ -392,6 +427,7 @@ public class HomeController : ControllerBase
             _context.Reservation.Add(reservation);
             await _context.SaveChangesAsync();
 
+            // FIXED: Insert Passenger BEFORE Segment so triggers pass
             var passenger = new ReservationPassenger
             {
                 ReservationId = reservation.ReservationId,
@@ -400,7 +436,9 @@ public class HomeController : ControllerBase
                 MealSelection = null
             };
             _context.ReservationPassenger.Add(passenger);
+            await _context.SaveChangesAsync();
 
+            // FIXED: Insert Segment and explicitly SaveChanges so the trigger fires correctly
             var segment = new ReservationSegment
             {
                 ReservationId = reservation.ReservationId,
@@ -429,27 +467,18 @@ public class HomeController : ControllerBase
                 await _context.SaveChangesAsync();
             }
 
-
-            if (selectedSeatId.HasValue)
+            // FIXED: Assign Seats
+            if (validSeatIds.Any())
             {
-                var seatAircraftIds = _context.Database.SqlQueryRaw<int>("SELECT aircraft_id FROM Seat WHERE seat_id = {0}", selectedSeatId).ToList();
-                if (seatAircraftIds.Count == 0) { await transaction.RollbackAsync(); return BadRequest("Seat does not exist."); }
-
-
-                if (seatAircraftIds[0] != flight.AircraftId)
+                foreach (var sId in validSeatIds)
                 {
-                    await transaction.RollbackAsync();
-                    return BadRequest("Seat is not on this flight.");
+                    await _context.Database.ExecuteSqlRawAsync(
+                        "INSERT INTO SeatAssignment (reservation_segment_id, reservation_passenger_id, seat_id, flight_id, assignment_date_time, seat_fee, active_seat) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, 1)",
+                        segment.ReservationSegmentId, passenger.ReservationPassengerId, sId, fare.FlightId, DateTime.Now, 25);
                 }
-
-                var taken = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM SeatAssignment WHERE flight_id = {0} AND seat_id = {1} AND active_seat = 1", fare.FlightId, selectedSeatId).FirstOrDefault() > 0;
-                if (taken) { await transaction.RollbackAsync(); return BadRequest("That seat was just taken."); }
-
-                await _context.Database.ExecuteSqlRawAsync(
-                    "INSERT INTO SeatAssignment (reservation_segment_id, reservation_passenger_id, seat_id, flight_id, assignment_date_time, seat_fee, active_seat) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, 1)",
-                    segment.ReservationSegmentId, passenger.ReservationPassengerId, selectedSeatId, fare.FlightId, DateTime.Now, 25);
             }
 
+            // FIXED: Add Payment
             var paymentReference = "PAY" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper();
             await _context.Database.ExecuteSqlRawAsync(
                 "INSERT INTO Payment (reservation_id, employee_id, payment_date_time, amount, payment_method, payment_status, transaction_reference, transaction_type) VALUES ({0}, NULL, {1}, {2}, 'Card (demo)', 'Successful', {3}, 'Payment')",
@@ -457,11 +486,32 @@ public class HomeController : ControllerBase
 
             await transaction.CommitAsync();
 
-            return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount });
+            // Return full details for the Payment Confirmation page
+            return Ok(new { 
+                reservationId = reservation.ReservationId, 
+                confirmationNumber = reservation.ConfirmationNumber, 
+                reservationStatus = reservation.ReservationStatus, 
+                totalAmount = reservation.TotalAmount,
+                flightNumber = flight.FlightNumber,
+                origin = flight.OriginAirportCode,
+                destination = flight.DestinationAirportCode,
+                departureTime = flight.DepartureTime.ToString(@"hh\:mm"),
+                arrivalTime = flight.ArrivalTime.ToString(@"hh\:mm")
+            });
         }
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
+            
+            // Extract specific trigger errors to show the user exactly what went wrong
+            var innerMsg = ex.InnerException?.Message ?? "";
+            if (innerMsg.Contains("Cannot book a segment without passengers"))
+                return BadRequest("Booking failed: Passenger must be added before the segment.");
+            if (innerMsg.Contains("Add passengers before booking flight segments"))
+                return BadRequest("Booking failed: You cannot add passengers after the flight segment is booked.");
+            if (innerMsg.Contains("Seat does not belong to the aircraft"))
+                return BadRequest("Booking failed: The selected seat does not belong to this aircraft.");
+                
             return StatusCode(500, "Internal Server Error: " + ex.Message);
         }
     }
@@ -489,7 +539,6 @@ public class HomeController : ControllerBase
         await using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
-
             foreach (var segment in segments)
             {
                 if (segment.SegmentStatus != "Cancelled")
@@ -500,7 +549,6 @@ public class HomeController : ControllerBase
                 }
             }
             await _context.SaveChangesAsync();
-
 
             reservation.ReservationStatus = "Cancelled";
             await _context.SaveChangesAsync();
@@ -539,10 +587,8 @@ public class HomeController : ControllerBase
 
         if (reservation.ReservationStatus == "Cancelled") return BadRequest("Cannot modify a cancelled booking");
 
-
         if (mod.additionalCheckedBags != null && (mod.additionalCheckedBags < 0 || mod.additionalCheckedBags > 5))
             return BadRequest("Extra checked bags must be between 0 and 5");
-
 
         if (mod.phone != null && mod.phone.Any(char.IsLetter))
             return BadRequest("Phone number must contain digits only");
@@ -803,9 +849,10 @@ public class HomeController : ControllerBase
     }
 }
 
+// --- UPDATED RECORD TYPES ---
 public record Payload(string email, string password);
 public record RegisterPayload(string email, string password, int? passengerId, string? firstName, string? lastName, string? Phone, DateTime? dateOfBirth);
-public record BookingPayload(int flightFareId, int? returnFareId, List<int>? seats);
+public record BookingPayload(int flightFareId, int? returnFareId, List<string>? seats); // Changed to List<string> for seat IDs like "A1"
 public record ModifyPayload(string? phone, string? address, string? mealSelection, int? additionalCheckedBags);
 public record AddFlightPayload(string flightNumber, string origin, string destination, int aircraftId, DateTime departure, DateTime arrival);
 public record AddFarePayload(int cabinClassId, int fareClassId, decimal price, int allocatedCapacity);

@@ -12,6 +12,7 @@ import AdminPage from './components/AdminPage';
 import EmployeePage from './components/EmployeePage';
 import SideBar from './components/SideBar';
 import RefundConfirmationPage from './components/RefundConfirmationPage';
+import PaymentConfirmationPage from './components/PaymentConfirmationPage';
 
 const BACKGROUNDS = [
   { src: '/landscapes/europe.jpg', name: 'The Alps, Europe' },
@@ -28,6 +29,7 @@ export default function App() {
   const [bgIndex, setBgIndex] = useState(0);
   
   const [refundDetails, setRefundDetails] = useState(null);
+  const [paymentDetails, setPaymentDetails] = useState(null);
 
   const [auth, setAuth] = useState(() => ({
     token: sessionStorage.getItem('token'),
@@ -56,7 +58,7 @@ export default function App() {
     window.location.reload();
   };
 
-  const handleSidebarNavigate = (pageId) => {
+  const handleNavigate = (pageId) => {
     if (pageId === 'profile') return;
     if (pageId === 'deals') setCurrentPage('deals');
     if (pageId === 'admin') setCurrentPage('admin');
@@ -64,7 +66,8 @@ export default function App() {
     if (pageId === 'reports') setCurrentPage('reports');
     if (pageId === 'queries') setCurrentPage('queries');
     if (pageId === 'triggers') setCurrentPage('triggers');
-    if (pageId === 'dashboard' || pageId === 'home') {
+    if (pageId === 'trips') setCurrentPage('trips');
+    if (pageId === 'dashboard' || pageId === 'flights') {
       setCurrentPage('home');
       setActiveTab('flights');
     }
@@ -103,7 +106,7 @@ export default function App() {
       onHide={() => setShowSidebar(false)} 
       auth={auth} 
       onLogout={handleLogout} 
-      onNavigate={handleSidebarNavigate} 
+      onNavigate={handleNavigate} 
     />
   );
 
@@ -155,6 +158,22 @@ export default function App() {
         details={refundDetails}
         onBackToTrips={() => setCurrentPage('trips')}
       />
+    );
+  }
+
+  if (currentPage === 'payment-success' && paymentDetails) {
+    return (
+      <>
+        <PaymentConfirmationPage
+          details={paymentDetails}
+          onNavigate={handleNavigate}
+          auth={auth}
+          onToggleSidebar={() => setShowSidebar(true)}
+          onSignOut={handleLogout}
+        />
+        {modal}
+        {sidebar}
+      </>
     );
   }
 
@@ -227,6 +246,7 @@ export default function App() {
           user={auth.token ? { name: auth.email, email: auth.email } : null}
           onSignOut={handleLogout}
           onToggleSidebar={() => setShowSidebar(true)}
+          auth={auth}
         />
         {modal}
         {sidebar}
@@ -234,73 +254,64 @@ export default function App() {
     );
   }
 
+  // Home Page Layout
   return (
     <div className="min-h-screen bg-white font-sans p-4">
-      <div className="relative h-[calc(100vh-2rem)] min-h-[700px] flex flex-col">
+      <div className="relative min-h-[calc(100vh-2rem)] pb-12 flex flex-col">
+        
+        {/* Background Layer */}
         <div className="absolute inset-0 rounded-[2.5rem] overflow-hidden shadow-2xl pointer-events-none z-0">
           <div
             className="w-full h-full bg-cover bg-center transition-all duration-1000 ease-in-out"
             style={{ backgroundImage: `url(${currentBg.src})` }}
           >
-            <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/10 to-black/60 transition-opacity duration-1000"></div>
+            <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60 transition-opacity duration-1000"></div>
           </div>
         </div>
 
-        <nav className="relative z-20 flex justify-between items-center px-10 py-6">
-          <Logo />
+        {/* Custom Top Bar */}
+        <header className="relative z-30 flex justify-between items-center px-8 py-6 w-full">
+          <div className="cursor-pointer flex items-center gap-2" onClick={() => goHome()}>
+            <Logo light={true} />
+          </div>
+
           <div className="flex items-center gap-6">
-            <a href="#" onClick={(e) => { e.preventDefault(); setCurrentPage('trips'); }} className="text-white font-semibold hover:opacity-80 flex items-center gap-2 text-sm drop-shadow-sm transition-opacity">
+            <button className="text-white hover:text-gray-200 transition-colors flex items-center gap-2 text-sm font-semibold">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-              My Trips
-            </a>
-            {(auth.role === 'Supervisor' || auth.role === 'Employee') && (
-              <a href="#" onClick={(e) => { e.preventDefault(); setCurrentPage('reports'); }} className="text-white font-semibold hover:opacity-80 flex items-center gap-2 text-sm drop-shadow-sm transition-opacity">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
-                Reports
-              </a>
-            )}
-            {(auth.role === 'Supervisor' || auth.role === 'Employee') && (
-              <a href="#" onClick={(e) => { e.preventDefault(); setCurrentPage('queries'); }} className="text-white font-semibold hover:opacity-80 flex items-center gap-2 text-sm drop-shadow-sm transition-opacity">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                Queries
-              </a>
-            )}
+            </button>
             
+            <button onClick={() => setCurrentPage('trips')} className="text-white hover:text-gray-200 transition-colors flex items-center gap-2 text-sm font-semibold">
+              My Trips
+            </button>
+
             {auth.token ? (
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={() => setShowSidebar(true)}
-                  title="Menu"
-                  className="w-10 h-10 rounded-full bg-white text-[#0066ff] flex items-center justify-center font-bold text-lg shadow-md hover:scale-105 transition-transform cursor-pointer"
-                >
-                  {auth.email?.charAt(0).toUpperCase()}
-                </button>
-              </div>
+              <button
+                onClick={() => setShowSidebar(true)}
+                className="w-10 h-10 rounded-full bg-white text-[#0066ff] flex items-center justify-center font-bold shadow-md hover:scale-105 transition-transform cursor-pointer ml-2"
+              >
+                {auth.email?.charAt(0).toUpperCase()}
+              </button>
             ) : (
-              <button onClick={() => setShowSignIn(true)} className="border border-white/60 text-white font-semibold px-6 py-2.5 rounded-full hover:bg-white/20 transition-all text-sm backdrop-blur-sm shadow-sm cursor-pointer">
+              <button 
+                onClick={() => setShowSignIn(true)} 
+                className="bg-white text-[#0066ff] font-semibold px-6 py-2 rounded-full text-sm hover:bg-gray-100 transition-all ml-2"
+              >
                 Sign In
               </button>
             )}
           </div>
-        </nav>
+        </header>
 
-        <div className="relative z-30 flex-grow flex flex-col justify-center items-center px-4 w-full">
+        <div className="relative z-30 flex-grow flex flex-col justify-start items-center px-4 w-full mt-4">
           <HeroSearch
             activeTab={activeTab}
             setActiveTab={handleTabChange}
             onSignIn={() => setShowSignIn(true)}
+            onBooked={(details) => {
+              setPaymentDetails(details);
+              setCurrentPage('payment-success');
+            }}
           />
-        </div>
-
-        <div className="relative z-10 flex justify-end px-10 pb-10 pointer-events-none">
-          <div className="flex items-center">
-            <span
-              key={currentBg.name}
-              className="text-white font-bold text-lg drop-shadow-lg tracking-wide animate-in fade-in zoom-in-95 duration-500"
-            >
-              {currentBg.name}
-            </span>
-          </div>
         </div>
       </div>
 
