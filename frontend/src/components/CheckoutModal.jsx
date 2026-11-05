@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { API_URL } from '../config';
 
-export default function CheckoutModal({ show, onHide, fareId, returnFareId, totalPrice, selectedSeats = [], onSuccess }) {
+export default function CheckoutModal({ show, onHide, fareId, returnFareId, totalPrice, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
@@ -49,7 +49,6 @@ export default function CheckoutModal({ show, onHide, fareId, returnFareId, tota
     try {
       const body = {
         flightFareId: fareId,
-        seats: selectedSeats,
       };
       if (returnFareId) {
         body.returnFareId = returnFareId;
@@ -81,13 +80,7 @@ export default function CheckoutModal({ show, onHide, fareId, returnFareId, tota
       }
       
       const data = JSON.parse(text);
-      onSuccess(data.confirmationNumber, {
-        flightNumber: data.flightNumber || 'FL-123',
-        origin: data.origin || 'JFK',
-        destination: data.destination || 'LAX',
-        departureTime: data.departureTime || '08:00 AM',
-        arrivalTime: data.arrivalTime || '11:15 AM'
-      });
+      onSuccess(data.confirmationNumber);
     } catch (error) {
       clearTimeout(timeoutId);
       if (error && error.name === 'AbortError') {
