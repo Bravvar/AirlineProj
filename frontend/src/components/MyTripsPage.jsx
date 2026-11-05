@@ -10,6 +10,7 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, onRe
   const [additionalCheckedBags, setAdditionalCheckedBags] = useState('');
 
   const [loadingCancel, setLoadingCancel] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [loadingModify, setLoadingModify] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -19,6 +20,7 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, onRe
 
   const handleCancel = async () => {
     if (isCancelled) return;
+    setConfirmCancel(false);
     setErrorMsg('');
     setSuccessMsg('');
     setLoadingCancel(true);
@@ -46,7 +48,6 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, onRe
       onRefundSuccess({
         confirmationNumber: booking.confirmationNumber,
         totalAmount: booking.totalAmount,
-        phone: 'the phone number on file'
       });
       
     } catch (err) {
@@ -195,6 +196,7 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, onRe
                   } else {
                     onEditStart();
                   }
+                  setConfirmCancel(false);
                   setErrorMsg('');
                   setSuccessMsg('');
                 }}
@@ -203,11 +205,11 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, onRe
                 {isEditing ? 'Close Form' : 'Modify Trip'}
               </button>
               <button
-                onClick={handleCancel}
+                onClick={() => { if (confirmCancel) { handleCancel(); } else { setConfirmCancel(true); } }}
                 disabled={loadingCancel}
                 className="text-xs font-semibold px-4 py-2 rounded-xl border border-red-300 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
               >
-                {loadingCancel ? 'Cancelling...' : 'Cancel Booking'}
+                {loadingCancel ? 'Cancelling...' : confirmCancel ? 'Click again to confirm cancel' : 'Cancel Booking'}
               </button>
             </>
           )}

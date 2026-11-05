@@ -38,12 +38,6 @@ export default function RefundConfirmationPage({ details, onBackToTrips }) {
               <span className="text-gray-500 text-sm font-medium">Original Booking Total</span>
               <span className="font-bold text-gray-900 text-base">${details.totalAmount}</span>
             </div>
-            {details.phone && (
-              <div className="flex justify-between items-center">
-                <span className="text-gray-500 text-sm font-medium">Notification Sent To</span>
-                <span className="font-medium text-gray-900">{details.phone}</span>
-              </div>
-            )}
           </div>
 
           <p className="text-sm text-gray-500 mb-8 leading-relaxed">

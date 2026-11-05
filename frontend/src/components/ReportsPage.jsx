@@ -212,7 +212,7 @@ function ReportTable({ def, rows, search, hiddenColumns, toggleColumn }) {
             {sortedRows.length === 0 ? (
               <tr>
                 <td colSpan={cols.length || 1} className="px-6 py-8 text-center text-gray-400 text-sm">
-                  {search ? 'No matching records.' : 'No records available in this report.'}
+                  {loading ? 'Loading reports data...' : search ? 'No matching records.' : 'No records available in this report.'}
                 </td>
               </tr>
             ) : (

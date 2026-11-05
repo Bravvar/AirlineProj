@@ -8,6 +8,7 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
   const [overview, setOverview] = useState(null);
   const [users, setUsers] = useState([]);
   const [flights, setFlights] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
@@ -15,6 +16,7 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
   useEffect(() => {
     if (!token) return;
     const load = async () => {
+      setLoading(true);
       try {
         const headers = { Authorization: `Bearer ${token}` };
         const paths = { overview: 'admin/overview', users: 'admin/users', flights: 'admin/flights' };
@@ -26,7 +28,8 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
         if (tab === 'overview') setOverview(data);
         if (tab === 'users') setUsers(data);
         if (tab === 'flights') setFlights(data);
-      } catch { setError('Could not load data.'); }
+        setLoading(false);
+      } catch { setError('Could not load data.'); setLoading(false); }
     };
     load();
   }, [tab, token]);
@@ -91,6 +94,9 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
           </div>
         )}
 
+        {tab === 'flights' && loading && flights.length === 0 && (
+          <p className="text-gray-400 text-sm px-2 py-8">Loading flights...</p>
+        )}
         {tab === 'flights' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {flights.map(f => (
@@ -123,6 +129,9 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
           <StaffFlightManagement token={token} />
         )}
 
+        {tab === 'users' && loading && users.length === 0 && (
+          <p className="text-gray-400 text-sm px-2 py-8">Loading users...</p>
+        )}
         {tab === 'users' && (
           <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
             <table className="w-full text-sm text-left">

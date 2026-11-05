@@ -12,7 +12,7 @@ const QUERY_DEFINITIONS = [
 
 function formatCell(val) {
   if (val === null || val === undefined || String(val).trim() === '') return '—';
-  if (typeof val === 'string' && val.includes('T')) return val.replace('T', ' ').slice(0, 19);
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(val)) return val.replace('T', ' ').slice(0, 19);
   if (typeof val === 'number') return Number.isInteger(val) ? val : val.toFixed(2);
   return String(val);
 }

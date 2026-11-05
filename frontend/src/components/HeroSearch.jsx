@@ -40,6 +40,9 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
   const RESULTS_LIMIT = 10;
 
+  const userRole = sessionStorage.getItem('role');
+  const isStaff = userRole === 'Employee' || userRole === 'Supervisor';
+
   const calendarRef = useRef(null);
   const travelersRef = useRef(null);
   const dateTriggerRef = useRef(null);
@@ -447,6 +450,10 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       if (onSignIn) onSignIn();
       return;
     }
+    if (isStaff) {
+      setBookingError('Staff accounts cannot book flights.');
+      return;
+    }
     setBookingError('');
     setBookingMessage('');
 
@@ -472,6 +479,10 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
   const selectReturnFare = (returnFlight, returnFare) => {
     if (!selectedOutboundFare) return;
+    if (isStaff) {
+      setBookingError('Staff accounts cannot book flights.');
+      return;
+    }
     const outboundFareObj = selectedOutboundFare.fare;
     const totalPrice = (outboundFareObj?.currentPrice || 0) + (returnFare?.currentPrice || 0);
 
@@ -765,9 +776,13 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                                     <span className="font-medium">${fare.currentPrice} <span className="text-gray-400 font-normal ml-1">({fare.availableInventory} seats left)</span></span>
                                     <span className="text-xs text-gray-500 mt-0.5">{fareDescriptor(fare)}</span>
                                   </div>
-                                  <button onClick={() => selectReturnFare(f, fare)} className="bg-[#0066ff] text-white hover:bg-blue-700 px-4 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer">
-                                    Select
-                                  </button>
+                                  {isStaff ? (
+                                    <span className="text-xs text-gray-400 font-medium">Staff can't book</span>
+                                  ) : (
+                                    <button onClick={() => selectReturnFare(f, fare)} className="bg-[#0066ff] text-white hover:bg-blue-700 px-4 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer">
+                                      Select
+                                    </button>
+                                  )}
                                 </div>
                               ))
                             )}
@@ -811,9 +826,13 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                               <span className="font-medium">${fare.currentPrice} <span className="text-gray-400 font-normal ml-1">({fare.availableInventory} seats left)</span></span>
                               <span className="text-xs text-gray-500 mt-0.5">{fareDescriptor(fare)}</span>
                             </div>
-                            <button onClick={() => initiateBooking(f, fare)} className="bg-[#0066ff] text-white hover:bg-blue-700 px-4 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer">
-                              Book
-                            </button>
+                            {isStaff ? (
+                              <span className="text-xs text-gray-400 font-medium">Staff can't book</span>
+                            ) : (
+                              <button onClick={() => initiateBooking(f, fare)} className="bg-[#0066ff] text-white hover:bg-blue-700 px-4 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer">
+                                Book
+                              </button>
+                            )}
                           </div>
                         ))
                       )}

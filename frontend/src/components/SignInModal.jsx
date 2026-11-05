@@ -260,6 +260,11 @@ export default function SignInModal({ show, onHide }) {
           return;
         }
 
+        if (accountTab === 'user' && data.role !== 'Member') {
+          setFormError('This login is for member accounts, use the Admin tab');
+          return;
+        }
+
         sessionStorage.setItem('token', data.token);
         sessionStorage.setItem('role', data.role);
         sessionStorage.setItem('email', data.email);
