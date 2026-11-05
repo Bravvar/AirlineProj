@@ -1,57 +1,127 @@
-import { useState } from 'react';
-import ComingSoonModal from './ComingSoonModal';
+import { useState, useEffect } from 'react';
+import { API_URL } from '../config';
 
-const DEAL_1_IMG = '/landscapes/new zea.jpg';
-const DEAL_2_IMG = '/landscapes/ausi.jpg';
-const DEAL_3_IMG = '/landscapes/india.jpg';
+const DEAL_IMG = {
+  DEL: '/landscapes/india.jpg',
+  AKL: '/landscapes/new zea.jpg',
+  SYD: '/landscapes/ausi.jpg',
+  FCO: '/landscapes/italy.jpg',
+  HND: '/landscapes/japan.jpg',
+  LIM: '/landscapes/peru.jpg',
+};
+const FALLBACK_IMG = '/landscapes/europe.jpg';
 
-const deals = [
-  { title: 'New Zealand', desc: 'Tap to save $300 off select flights to New Zealand', img: DEAL_1_IMG, badge: '100% PURE NEW ZEALAND' },
-  { title: 'Australia', desc: 'Tap to save 35% off hotels', img: DEAL_2_IMG, badge: 'VISIT AUSTRALIA' },
-  { title: 'India', desc: 'Tap to save 30% off hotels', img: DEAL_3_IMG, badge: 'DISCOVER INDIA' },
-];
-
-// Add the onSeeAll prop
 export default function DealsSection({ onSeeAll }) {
-  const [showComingSoon, setShowComingSoon] = useState(false);
+  const [deals, setDeals] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [cityByCode, setCityByCode] = useState({});
+
+  const cityOf = (code) => cityByCode[(code || '').toUpperCase()] || code;
+
+  useEffect(() => {
+    let ignore = false;
+    fetch(`${API_URL}/api/deals`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!ignore && Array.isArray(data)) {
+          // Take first 3 cheapest deals
+          setDeals(data.slice(0, 3));
+        }
+      })
+      .catch(() => {
+        if (!ignore) setDeals([]);
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+    return () => { ignore = true; };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    fetch(`${API_URL}/api/airports`)
+      .then((r) => {
+        if (!r.ok) throw new Error('Failed to load airports');
+        return r.json();
+      })
+      .then((data) => {
+        if (!ignore && Array.isArray(data)) {
+          const map = {};
+          data.forEach((a) => {
+            const code = (a.airportCode || a.AirportCode || '').toUpperCase();
+            if (code) map[code] = a.city || a.City || code;
+          });
+          setCityByCode(map);
+        }
+      })
+      .catch(() => {
+        if (!ignore) setCityByCode({});
+      });
+    return () => { ignore = true; };
+  }, []);
 
   return (
     <div className="max-w-6xl mx-auto py-16 px-4">
       <div className="flex justify-between items-end mb-8">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 mb-1">Deals for top destinations</h2>
-          <p className="text-sm text-gray-500">Sponsored</p>
+          <p className="text-sm text-gray-500">Real-time lowest fares</p>
         </div>
-        {/* Attach the click handler */}
         <button onClick={onSeeAll} className="text-blue-600 font-medium hover:underline text-sm cursor-pointer">
           See all
         </button>
       </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {deals.map((deal, idx) => (
-          <div key={idx} className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden flex flex-col hover:shadow-md transition-shadow">
-            <div className="relative h-56">
-              <img src={deal.img} alt={deal.title} className="w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-black/30 flex items-center justify-center p-4">
-                <span className="text-white font-bold text-center text-xl tracking-wider drop-shadow-md">{deal.badge}</span>
+
+      {loading ? (
+        <p className="text-gray-500 text-sm">Loading latest deals...</p>
+      ) : deals.length === 0 ? (
+        <p className="text-gray-400 text-sm">No flight deals currently available.</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {deals.map((deal, idx) => (
+            <div key={deal.flightFareId || idx} className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden flex flex-col hover:shadow-md transition-shadow">
+              <div className="relative h-48 overflow-hidden bg-gray-100">
+                <img
+                  src={DEAL_IMG[deal.destination] || FALLBACK_IMG}
+                  alt={`${deal.origin} to ${deal.destination}`}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex flex-col justify-end items-start gap-0.5 p-4">
+                  <span className="text-white font-bold text-lg drop-shadow">
+                    {cityOf(deal.origin)} → {cityOf(deal.destination)}
+                  </span>
+                  <span className="text-white/80 font-medium text-xs drop-shadow">
+                    {deal.origin} → {deal.destination}
+                  </span>
+                </div>
+                <span className="absolute top-3 right-3 bg-white/90 backdrop-blur-xs text-blue-700 font-bold px-3 py-1 rounded-full text-xs shadow-xs">
+                  ${deal.currentPrice}
+                </span>
+              </div>
+              <div className="p-5 flex flex-col flex-grow justify-between gap-3">
+                <div className="flex flex-col gap-1 text-xs text-gray-600">
+                  <div className="flex justify-between font-bold text-gray-900 text-sm">
+                    <span>Flight {deal.flightNumber}</span>
+                    <span className="text-blue-600 font-semibold">{deal.cabinName}</span>
+                  </div>
+                  <div className="text-gray-500">
+                    Departs {String(deal.departureDate).slice(0, 10)} at {deal.departureTime}
+                  </div>
+                  <div className="text-gray-500">
+                    {deal.fareClassName} · {deal.availableInventory} seats left
+                  </div>
+                </div>
+                <button
+                  onClick={onSeeAll}
+                  className="w-full bg-gray-100 hover:bg-[#0066ff] hover:text-white text-gray-900 font-medium py-2 px-4 rounded-xl text-xs transition-colors cursor-pointer text-center"
+                >
+                  View deals
+                </button>
               </div>
             </div>
-            <div className="p-6 flex flex-col flex-grow">
-              <h3 className="text-xl font-bold text-gray-900 mb-2">{deal.title}</h3>
-              <p className="text-gray-500 text-sm mb-6 flex-grow">{deal.desc}</p>
-              <button
-                onClick={() => setShowComingSoon(true)}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-900 font-medium py-2 px-6 rounded-lg self-start transition-colors cursor-pointer"
-              >
-                Claim now
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <ComingSoonModal show={showComingSoon} onHide={() => setShowComingSoon(false)} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
