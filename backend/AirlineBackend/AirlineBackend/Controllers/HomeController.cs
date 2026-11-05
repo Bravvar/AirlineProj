@@ -213,10 +213,7 @@ public class HomeController : ControllerBase
     [HttpGet("flights/{id}/seats")]
     public IActionResult FlightSeats(int id)
     {
-        var data = _context.SeatAssignment
-            .Where(sa => sa.FlightId == id && sa.ActiveSeat == 1)
-            .Select(sa => sa.SeatId)
-            .ToList();
+        var data = _context.Database.SqlQueryRaw<int>("SELECT seat_id FROM SeatAssignment WHERE flight_id = {0} AND active_seat = 1", id).ToList();
         return Ok(data);
     }
 
@@ -489,7 +486,6 @@ public class HomeController : ControllerBase
             await _context.SaveChangesAsync();
 
 
-            await _context.Database.ExecuteSqlRawAsync("UPDATE SeatAssignment SET active_seat = 0 WHERE reservation_segment_id IN (SELECT reservation_segment_id FROM ReservationSegment WHERE reservation_id = {0})", id);
             reservation.ReservationStatus = "Cancelled";
             await _context.SaveChangesAsync();
 
@@ -532,7 +528,6 @@ public class HomeController : ControllerBase
             return BadRequest("Extra checked bags must be between 0 and 5");
 
 
-        // Phone digits-only (no letters)
         if (mod.phone != null && mod.phone.Any(char.IsLetter))
             return BadRequest("Phone number must contain digits only");
 
