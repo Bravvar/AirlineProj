@@ -72,8 +72,8 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, onRe
     if (mealSelection.trim()) body.mealSelection = mealSelection.trim();
     if (additionalCheckedBags !== '') {
       const bags = parseInt(additionalCheckedBags, 10);
-      if (isNaN(bags) || bags < 2 || bags > 10) {
-        setErrorMsg('Extra checked bags must be between 2 and 10.');
+      if (isNaN(bags) || bags < 0 || bags > 5) {
+        setErrorMsg('Extra checked bags must be between 0 and 5.');
         return;
       }
       body.additionalCheckedBags = bags;
@@ -245,12 +245,12 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, onRe
               </div>
               <div className="sm:col-span-2">
                 <label className="text-xs font-semibold text-gray-600 mb-1 block">
-                  Extra Checked Bags (2–10, $30 each)
+                  Extra Checked Bags (0–5, $30 each)
                 </label>
                 <input
                   type="number"
-                  min="2"
-                  max="10"
+                  min="0"
+                  max="5"
                   placeholder="e.g. 3"
                   value={additionalCheckedBags}
                   onChange={(e) => setAdditionalCheckedBags(e.target.value)}
@@ -287,7 +287,7 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, onRe
   );
 }
 
-export default function MyTripsPage({ token, email, onBackToHome, onReports, onSignIn, onSignOut, onToggleSidebar, onRefundSuccess }) {
+export default function MyTripsPage({ token, email, onBackToHome, onSignIn, onToggleSidebar, onRefundSuccess }) {
   const [bookings, setBookings] = useState(null);
   const [segmentsById, setSegmentsById] = useState({});
   const [loadError, setLoadError] = useState('');

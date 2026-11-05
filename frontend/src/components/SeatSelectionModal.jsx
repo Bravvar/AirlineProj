@@ -8,7 +8,6 @@ export default function SeatSelectionModal({ show, onHide, flightId, farePrice, 
 
   useEffect(() => {
     if (!show || !flightId) return;
-    setLoading(true);
     fetch(`${API_URL}/api/flights/${flightId}/seats`)
       .then(res => res.json())
       .then(data => {

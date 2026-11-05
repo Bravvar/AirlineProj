@@ -46,7 +46,7 @@ function DataTable({ rows }) {
   );
 }
 
-export default function QueriesPage({ token, email, role, onBackToHome, onMyTrips, onSignIn, onSignOut, onToggleSidebar }) {
+export default function QueriesPage({ token, email, role, onBackToHome, onMyTrips, onReports, onSignIn, onToggleSidebar }) {
   const [confirmation, setConfirmation] = useState('ARS1002');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -79,7 +79,12 @@ export default function QueriesPage({ token, email, role, onBackToHome, onMyTrip
 
   useEffect(() => {
     if (!token) return;
-    fetchQueries(confirmation);
+    let ignore = false;
+    (async () => {
+      await Promise.resolve();
+      if (!ignore) fetchQueries(confirmation);
+    })();
+    return () => { ignore = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -100,6 +105,11 @@ export default function QueriesPage({ token, email, role, onBackToHome, onMyTrip
           <button onClick={onMyTrips} className="text-gray-600 hover:text-gray-900 font-semibold text-sm transition-colors">
             My Trips
           </button>
+          {onReports && (
+            <button onClick={onReports} className="text-gray-600 hover:text-gray-900 font-semibold text-sm transition-colors">
+              Reports
+            </button>
+          )}
           <span className="text-blue-600 font-semibold flex items-center gap-2 text-sm">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
             Queries

@@ -9,7 +9,7 @@ export default function RefundConfirmationPage({ details, onBackToTrips }) {
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 flex flex-col">
       <nav className="bg-white border-b border-gray-100 px-8 py-4 flex justify-between items-center shadow-sm">
-        <div className="cursor-pointer">
+        <div className="cursor-pointer" onClick={onBackToTrips}>
           <Logo />
         </div>
       </nav>
@@ -22,8 +22,8 @@ export default function RefundConfirmationPage({ details, onBackToTrips }) {
             </svg>
           </div>
           
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Refund Initiated</h1>
-          <p className="text-gray-500 mb-8">Your cancellation has been processed successfully.</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Cancellation Confirmed</h1>
+          <p className="text-gray-500 mb-8">Your reservation has been cancelled successfully.</p>
 
           <div className="bg-gray-50 rounded-2xl p-6 mb-8 text-left border border-gray-100">
             <div className="flex justify-between items-center mb-3">
@@ -31,17 +31,23 @@ export default function RefundConfirmationPage({ details, onBackToTrips }) {
               <span className="font-mono font-bold text-gray-900">{details.confirmationNumber}</span>
             </div>
             <div className="flex justify-between items-center mb-3">
-              <span className="text-gray-500 text-sm font-medium">Refund Amount</span>
-              <span className="font-bold text-green-600 text-lg">${details.totalAmount}</span>
+              <span className="text-gray-500 text-sm font-medium">Status</span>
+              <span className="font-bold text-red-600 text-sm">Cancelled</span>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-500 text-sm font-medium">Notification Sent To</span>
-              <span className="font-medium text-gray-900">{details.phone}</span>
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-gray-500 text-sm font-medium">Original Booking Total</span>
+              <span className="font-bold text-gray-900 text-base">${details.totalAmount}</span>
             </div>
+            {details.phone && (
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500 text-sm font-medium">Notification Sent To</span>
+                <span className="font-medium text-gray-900">{details.phone}</span>
+              </div>
+            )}
           </div>
 
-          <p className="text-sm text-gray-500 mb-8">
-            A confirmation SMS has been sent to your phone. Please allow 5-7 business days for the refund to appear on your original payment method.
+          <p className="text-sm text-gray-500 mb-8 leading-relaxed">
+            Your cancellation has been recorded in the system. Please note that cancelling a reservation updates your booking status and does not issue an automatic refund payment.
           </p>
 
           <button

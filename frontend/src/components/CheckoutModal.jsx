@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { API_URL } from '../config';
 
-export default function CheckoutModal({ show, onHide, fareId, returnFareId, totalPrice, seats, tripType, onSuccess }) {
+export default function CheckoutModal({ show, onHide, fareId, returnFareId, totalPrice, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
@@ -9,6 +9,15 @@ export default function CheckoutModal({ show, onHide, fareId, returnFareId, tota
   const [expiry, setExpiry] = useState('');
   const [cvc, setCvc] = useState('');
   const [name, setName] = useState('');
+
+  useEffect(() => {
+    if (!show) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onHide();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [show, onHide]);
 
   if (!show) return null;
 
@@ -36,21 +45,33 @@ export default function CheckoutModal({ show, onHide, fareId, returnFareId, tota
     const token = sessionStorage.getItem('token');
     
     try {
+      const body = {
+        flightFareId: fareId,
+      };
+      if (returnFareId) {
+        body.returnFareId = returnFareId;
+      }
+
       const res = await fetch(`${API_URL}/api/reservations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ 
-          flightFareId: fareId, 
-          returnFareId: returnFareId ?? null,
-          seats: seats
-        }),
+        body: JSON.stringify(body),
       });
       
       const text = await res.text();
-      if (!res.ok) { 
-        setError(text || 'Payment failed'); 
+      if (!res.ok) {
+        let cleanMessage = 'Payment failed. Please check your details.';
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed.message) cleanMessage = parsed.message;
+        } catch {
+          if (text && text.length < 120 && !text.includes('{') && !text.includes('<')) {
+            cleanMessage = text;
+          }
+        }
+        setError(cleanMessage);
         setLoading(false);
-        return; 
+        return;
       }
       
       const data = JSON.parse(text);
@@ -62,8 +83,8 @@ export default function CheckoutModal({ show, onHide, fareId, returnFareId, tota
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto" onClick={onHide}>
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto my-auto" onClick={(e) => e.stopPropagation()}>
         <button onClick={onHide} className="absolute top-5 right-5 text-gray-400 hover:text-gray-700 text-3xl leading-none transition-colors cursor-pointer">&times;</button>
         
         <h3 className="text-2xl font-bold text-gray-900 mb-6 text-center">Secure Checkout</h3>
@@ -114,7 +135,7 @@ export default function CheckoutModal({ show, onHide, fareId, returnFareId, tota
           <button 
             type="submit" 
             disabled={loading}
-            className="w-full bg-[#0066ff] hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl mt-2 shadow-md hover:shadow-lg transition-all disabled:opacity-50"
+            className="w-full bg-[#0066ff] hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl mt-2 shadow-md hover:shadow-lg transition-all disabled:opacity-50 cursor-pointer"
           >
             {loading ? 'Processing...' : `Pay $${totalPrice.toFixed(2)}`}
           </button>

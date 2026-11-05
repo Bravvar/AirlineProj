@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { API_URL } from '../config';
-import SeatSelectionModal from './SeatSelectionModal';
 import CheckoutModal from './CheckoutModal';
 import TabToggle from './TabToggle';
 
@@ -28,13 +27,12 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   const [returnSearching, setReturnSearching] = useState(false);
   const [selectedOutboundFare, setSelectedOutboundFare] = useState(null);
 
-  const [showSeatModal, setShowSeatModal] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [selectedFlightFare, setSelectedFlightFare] = useState(null);
-  const [selectedSeats, setSelectedSeats] = useState([]);
   const [checkoutTotal, setCheckoutTotal] = useState(0);
 
   const [airports, setAirports] = useState(null);
+  const [routes, setRoutes] = useState(null);
   const [showFromDropdown, setShowFromDropdown] = useState(false);
   const [showToDropdown, setShowToDropdown] = useState(false);
 
@@ -59,7 +57,32 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
   useEffect(() => {
     let ignore = false;
-    fetch(`${API_URL}/api/airports`)
+    fetch(`${API_URL}/api/routes`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data) => {
+        if (!ignore && Array.isArray(data) && data.length > 0) {
+          const pairs = data
+            .map((p) => ({
+              origin: (p.origin || p.Origin || '').trim().toUpperCase(),
+              destination: (p.destination || p.Destination || '').trim().toUpperCase(),
+            }))
+            .filter((p) => p.origin && p.destination);
+          setRoutes(pairs);
+        }
+      })
+      .catch((err) => {
+        console.warn('GET /api/routes returned error or empty, falling back to with-flights airports:', err.message);
+        if (!ignore) setRoutes(null);
+      });
+    return () => { ignore = true; };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    fetch(`${API_URL}/api/airports/with-flights`)
       .then((r) => {
         if (!r.ok) throw new Error('Failed to load airports');
         return r.json();
@@ -90,24 +113,98 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const getAirportMatches = (query, excludeCode) => {
+  const distinctOrigins = routes ? new Set(routes.map((r) => r.origin)) : null;
+  const distinctDestinations = routes ? new Set(routes.map((r) => r.destination)) : null;
+
+  const validDestinationsForFrom = (routes && from.trim())
+    ? new Set(routes.filter((r) => r.origin === from.trim().toUpperCase()).map((r) => r.destination))
+    : distinctDestinations;
+
+  const validOriginsForTo = (routes && to.trim())
+    ? new Set(routes.filter((r) => r.destination === to.trim().toUpperCase()).map((r) => r.origin))
+    : distinctOrigins;
+
+  const handleSelectFrom = (airportCode) => {
+    clearResults();
+    const code = airportCode.toUpperCase();
+    setFrom(code);
+    setShowFromDropdown(false);
+    if (routes && routes.length > 0 && to.trim()) {
+      const allowedDestinations = new Set(
+        routes.filter((r) => r.origin === code).map((r) => r.destination)
+      );
+      if (!allowedDestinations.has(to.trim().toUpperCase())) {
+        setTo('');
+      }
+    }
+  };
+
+  const handleSelectTo = (airportCode) => {
+    clearResults();
+    const code = airportCode.toUpperCase();
+    setTo(code);
+    setShowToDropdown(false);
+    if (routes && routes.length > 0 && from.trim()) {
+      const allowedOrigins = new Set(
+        routes.filter((r) => r.destination === code).map((r) => r.origin)
+      );
+      if (!allowedOrigins.has(from.trim().toUpperCase())) {
+        setFrom('');
+      }
+    }
+  };
+
+  const handleSwap = () => {
+    clearResults();
+    const prevFrom = from.trim().toUpperCase();
+    const prevTo = to.trim().toUpperCase();
+    let newFrom = prevTo;
+    let newTo = prevFrom;
+
+    if (routes && routes.length > 0) {
+      if (newFrom) {
+        const allowedDests = new Set(routes.filter((r) => r.origin === newFrom).map((r) => r.destination));
+        if (newTo && !allowedDests.has(newTo)) {
+          newTo = '';
+        }
+      }
+    }
+
+    setFrom(newFrom);
+    setTo(newTo);
+    setShowFromDropdown(false);
+    setShowToDropdown(false);
+  };
+
+  const getAirportMatches = (query, filterType) => {
     if (!airports || !Array.isArray(airports)) return [];
     const q = (query || '').trim().toLowerCase();
-    const exclude = (excludeCode || '').trim().toUpperCase();
+
+    let allowedCodes = null;
+    if (routes && routes.length > 0) {
+      if (filterType === 'from') {
+        allowedCodes = validOriginsForTo;
+      } else if (filterType === 'to') {
+        allowedCodes = validDestinationsForFrom;
+      }
+    }
 
     const matches = airports.filter((a) => {
       const code = (a.airportCode || a.AirportCode || '').toUpperCase();
-      if (exclude && code === exclude) return false;
+      if (allowedCodes && !allowedCodes.has(code)) return false;
+      if (filterType === 'from' && to.trim() && code === to.trim().toUpperCase()) return false;
+      if (filterType === 'to' && from.trim() && code === from.trim().toUpperCase()) return false;
       if (!q) return true;
 
       const city = (a.city || a.City || '').toLowerCase();
       const name = (a.airportName || a.AirportName || '').toLowerCase();
+      const state = (a.stateProvince || a.StateProvince || '').toLowerCase();
       const codeLower = code.toLowerCase();
 
-      return codeLower.includes(q) || city.includes(q) || name.includes(q);
+      return codeLower.includes(q) || city.includes(q) || name.includes(q) || state.includes(q);
     });
 
-    if (!q) return matches.sort((a, b) => (a.city || '').localeCompare(b.city || '')).slice(0, 6);
+    if (!q) return matches.sort((a, b) => (a.city || '').localeCompare(b.city || ''));
 
     return matches.sort((a, b) => {
       const aCode = (a.airportCode || a.AirportCode || '').toLowerCase();
@@ -115,11 +212,11 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       if (aCode === q && bCode !== q) return -1;
       if (bCode === q && aCode !== q) return 1;
       return (a.city || '').localeCompare(b.city || '');
-    }).slice(0, 6);
+    });
   };
 
-  const fromMatches = getAirportMatches(from, to);
-  const toMatches = getAirportMatches(to, from);
+  const fromMatches = getAirportMatches(from, 'from');
+  const toMatches = getAirportMatches(to, 'to');
 
   const handleDateClick = (day, monthIndex, year) => {
     clearResults();
@@ -214,14 +311,6 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       setBookingError('Please enter both origin and destination.');
       return;
     }
-    if (!startDate) {
-      setBookingError('Please select a departure date.');
-      return;
-    }
-    if (tripType === 'round-trip' && !endDate) {
-      setBookingError('Please select a return date for a round-trip.');
-      return;
-    }
 
     setSearching(true);
     setBookingMessage('');
@@ -261,7 +350,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
           }
         }
       }
-    } catch (err) {
+    } catch {
       setResults([]);
       setBookingError('Unable to reach the server.');
     }
@@ -280,13 +369,14 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   };
 
   const handleReturnSearch = async () => {
-    if (!endDate) return;
     setReturnSearching(true);
     const params = new URLSearchParams();
     if (to.trim()) params.set('origin', to.trim().toUpperCase());
     if (from.trim()) params.set('destination', from.trim().toUpperCase());
-    const d = `${endDate.year}-${String(endDate.month + 1).padStart(2, '0')}-${String(endDate.day).padStart(2, '0')}`;
-    params.set('date', d);
+    if (endDate) {
+      const d = `${endDate.year}-${String(endDate.month + 1).padStart(2, '0')}-${String(endDate.day).padStart(2, '0')}`;
+      params.set('date', d);
+    }
 
     try {
       const res = await fetch(`${API_URL}/api/flights?${params.toString()}`);
@@ -298,6 +388,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     setReturnSearching(false);
   };
 
+  // Straight to Checkout: no seat selection
   const initiateBooking = (flight, fare, isReturn = false) => {
     const token = sessionStorage.getItem('token');
     if (!token) {
@@ -314,25 +405,33 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       return;
     }
 
-    setSelectedFlightFare({ flight, fare, returnFare: isReturn ? fare : null, outboundFare: selectedOutboundFare?.fare });
-    setShowSeatModal(true);
+    const returnFareObj = isReturn ? fare : null;
+    const outboundFareObj = selectedOutboundFare?.fare || fare;
+    const totalPrice = (outboundFareObj?.currentPrice || 0) + (returnFareObj ? returnFareObj.currentPrice : 0);
+
+    setSelectedFlightFare({
+      flight,
+      fare: outboundFareObj,
+      returnFare: returnFareObj,
+      outboundFare: outboundFareObj,
+    });
+    setCheckoutTotal(totalPrice);
+    setShowCheckoutModal(true);
   };
 
+  // Straight to Checkout for return fare
   const selectReturnFare = (returnFlight, returnFare) => {
     if (!selectedOutboundFare) return;
+    const outboundFareObj = selectedOutboundFare.fare;
+    const totalPrice = (outboundFareObj?.currentPrice || 0) + (returnFare?.currentPrice || 0);
+
     setSelectedFlightFare({
       flight: selectedOutboundFare.flight,
-      fare: selectedOutboundFare.fare,
+      fare: outboundFareObj,
       returnFlight,
       returnFare,
     });
-    setShowSeatModal(true);
-  };
-
-  const handleSeatsSelected = (seats, totalPrice) => {
-    setSelectedSeats(seats);
     setCheckoutTotal(totalPrice);
-    setShowSeatModal(false);
     setShowCheckoutModal(true);
   };
 
@@ -415,7 +514,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                       <div className="p-3 text-xs text-gray-400 text-center">No matching airports</div>
                     ) : (
                       fromMatches.map((a) => (
-                        <div key={a.airportCode} onMouseDown={() => { setFrom(a.airportCode); setShowFromDropdown(false); clearResults(); }} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors">
+                        <div key={a.airportCode} onMouseDown={() => handleSelectFrom(a.airportCode || a.AirportCode)} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors">
                           <div className="flex flex-col min-w-0 pr-2">
                             <span className="font-bold text-gray-900 text-sm truncate">{a.city}, {a.stateProvince || a.country}</span>
                             <span className="text-xs text-gray-500 truncate">{a.airportName}</span>
@@ -428,7 +527,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                 )}
               </div>
 
-              <button type="button" onClick={() => { const temp = from; setFrom(to); setTo(temp); setShowFromDropdown(false); setShowToDropdown(false); clearResults(); }} className="text-gray-400 hover:text-gray-600 px-2 text-lg transition-colors cursor-pointer">⇄</button>
+              <button type="button" onClick={handleSwap} className="text-gray-400 hover:text-gray-600 px-2 text-lg transition-colors cursor-pointer">⇄</button>
 
               <div ref={toRef} className="flex-1 px-5 py-1 relative">
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">To</div>
@@ -452,7 +551,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                       <div className="p-3 text-xs text-gray-400 text-center">No matching airports</div>
                     ) : (
                       toMatches.map((a) => (
-                        <div key={a.airportCode} onMouseDown={() => { setTo(a.airportCode); setShowToDropdown(false); clearResults(); }} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors">
+                        <div key={a.airportCode} onMouseDown={() => handleSelectTo(a.airportCode || a.AirportCode)} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors">
                           <div className="flex flex-col min-w-0 pr-2">
                             <span className="font-bold text-gray-900 text-sm truncate">{a.city}, {a.stateProvince || a.country}</span>
                             <span className="text-xs text-gray-500 truncate">{a.airportName}</span>
@@ -606,7 +705,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
               {returnSearching ? (
                 <p className="text-gray-500">Searching return flights...</p>
               ) : !returnResults || returnResults.length === 0 ? (
-                <p className="text-gray-500 text-sm">No return flights found for {endDate ? `${endDate.year}-${String(endDate.month+1).padStart(2,'0')}-${String(endDate.day).padStart(2,'0')}` : ''}.</p>
+                <p className="text-gray-500 text-sm">No return flights found{endDate ? ` for ${endDate.year}-${String(endDate.month+1).padStart(2,'0')}-${String(endDate.day).padStart(2,'0')}` : ' for this route'}.</p>
               ) : (
                 <div className="flex flex-col gap-4">
                   {returnResults.map((f) => (
@@ -651,23 +750,12 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       )}
 
       {selectedFlightFare && (
-        <SeatSelectionModal
-          show={showSeatModal}
-          onHide={() => setShowSeatModal(false)}
-          flightId={selectedFlightFare.flight.flightId}
-          farePrice={selectedFlightFare.fare.currentPrice + (selectedFlightFare.returnFare ? selectedFlightFare.returnFare.currentPrice : 0)}
-          onProceed={handleSeatsSelected}
-        />
-      )}
-
-      {selectedFlightFare && (
         <CheckoutModal
           show={showCheckoutModal}
           onHide={() => setShowCheckoutModal(false)}
           fareId={selectedFlightFare.fare.flightFareId}
           returnFareId={selectedFlightFare.returnFare?.flightFareId ?? null}
           totalPrice={checkoutTotal}
-          seats={selectedSeats}
           tripType={tripType}
           onSuccess={handlePaymentSuccess}
         />

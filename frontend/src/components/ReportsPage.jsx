@@ -115,6 +115,8 @@ function useClickOutside(ref, handler) {
 
 function ReportTable({ def, rows, search, hiddenColumns, toggleColumn }) {
   const [showColumns, setShowColumns] = useState(false);
+  const [sortKey, setSortKey] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
   const dropdownRef = useRef(null);
   
   useClickOutside(dropdownRef, () => setShowColumns(false));
@@ -129,6 +131,22 @@ function ReportTable({ def, rows, search, hiddenColumns, toggleColumn }) {
       })
     );
   }, [rows, search, def.columns]);
+
+  const sortedRows = useMemo(() => {
+    if (!sortKey) return filteredRows;
+    const sorted = [...filteredRows];
+    sorted.sort((a, b) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === 'number' && typeof bv === 'number') return sortDir === 'asc' ? av - bv : bv - av;
+      const cmp = String(av).localeCompare(String(bv));
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return sorted;
+  }, [filteredRows, sortKey, sortDir]);
 
   const cols = def.columns.filter((c) => !hiddenColumns.has(c.key));
 
@@ -186,19 +204,19 @@ function ReportTable({ def, rows, search, hiddenColumns, toggleColumn }) {
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50/30 text-xs font-semibold text-gray-600 uppercase tracking-wider">
               {cols.map((col) => (
-                <th key={col.key} className="px-6 py-3.5 whitespace-nowrap">{col.label}</th>
+                <th key={col.key} onClick={() => { if (sortKey === col.key) setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(col.key); setSortDir('asc'); } }} className="px-6 py-3.5 whitespace-nowrap cursor-pointer select-none hover:text-gray-900" title="Click to sort">{col.label}{sortKey === col.key ? (sortDir === 'asc' ? ' \u25b2' : ' \u25bc') : ''}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filteredRows.length === 0 ? (
+            {sortedRows.length === 0 ? (
               <tr>
                 <td colSpan={cols.length || 1} className="px-6 py-8 text-center text-gray-400 text-sm">
                   {search ? 'No matching records.' : 'No records available in this report.'}
                 </td>
               </tr>
             ) : (
-              filteredRows.map((row, idx) => (
+              sortedRows.map((row, idx) => (
                 <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
                   {cols.map((col) => (
                     <td key={col.key} className="px-6 py-3.5 whitespace-nowrap text-gray-800">
@@ -215,7 +233,7 @@ function ReportTable({ def, rows, search, hiddenColumns, toggleColumn }) {
   );
 }
 
-export default function ReportsPage({ token, email, role, onBackToHome, onMyTrips, onQueries, onSignIn, onSignOut, onToggleSidebar }) {
+export default function ReportsPage({ token, email, role, onBackToHome, onMyTrips, onQueries, onSignIn, onToggleSidebar }) {
   const [reportsData, setReportsData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -249,7 +267,12 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
 
   useEffect(() => {
     if (!token) return;
-    fetchReports();
+    let ignore = false;
+    (async () => {
+      await Promise.resolve();
+      if (!ignore) fetchReports();
+    })();
+    return () => { ignore = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -268,12 +291,12 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
     ? REPORT_DEFINITIONS
     : REPORT_DEFINITIONS.filter((r) => r.key === activeTab);
 
-  if (token && role !== 'Supervisor') {
+  if (token && role !== 'Supervisor' && role !== 'Employee') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="max-w-md bg-white rounded-3xl border border-gray-200 shadow p-10 text-center">
           <h1 className="text-2xl font-bold mb-2">Access Denied</h1>
-          <p className="text-gray-600 text-sm mb-6">Reports are for Supervisors only.</p>
+          <p className="text-gray-600 text-sm mb-6">Reports are for staff only.</p>
           <button onClick={() => onBackToHome('flights')} className="bg-[#0066ff] hover:bg-blue-700 text-white font-semibold py-2.5 px-6 rounded-xl">
             Return to Flight Search
           </button>

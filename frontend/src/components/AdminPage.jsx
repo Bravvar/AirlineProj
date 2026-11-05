@@ -75,7 +75,7 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
               { label: 'Total Users', value: overview.totalUsers, color: 'text-blue-600' },
-              { label: 'Total Revenue', value: `$${overview.totalRevenue.toLocaleString()}`, color: 'text-green-600' },
+              { label: 'Total Revenue', value: overview.totalRevenue != null ? `${overview.totalRevenue.toLocaleString()}` : '$0', color: 'text-green-600' },
               { label: 'Total Flights', value: overview.totalFlights, color: 'text-gray-900' },
               { label: 'Reservations', value: overview.reservations, color: 'text-gray-900' },
               { label: 'Confirmed Trips', value: overview.confirmedReservations, color: 'text-gray-900' },
@@ -107,7 +107,7 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
                   }`}>{f.flightStatus}</span>
                 </div>
                 <div className="flex flex-col gap-2 mt-4">
-                  {f.fares.map(fare => (
+                  {(f.fares || []).map(fare => (
                     <div key={fare.flightFareId} className="flex justify-between text-sm bg-gray-50 rounded-xl px-4 py-2">
                       <span className="text-gray-600 font-medium">Fare {fare.fareClassId}</span>
                       <span className="font-bold text-gray-900">${fare.currentPrice} <span className="text-gray-400 font-normal">| {fare.availableInventory} left</span></span>
