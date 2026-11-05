@@ -213,7 +213,10 @@ public class HomeController : ControllerBase
     [HttpGet("flights/{id}/seats")]
     public IActionResult FlightSeats(int id)
     {
-        var data = _context.Database.SqlQueryRaw<int>("SELECT seat_id FROM SeatAssignment WHERE flight_id = {0} AND active_seat = 1", id).ToList();
+        var data = _context.SeatAssignment
+            .Where(sa => sa.FlightId == id && sa.ActiveSeat == 1)
+            .Select(sa => sa.SeatId)
+            .ToList();
         return Ok(data);
     }
 
@@ -529,6 +532,7 @@ public class HomeController : ControllerBase
             return BadRequest("Extra checked bags must be between 0 and 5");
 
 
+        // Phone digits-only (no letters)
         if (mod.phone != null && mod.phone.Any(char.IsLetter))
             return BadRequest("Phone number must contain digits only");
 

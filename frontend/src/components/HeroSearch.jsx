@@ -2,9 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { API_URL } from '../config';
 import SeatSelectionModal from './SeatSelectionModal';
 import CheckoutModal from './CheckoutModal';
+import TabToggle from './TabToggle';
 
 export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn }) {
-  const currentTab = (activeTab === 'packages' || activeTab === 'deals') ? activeTab : 'flights';
+  const currentTab = (activeTab === 'deals') ? activeTab : 'flights';
 
   const [tripType, setTripType] = useState('round-trip');
   const [showCalendar, setShowCalendar] = useState(false);
@@ -23,14 +24,16 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   const [bookingError, setBookingError] = useState('');
   const [fallbackWarning, setFallbackWarning] = useState('');
 
-  // Seat & Checkout State
+  const [returnResults, setReturnResults] = useState(null);
+  const [returnSearching, setReturnSearching] = useState(false);
+  const [selectedOutboundFare, setSelectedOutboundFare] = useState(null);
+
   const [showSeatModal, setShowSeatModal] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [selectedFlightFare, setSelectedFlightFare] = useState(null);
   const [selectedSeats, setSelectedSeats] = useState([]);
   const [checkoutTotal, setCheckoutTotal] = useState(0);
 
-  // Airport autocomplete
   const [airports, setAirports] = useState(null);
   const [showFromDropdown, setShowFromDropdown] = useState(false);
   const [showToDropdown, setShowToDropdown] = useState(false);
@@ -47,6 +50,8 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
   const clearResults = () => {
     if (results !== null) setResults(null);
+    if (returnResults !== null) setReturnResults(null);
+    if (selectedOutboundFare) setSelectedOutboundFare(null);
     if (bookingMessage) setBookingMessage('');
     if (bookingError) setBookingError('');
     if (fallbackWarning) setFallbackWarning('');
@@ -102,7 +107,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       return codeLower.includes(q) || city.includes(q) || name.includes(q);
     });
 
-    if (!q) return matches.sort((a, b) => (a.city || '').localeCompare(b.city || ''));
+    if (!q) return matches.sort((a, b) => (a.city || '').localeCompare(b.city || '')).slice(0, 6);
 
     return matches.sort((a, b) => {
       const aCode = (a.airportCode || a.AirportCode || '').toLowerCase();
@@ -110,7 +115,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       if (aCode === q && bCode !== q) return -1;
       if (bCode === q && aCode !== q) return 1;
       return (a.city || '').localeCompare(b.city || '');
-    });
+    }).slice(0, 6);
   };
 
   const fromMatches = getAirportMatches(from, to);
@@ -144,7 +149,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       const startMonth = new Date(startDate.year, startDate.month).toLocaleString('default', { month: 'short' });
       return `${startMonth} ${startDate.day}`;
     }
-    return 'Add dates';
+    return tripType === 'round-trip' ? 'Add dates' : 'Add date';
   };
 
   const getDisplayedMonth = (offset) => {
@@ -204,12 +209,28 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
   const handleSearch = async () => {
     if (currentTab !== 'flights') return;
+
+    if (!from.trim() || !to.trim()) {
+      setBookingError('Please enter both origin and destination.');
+      return;
+    }
+    if (!startDate) {
+      setBookingError('Please select a departure date.');
+      return;
+    }
+    if (tripType === 'round-trip' && !endDate) {
+      setBookingError('Please select a return date for a round-trip.');
+      return;
+    }
+
     setSearching(true);
     setBookingMessage('');
     setBookingError('');
     setFallbackWarning('');
     setResults(null);
     setFaresByFlight({});
+    setSelectedOutboundFare(null);
+    setReturnResults(null);
 
     const params = new URLSearchParams();
     if (from.trim()) params.set('origin', from.trim().toUpperCase());
@@ -258,8 +279,26 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     }
   };
 
-  // STEP 1: User clicks "Book" on a fare -> Open Seat Map
-  const initiateBooking = (flight, fare) => {
+  const handleReturnSearch = async () => {
+    if (!endDate) return;
+    setReturnSearching(true);
+    const params = new URLSearchParams();
+    if (to.trim()) params.set('origin', to.trim().toUpperCase());
+    if (from.trim()) params.set('destination', from.trim().toUpperCase());
+    const d = `${endDate.year}-${String(endDate.month + 1).padStart(2, '0')}-${String(endDate.day).padStart(2, '0')}`;
+    params.set('date', d);
+
+    try {
+      const res = await fetch(`${API_URL}/api/flights?${params.toString()}`);
+      const data = await res.json();
+      setReturnResults(Array.isArray(data) ? data : []);
+    } catch {
+      setReturnResults([]);
+    }
+    setReturnSearching(false);
+  };
+
+  const initiateBooking = (flight, fare, isReturn = false) => {
     const token = sessionStorage.getItem('token');
     if (!token) {
       setBookingError('Please log in first to book a flight.');
@@ -268,11 +307,28 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     }
     setBookingError('');
     setBookingMessage('');
-    setSelectedFlightFare({ flight, fare });
+
+    if (!isReturn && tripType === 'round-trip') {
+      setSelectedOutboundFare({ flight, fare });
+      handleReturnSearch();
+      return;
+    }
+
+    setSelectedFlightFare({ flight, fare, returnFare: isReturn ? fare : null, outboundFare: selectedOutboundFare?.fare });
     setShowSeatModal(true);
   };
 
-  // STEP 2: User finishes picking seats -> Open Checkout
+  const selectReturnFare = (returnFlight, returnFare) => {
+    if (!selectedOutboundFare) return;
+    setSelectedFlightFare({
+      flight: selectedOutboundFare.flight,
+      fare: selectedOutboundFare.fare,
+      returnFlight,
+      returnFare,
+    });
+    setShowSeatModal(true);
+  };
+
   const handleSeatsSelected = (seats, totalPrice) => {
     setSelectedSeats(seats);
     setCheckoutTotal(totalPrice);
@@ -280,19 +336,14 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     setShowCheckoutModal(true);
   };
 
-  // STEP 3: User pays -> Create reservation via backend
   const handlePaymentSuccess = (confirmationNumber) => {
     setShowCheckoutModal(false);
     setBookingMessage(`Successfully booked! Confirmation #${confirmationNumber} — see it in My Trips.`);
-    setFaresByFlight({}); // Refresh inventory
+    setFaresByFlight({}); 
+    setSelectedOutboundFare(null);
+    setReturnResults(null);
     if (onBooked) onBooked();
   };
-
-  const tabs = [
-    { id: 'flights', label: 'Flights', icon: '✈' },
-    { id: 'packages', label: 'Packages', icon: '🧳' },
-    { id: 'deals', label: 'Deals', icon: '🏷' },
-  ];
 
   const searchIcon = (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -301,22 +352,21 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     </svg>
   );
 
+  const fareDescriptor = (fare) => {
+    const bits = [];
+    if (fare.cabinName) bits.push(fare.cabinName);
+    bits.push(fare.refundable ? 'Refundable' : 'Non-refundable');
+    if (fare.checkedBagsIncluded > 0) bits.push(`${fare.checkedBagsIncluded} checked bag${fare.checkedBagsIncluded > 1 ? 's' : ''}`);
+    if (fare.changesAllowed && fare.changeFee > 0) bits.push(`Change fee $${fare.changeFee}`);
+    if (!fare.changesAllowed) bits.push('No changes');
+    return bits.join(' · ');
+  };
+
   return (
     <div className="relative z-50 w-full max-w-5xl mx-auto flex flex-col items-center mt-4">
       
-      <div className="flex justify-center gap-1 mb-5 p-1.5 bg-white/20 backdrop-blur-md rounded-full border border-white/30 shadow-sm relative z-10">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => { clearResults(); setActiveTab(tab.id); }}
-            className={`flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold transition-all cursor-pointer ${
-              currentTab === tab.id ? 'bg-white text-gray-900 shadow-md scale-100' : 'text-white hover:bg-white/20 scale-95 hover:scale-100'
-            }`}
-          >
-            <span>{tab.icon}</span>
-            <span>{tab.label}</span>
-          </button>
-        ))}
+      <div className="mb-5">
+        <TabToggle activeTab={currentTab} setActiveTab={setActiveTab} isDarkBackground={true} />
       </div>
 
       <div className="w-full flex flex-col items-center relative z-30">
@@ -347,7 +397,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">From</div>
                 <input
                   type="text"
-                  placeholder="Departure (e.g. JFK)"
+                  placeholder="City or Airport"
                   value={from}
                   onChange={(e) => {
                     setFrom(e.target.value); setShowFromDropdown(true); setShowToDropdown(false);
@@ -384,7 +434,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">To</div>
                 <input
                   type="text"
-                  placeholder="Destination (e.g. LAX)"
+                  placeholder="City or Airport"
                   value={to}
                   onChange={(e) => {
                     setTo(e.target.value); setShowToDropdown(true); setShowFromDropdown(false);
@@ -496,7 +546,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       </div>
 
       {currentTab === 'flights' && (searching || results !== null) && (
-        <div className="w-full bg-white rounded-3xl shadow-2xl mt-4 p-6 text-gray-800 relative z-10">
+        <div className="w-full bg-white rounded-3xl shadow-2xl mt-4 p-6 text-gray-800 relative z-10 max-h-[500px] overflow-y-auto">
           {bookingMessage && <p className="bg-green-50 border border-green-200 text-green-800 font-semibold rounded-2xl px-4 py-3 mb-4">{bookingMessage}</p>}
           {bookingError && <p className="bg-red-50 border border-red-200 text-red-700 font-semibold rounded-2xl px-4 py-3 mb-4">{bookingError}</p>}
           {fallbackWarning && <p className="bg-amber-50 border border-amber-200 text-amber-800 font-semibold rounded-2xl px-4 py-3 mb-4">{fallbackWarning}</p>}
@@ -505,11 +555,12 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
             <p className="text-gray-500">Searching...</p>
           ) : results.length === 0 ? (
             <div className="text-gray-600 text-center py-6">
-              <p className="font-medium mb-1">No flights found for that route/date.</p>
-              <p className="text-sm text-gray-500">Try searching a major route like JFK to LAX.</p>
+              <p className="font-medium mb-1">No flights found.</p>
+              <p className="text-sm text-gray-500">Try adjusting your origin, destination, or date.</p>
             </div>
           ) : (
             <div className="flex flex-col gap-4">
+              <h3 className="text-lg font-bold text-gray-900">Outbound Flights</h3>
               {results.map((f) => (
                 <div key={f.flightId} className="border border-gray-100 rounded-2xl p-4">
                   <div className="flex justify-between items-center">
@@ -530,7 +581,10 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                       ) : (
                         faresByFlight[f.flightId].map((fare) => (
                           <div key={fare.flightFareId} className="text-sm text-gray-700 flex justify-between items-center bg-gray-50 rounded-xl px-3 py-2 mt-1">
-                            <span className="font-medium">${fare.currentPrice} <span className="text-gray-400 font-normal ml-1">({fare.availableInventory} seats left)</span></span>
+                            <div className="flex flex-col">
+                              <span className="font-medium">${fare.currentPrice} <span className="text-gray-400 font-normal ml-1">({fare.availableInventory} seats left)</span></span>
+                              <span className="text-xs text-gray-500 mt-0.5">{fareDescriptor(fare)}</span>
+                            </div>
                             <button onClick={() => initiateBooking(f, fare)} className="bg-[#0066ff] text-white hover:bg-blue-700 px-4 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer">
                               Book
                             </button>
@@ -543,16 +597,65 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
               ))}
             </div>
           )}
+
+          {selectedOutboundFare && tripType === 'round-trip' && (
+            <div className="mt-6 pt-6 border-t border-gray-100">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">
+                Select Return Flight ({to} → {from})
+              </h3>
+              {returnSearching ? (
+                <p className="text-gray-500">Searching return flights...</p>
+              ) : !returnResults || returnResults.length === 0 ? (
+                <p className="text-gray-500 text-sm">No return flights found for {endDate ? `${endDate.year}-${String(endDate.month+1).padStart(2,'0')}-${String(endDate.day).padStart(2,'0')}` : ''}.</p>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {returnResults.map((f) => (
+                    <div key={f.flightId} className="border border-gray-100 rounded-2xl p-4">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <div className="font-bold text-gray-900">{f.flightNumber} — {f.originAirportCode} → {f.destinationAirportCode}</div>
+                          <div className="text-sm text-gray-500">
+                            Departs {String(f.departureDate).slice(0, 10)} {f.departureTime} — {f.flightStatus}
+                          </div>
+                        </div>
+                        <button onClick={() => loadFares(f.flightId)} className="text-blue-600 font-semibold text-sm hover:underline cursor-pointer">
+                          View fares
+                        </button>
+                      </div>
+                      {faresByFlight[f.flightId] && (
+                        <div className="mt-3 flex flex-col gap-1">
+                          {faresByFlight[f.flightId].length === 0 ? (
+                            <div className="text-sm text-gray-500">No fares for this flight.</div>
+                          ) : (
+                            faresByFlight[f.flightId].map((fare) => (
+                              <div key={fare.flightFareId} className="text-sm text-gray-700 flex justify-between items-center bg-gray-50 rounded-xl px-3 py-2 mt-1">
+                                <div className="flex flex-col">
+                                  <span className="font-medium">${fare.currentPrice} <span className="text-gray-400 font-normal ml-1">({fare.availableInventory} seats left)</span></span>
+                                  <span className="text-xs text-gray-500 mt-0.5">{fareDescriptor(fare)}</span>
+                                </div>
+                                <button onClick={() => selectReturnFare(f, fare)} className="bg-[#0066ff] text-white hover:bg-blue-700 px-4 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer">
+                                  Select
+                                </button>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
-      {/* MODALS */}
       {selectedFlightFare && (
         <SeatSelectionModal
           show={showSeatModal}
           onHide={() => setShowSeatModal(false)}
           flightId={selectedFlightFare.flight.flightId}
-          farePrice={selectedFlightFare.fare.currentPrice}
+          farePrice={selectedFlightFare.fare.currentPrice + (selectedFlightFare.returnFare ? selectedFlightFare.returnFare.currentPrice : 0)}
           onProceed={handleSeatsSelected}
         />
       )}
@@ -562,6 +665,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
           show={showCheckoutModal}
           onHide={() => setShowCheckoutModal(false)}
           fareId={selectedFlightFare.fare.flightFareId}
+          returnFareId={selectedFlightFare.returnFare?.flightFareId ?? null}
           totalPrice={checkoutTotal}
           seats={selectedSeats}
           tripType={tripType}
