@@ -315,13 +315,31 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         {allSlots.map((day, idx) => {
           if (day === null) return <div key={`empty-${idx}`} className="h-10 w-10" />;
 
-          const isStart = startDate && startDate.day === day && startDate.month === monthIndex && startDate.year === year;
-          const isEnd = endDate && endDate.day === day && endDate.month === monthIndex && endDate.year === year;
+          const currentDate = new Date(year, monthIndex, day);
+          let isStart = false;
+          let isEnd = false;
+          let isInRange = false;
+
+          if (startDate) {
+            const startObj = new Date(startDate.year, startDate.month, startDate.day);
+            if (currentDate.getTime() === startObj.getTime()) isStart = true;
+
+            if (endDate) {
+              const endObj = new Date(endDate.year, endDate.month, endDate.day);
+              if (currentDate.getTime() === endObj.getTime()) isEnd = true;
+              if (currentDate > startObj && currentDate < endObj) isInRange = true;
+            }
+          }
 
           let btnClasses = "h-10 w-10 mx-auto flex flex-col items-center justify-center rounded-xl text-sm font-medium transition-all ";
 
-          if (isStart || isEnd) btnClasses += "bg-blue-600 text-white shadow-md cursor-pointer";
-          else btnClasses += "text-gray-800 hover:bg-gray-100 cursor-pointer";
+          if (isStart || isEnd) {
+            btnClasses += "bg-blue-600 text-white shadow-md cursor-pointer z-10 relative";
+          } else if (isInRange) {
+            btnClasses += "bg-blue-50 text-blue-900 cursor-pointer hover:bg-blue-100";
+          } else {
+            btnClasses += "text-gray-800 hover:bg-gray-100 cursor-pointer";
+          }
 
           return (
             <div key={`${monthIndex}-${day}`} onClick={() => handleDateClick(day, monthIndex, year)} className={btnClasses}>
@@ -387,7 +405,6 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         const rows = Array.isArray(data) ? data : [];
         setResults(rows);
 
-        // FIX: Automatically fetch fares for all returned flights
         if (rows.length > 0) {
           const faresPromises = rows.map((flight) => fetch(`${API_URL}/api/flights/${flight.flightId}/fares`).then(r => r.json()).catch(() => []));
           const faresResults = await Promise.all(faresPromises);
@@ -414,17 +431,6 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     setSearching(false);
   };
 
-  const loadFares = async (flightId) => {
-    if (faresByFlight[flightId]) return;
-    try {
-      const res = await fetch(`${API_URL}/api/flights/${flightId}/fares`);
-      const data = await res.json();
-      setFaresByFlight((prev) => ({ ...prev, [flightId]: Array.isArray(data) ? data : [] }));
-    } catch {
-      setFaresByFlight((prev) => ({ ...prev, [flightId]: [] }));
-    }
-  };
-
   const handleReturnSearch = async () => {
     setReturnSearching(true);
     setShowAllReturn(false);
@@ -442,7 +448,6 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       const rows = Array.isArray(data) ? data : [];
       setReturnResults(rows);
 
-      // FIX: Automatically fetch fares for all return flights
       if (rows.length > 0) {
         const faresPromises = rows.map((flight) => fetch(`${API_URL}/api/flights/${flight.flightId}/fares`).then(r => r.json()).catch(() => []));
         const faresResults = await Promise.all(faresPromises);
@@ -729,7 +734,13 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                 {renderMonth(rightMonth.month, rightMonth.year)}
               </div>
             </div>
-            <div className="flex justify-end mt-4 pt-4 border-t border-gray-100">
+            <div className="flex justify-between items-center mt-4 pt-4 border-t border-gray-100">
+              <button 
+                onClick={() => { setStartDate(null); setEndDate(null); }} 
+                className="text-sm font-semibold text-gray-500 hover:text-gray-900 hover:bg-gray-100 px-4 py-2 rounded-lg cursor-pointer transition-colors"
+              >
+                Clear dates
+              </button>
               <button onClick={() => setShowCalendar(false)} className="text-sm font-semibold text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-lg cursor-pointer">
                 Done
               </button>
