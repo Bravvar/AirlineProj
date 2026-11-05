@@ -117,20 +117,35 @@ function ReportTable({ def, rows, search, hiddenColumns, toggleColumn, loading }
   const [showColumns, setShowColumns] = useState(false);
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
+  const [filterCol, setFilterCol] = useState('');
+  const [filterVal, setFilterVal] = useState('');
   const dropdownRef = useRef(null);
   
   useClickOutside(dropdownRef, () => setShowColumns(false));
 
+  const filterValues = useMemo(() => {
+    if (!filterCol) return [];
+    const seen = new Set();
+    rows.forEach((row) => {
+      seen.add(formatCell(row, filterCol));
+    });
+    return [...seen].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).slice(0, 200);
+  }, [rows, filterCol]);
+
   const filteredRows = useMemo(() => {
-    if (!search.trim()) return rows;
+    let out = rows;
+    if (filterCol && filterVal) {
+      out = out.filter((row) => formatCell(row, filterCol) === filterVal);
+    }
+    if (!search.trim()) return out;
     const q = search.trim().toLowerCase();
-    return rows.filter((row) =>
+    return out.filter((row) =>
       def.columns.some((col) => {
         const v = formatCell(row, col.key);
         return String(v).toLowerCase().includes(q);
       })
     );
-  }, [rows, search, def.columns]);
+  }, [rows, search, def.columns, filterCol, filterVal]);
 
   const sortedRows = useMemo(() => {
     if (!sortKey) return filteredRows;
@@ -155,7 +170,7 @@ function ReportTable({ def, rows, search, hiddenColumns, toggleColumn, loading }
       <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/60 flex flex-wrap justify-between items-center gap-4 rounded-t-3xl">
         <div>
           <h2 className="text-lg font-bold text-gray-900">{def.title}</h2>
-          <p className="text-xs text-gray-500 mt-0.5">{filteredRows.length} {filteredRows.length === 1 ? 'record' : 'records'}{search ? ' (filtered)' : ''}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{filteredRows.length} {filteredRows.length === 1 ? 'record' : 'records'}{(search || (filterCol && filterVal)) ? ' (filtered)' : ''}</p>
         </div>
         
         <div className="flex items-center gap-3">
@@ -199,7 +214,40 @@ function ReportTable({ def, rows, search, hiddenColumns, toggleColumn, loading }
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-b-3xl">
+      <div className="px-6 py-3 border-b border-gray-100 bg-white flex flex-wrap items-center gap-3">
+        <span className="text-xs font-semibold text-gray-600">Filter:</span>
+        <select
+          value={filterCol}
+          onChange={(e) => { setFilterCol(e.target.value); setFilterVal(''); }}
+          className="text-sm text-gray-700 bg-white border border-gray-300 rounded-lg px-3 py-1.5 outline-none focus:border-blue-500 cursor-pointer"
+        >
+          <option value="">All columns</option>
+          {def.columns.map((c) => (
+            <option key={c.key} value={c.key}>{c.label}</option>
+          ))}
+        </select>
+        <select
+          value={filterVal}
+          disabled={!filterCol}
+          onChange={(e) => setFilterVal(e.target.value)}
+          className="text-sm text-gray-700 bg-white border border-gray-300 rounded-lg px-3 py-1.5 outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+        >
+          <option value="">All values</option>
+          {filterValues.map((v) => (
+            <option key={v} value={v}>{v}</option>
+          ))}
+        </select>
+        {(filterCol && filterVal) && (
+          <button
+            onClick={() => { setFilterCol(''); setFilterVal(''); }}
+            className="text-xs font-semibold text-blue-600 hover:text-blue-800 cursor-pointer"
+          >
+            Clear filter
+          </button>
+        )}
+      </div>
+
+      <div className="overflow-x-auto overflow-y-auto max-h-[480px] rounded-b-3xl">
         <table className="w-full text-left border-collapse text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50/30 text-xs font-semibold text-gray-600 uppercase tracking-wider">

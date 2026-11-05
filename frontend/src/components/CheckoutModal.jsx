@@ -109,7 +109,7 @@ export default function CheckoutModal({ show, onHide, fareId, returnFareId, tota
         <form onSubmit={handlePayment} className="flex flex-col gap-4">
           <div>
             <label className="text-xs font-semibold text-gray-600 mb-1 block">Cardholder Name</label>
-            <input type="text" required placeholder="John Doe" value={name} onChange={e => setName(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl px-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
+            <input type="text" required placeholder="John Doe" value={name} onChange={e => setName(e.target.value.replace(/[^a-zA-Z\s'-]/g, ''))} className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl px-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
           </div>
           <div>
             <label className="text-xs font-semibold text-gray-600 mb-1 block">Card Number</label>

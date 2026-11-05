@@ -276,7 +276,7 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-6">
-            <button className="text-white hover:text-gray-200 transition-colors flex items-center gap-2 text-sm font-semibold">
+            <button onClick={() => document.getElementById('flight-search')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} title="Search flights" className="text-white hover:text-gray-200 transition-colors flex items-center gap-2 text-sm font-semibold cursor-pointer">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
             </button>
             
@@ -302,7 +302,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="relative z-30 flex-grow flex flex-col justify-start items-center px-4 w-full mt-4">
+        <div id="flight-search" className="relative z-30 flex-grow flex flex-col justify-start items-center px-4 w-full mt-4">
           <HeroSearch
             activeTab={activeTab}
             setActiveTab={handleTabChange}
@@ -315,7 +315,7 @@ export default function App() {
         </div>
       </div>
 
-      <DealsSection onSeeAll={() => setCurrentPage('deals')} />
+      <DealsSection onSeeAll={() => setCurrentPage('deals')} onSignIn={() => setShowSignIn(true)} />
 
       {modal}
       {sidebar}

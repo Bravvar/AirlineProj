@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { API_URL } from '../config';
+import CheckoutModal from './CheckoutModal';
 
 const DEAL_IMG = {
   DEL: '/landscapes/india.jpg',
@@ -11,12 +12,32 @@ const DEAL_IMG = {
 };
 const FALLBACK_IMG = '/landscapes/europe.jpg';
 
-export default function DealsSection({ onSeeAll }) {
+export default function DealsSection({ onSeeAll, onSignIn }) {
   const [deals, setDeals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [cityByCode, setCityByCode] = useState({});
+  const [selectedDeal, setSelectedDeal] = useState(null);
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [bookingMessage, setBookingMessage] = useState('');
 
   const cityOf = (code) => cityByCode[(code || '').toUpperCase()] || code;
+
+  const token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
+
+  const handleBookDeal = (deal) => {
+    if (!token) {
+      if (onSignIn) onSignIn();
+      return;
+    }
+    setSelectedDeal(deal);
+    setShowCheckoutModal(true);
+  };
+
+  const handlePaymentSuccess = (confirmationNumber) => {
+    setShowCheckoutModal(false);
+    setSelectedDeal(null);
+    setBookingMessage(`Successfully booked! Confirmation #${confirmationNumber} — see it in My Trips.`);
+  };
 
   useEffect(() => {
     let ignore = false;
@@ -79,7 +100,7 @@ export default function DealsSection({ onSeeAll }) {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {deals.map((deal, idx) => (
-            <div key={deal.flightFareId || idx} className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden flex flex-col hover:shadow-md transition-shadow">
+            <div key={deal.flightFareId || idx} onClick={() => handleBookDeal(deal)} className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden flex flex-col hover:shadow-md transition-shadow cursor-pointer">
               <div className="relative h-48 overflow-hidden bg-gray-100">
                 <img
                   src={DEAL_IMG[deal.destination] || FALLBACK_IMG}
@@ -112,15 +133,31 @@ export default function DealsSection({ onSeeAll }) {
                   </div>
                 </div>
                 <button
-                  onClick={onSeeAll}
-                  className="w-full bg-gray-100 hover:bg-[#0066ff] hover:text-white text-gray-900 font-medium py-2 px-4 rounded-xl text-xs transition-colors cursor-pointer text-center"
+                  onClick={(e) => { e.stopPropagation(); handleBookDeal(deal); }}
+                  className="w-full bg-[#0066ff] hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-xl text-xs transition-colors cursor-pointer text-center"
                 >
-                  View deals
+                  Book for ${deal.currentPrice}
                 </button>
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {bookingMessage && (
+        <p className="mt-6 text-sm font-semibold text-green-700 bg-green-50 border border-green-200 rounded-xl px-4 py-3">{bookingMessage}</p>
+      )}
+
+      {selectedDeal && (
+        <CheckoutModal
+          show={showCheckoutModal}
+          onHide={() => { setShowCheckoutModal(false); setSelectedDeal(null); }}
+          fareId={selectedDeal.flightFareId}
+          returnFareId={null}
+          totalPrice={selectedDeal.currentPrice}
+          tripType="one-way"
+          onSuccess={handlePaymentSuccess}
+        />
       )}
     </div>
   );
