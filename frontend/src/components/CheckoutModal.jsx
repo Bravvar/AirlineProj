@@ -43,6 +43,8 @@ export default function CheckoutModal({ show, onHide, fareId, returnFareId, tota
     setError('');
     
     const token = sessionStorage.getItem('token');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
     
     try {
       const body = {
@@ -55,10 +57,12 @@ export default function CheckoutModal({ show, onHide, fareId, returnFareId, tota
       const res = await fetch(`${API_URL}/api/reservations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        signal: controller.signal,
         body: JSON.stringify(body),
       });
       
       const text = await res.text();
+      clearTimeout(timeoutId);
       if (!res.ok) {
         let cleanMessage = 'Payment failed. Please check your details.';
         try {
@@ -76,8 +80,13 @@ export default function CheckoutModal({ show, onHide, fareId, returnFareId, tota
       
       const data = JSON.parse(text);
       onSuccess(data.confirmationNumber);
-    } catch {
-      setError('Unable to connect to server.');
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err && err.name === 'AbortError') {
+        setError('The booking is taking longer than usual. Please try again.');
+      } else {
+        setError('Unable to connect to server.');
+      }
       setLoading(false);
     }
   };

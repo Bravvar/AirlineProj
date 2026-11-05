@@ -113,7 +113,7 @@ function useClickOutside(ref, handler) {
   }, [ref, handler]);
 }
 
-function ReportTable({ def, rows, search, hiddenColumns, toggleColumn }) {
+function ReportTable({ def, rows, search, hiddenColumns, toggleColumn, loading }) {
   const [showColumns, setShowColumns] = useState(false);
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
@@ -421,6 +421,7 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
                     search={search} 
                     hiddenColumns={hidden} 
                     toggleColumn={toggleColumn} 
+                    loading={loading}
                   />
                 );
               })}
