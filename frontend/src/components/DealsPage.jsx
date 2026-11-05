@@ -19,8 +19,9 @@ export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onS
   }, []);
 
   return (
-    <div className="min-h-screen bg-white font-sans text-gray-900">
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-900 pb-20">
       
+      {/* Top Navbar */}
       <nav className="sticky top-0 z-50 bg-white border-b border-gray-100 px-8 py-4 flex justify-between items-center shadow-sm">
         <div className="cursor-pointer" onClick={() => onBackToHome()}>
           <Logo />
@@ -44,8 +45,36 @@ export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onS
         </div>
       </nav>
 
-      <div className="max-w-6xl mx-auto py-12 px-4">
-        <div className="mb-10">
+      {/* Hero Header with Toggle Pill */}
+      <div className="relative bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900 h-64 flex flex-col items-center justify-center overflow-hidden">
+        {/* Decorative background clouds/circles to mimic the screenshot */}
+        <div className="absolute inset-0 opacity-20">
+          <div className="absolute top-0 left-1/4 w-96 h-96 bg-white rounded-full blur-3xl mix-blend-overlay"></div>
+          <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-400 rounded-full blur-3xl mix-blend-overlay"></div>
+        </div>
+
+        <h1 className="text-3xl font-bold text-white mb-8 relative z-10 drop-shadow-md">Where to next?</h1>
+
+        {/* The UI Pill from the screenshot */}
+        <div className="relative z-10 flex bg-white/20 backdrop-blur-md border border-white/30 rounded-full p-1.5 shadow-lg">
+          <button 
+            onClick={() => onBackToHome('flights')} 
+            className="flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-semibold text-white hover:bg-white/10 transition-all cursor-pointer"
+          >
+            <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M22 16.5L14 11.5V6.5C14 5.67 13.33 5 12.5 5C11.67 5 11 5.67 11 6.5V11.5L3 16.5V18.5L11 16V20.5L8.5 22V23.5L12.5 22.5L16.5 23.5V22L14 20.5V16L22 18.5V16.5Z"/></svg>
+            Flights
+          </button>
+          <button 
+            className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-white text-gray-900 text-sm font-bold shadow-md cursor-default"
+          >
+            <svg className="w-5 h-5 text-amber-500" fill="currentColor" viewBox="0 0 24 24"><path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/></svg>
+            Deals
+          </button>
+        </div>
+      </div>
+
+      <div className="max-w-6xl mx-auto py-12 px-4 -mt-10 relative z-20">
+        <div className="mb-10 bg-white rounded-3xl p-8 shadow-sm border border-gray-100">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Deals for top destinations</h1>
           <p className="text-gray-500">Find the best offers on flights, hotels, and packages to your favorite destinations.</p>
         </div>
