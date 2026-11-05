@@ -142,7 +142,8 @@ function ReportTable({ def, rows, search, hiddenColumns, toggleColumn, loading }
     return out.filter((row) =>
       def.columns.some((col) => {
         const v = formatCell(row, col.key);
-        return String(v).toLowerCase().includes(q);
+        const s = String(v).toLowerCase();
+        return s.includes(q) || s.replace(/[$,]/g, '').includes(q);
       })
     );
   }, [rows, search, def.columns, filterCol, filterVal]);

@@ -48,6 +48,9 @@ export default function App() {
   const closeSignIn = () => {
     setShowSignIn(false);
     refreshAuth();
+    const role = sessionStorage.getItem('role');
+    if (role === 'Supervisor') setCurrentPage('admin');
+    else if (role === 'Employee') setCurrentPage('employee');
   };
 
   const handleLogout = () => {

@@ -143,42 +143,12 @@ export default function PaymentConfirmationPage({
           <div className="w-full lg:w-96 flex flex-col gap-6">
             <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-6">Price Details</h3>
-              <div className="space-y-4 text-sm mb-6">
-                <div className="flex justify-between text-gray-600"><span>Base Fare</span><span className="font-semibold text-gray-900">${(details.totalAmount * 0.9).toFixed(2)}</span></div>
-                <div className="flex justify-between text-gray-600"><span>Discount</span><span className="font-semibold text-green-600">- $54.00</span></div>
-                <div className="flex justify-between text-gray-600"><span>Taxes</span><span className="font-semibold text-gray-900">$20.00</span></div>
-                <div className="flex justify-between text-gray-600"><span>Service Fee</span><span className="font-semibold text-gray-900">$24.00</span></div>
-              </div>
               <div className="border-t border-dashed border-gray-200 pt-4 flex justify-between font-bold text-lg">
                 <span>Total Price</span>
                 <span>${details.totalAmount.toFixed(2)}</span>
               </div>
             </div>
 
-            <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-bold text-gray-900">Promo Code</h3>
-                <button className="text-sm text-blue-600 font-semibold hover:underline">View all</button>
-              </div>
-              <div className="flex gap-2">
-                <input type="text" placeholder="Enter promo code here" className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm outline-none focus:border-blue-500" />
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-3xl border border-blue-100 p-6 relative overflow-hidden">
-              <div className="absolute -top-4 -left-4 bg-red-500 text-white text-xs font-bold px-4 py-1 rounded-full transform -rotate-12 shadow-sm z-10">Exclusive Deal</div>
-              <h3 className="text-lg font-bold text-gray-900 mb-4 mt-2">Book A Flight & Get</h3>
-              <ul className="space-y-3 text-sm text-gray-700">
-                <li className="flex items-start gap-2">
-                  <svg className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"/></svg>
-                  <span><strong className="text-blue-600">Exclusive Rates</strong> on Select Properties in Toronto</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <svg className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"/></svg>
-                  <span>Extra 10% off using code <strong className="text-blue-600">BOOKSTAYS</strong></span>
-                </li>
-              </ul>
-            </div>
           </div>
         </div>
       </div>

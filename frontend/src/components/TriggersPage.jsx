@@ -3,29 +3,74 @@ import Logo from './Logo';
 
 const TRIGGERS = [
   {
-    name: 'trg_segment_book_decrement_inventory',
+    name: 'trg_segment_inventory_insert',
     table: 'ReservationSegment',
+    timing: 'BEFORE INSERT (segment status = Booked)',
+    effect: 'Directional: seats decrease on booking (visible as seats-left dropping). Also blocks booking a segment with no passengers, a fare that does not match the flight, or when not enough seats are left.',
+    howToActivate: 'Book a flight in the app. The trigger decrements the fare available inventory by the number of passengers, and blocks the booking if there are no passengers, the fare does not match the flight, or seats are sold out.',
+    type: 'App-Visible Event',
+    badgeColor: 'bg-green-50 text-green-700 border-green-200',
+  },
+  {
+    name: 'trg_segment_inventory_update',
+    table: 'ReservationSegment',
+    timing: 'BEFORE UPDATE',
+    effect: 'Directional: seats return on cancel or change (visible as seats-left returning). Also blocks moving a segment to another reservation, changing a flown segment, or marking a cancelled segment as flown.',
+    howToActivate: 'Cancel or modify a booking in My Trips. The trigger restores inventory for the old fare and reserves it on the new one.',
+    type: 'App-Visible Event',
+    badgeColor: 'bg-green-50 text-green-700 border-green-200',
+  },
+  {
+    name: 'trg_segment_release_seats',
+    table: 'ReservationSegment',
+    timing: 'AFTER UPDATE (segment status -> Cancelled/Changed)',
+    effect: 'Directional: frees the assigned seat on cancel (visible as the seat becoming available again)',
+    howToActivate: 'Cancel a booking in My Trips. The trigger sets the seat assignment active_seat to NULL, releasing the seat.',
+    type: 'App-Visible Event',
+    badgeColor: 'bg-green-50 text-green-700 border-green-200',
+  },
+  {
+    name: 'trg_segment_inventory_delete',
+    table: 'ReservationSegment',
+    timing: 'BEFORE DELETE',
+    effect: 'Restores inventory when a booked segment is deleted (seats return to the fare available inventory, with a capacity check).',
+    howToActivate: 'Deleting a booked segment restores its seats to the fare available inventory.',
+    type: 'Database Guard',
+    badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
+  },
+  {
+    name: 'trg_passenger_inventory_insert',
+    table: 'ReservationPassenger',
     timing: 'BEFORE INSERT',
-    effect: 'Directional: seats decrease on booking (visible as seats-left dropping)',
-    howToActivate: 'Book a flight in the app. The trigger immediately decrements the availableInventory of the booked fare class.',
-    type: 'App-Visible Event',
-    badgeColor: 'bg-green-50 text-green-700 border-green-200',
+    effect: 'Order guard: passengers must be added before flight segments are booked. Blocks adding a passenger after segments already exist.',
+    howToActivate: 'Adding a passenger to a reservation that already has booked flight segments is blocked.',
+    type: 'Database Guard',
+    badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
   },
   {
-    name: 'trg_segment_cancel_restore_inventory',
-    table: 'ReservationSegment',
-    timing: 'AFTER UPDATE (segment status -> Cancelled)',
-    effect: 'Directional: seats return on cancel (visible as seats-left returning)',
-    howToActivate: 'Cancel a booking in My Trips. The trigger immediately restores availableInventory for all associated segments.',
-    type: 'App-Visible Event',
-    badgeColor: 'bg-green-50 text-green-700 border-green-200',
+    name: 'trg_passenger_inventory_update',
+    table: 'ReservationPassenger',
+    timing: 'BEFORE UPDATE',
+    effect: 'Order guard: blocks moving a passenger to another reservation once segments are booked.',
+    howToActivate: 'Moving a passenger between reservations after segments are booked is blocked.',
+    type: 'Database Guard',
+    badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
   },
   {
-    name: 'trg_segment_change_restore_inventory',
-    table: 'ReservationSegment',
-    timing: 'AFTER UPDATE (segment status -> Changed)',
-    effect: 'Itinerary lifecycle validation: synchronizes reservation status on segment transition',
-    howToActivate: 'Changing a segment from Booked to Changed fires the change trigger to update itinerary tracking.',
+    name: 'trg_passenger_inventory_delete',
+    table: 'ReservationPassenger',
+    timing: 'BEFORE DELETE',
+    effect: 'Order guard: blocks deleting a passenger while the reservation still has flight segments.',
+    howToActivate: 'Deleting a passenger from a reservation that still has flight segments is blocked - remove the segments first.',
+    type: 'Database Guard',
+    badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
+  },
+  {
+    name: 'trg_reservation_cancel_check',
+    table: 'Reservation',
+    timing: 'BEFORE UPDATE (reservation status -> Cancelled)',
+    effect: 'Order guard: blocks cancelling a reservation while it still has booked segments. Segments must be cancelled first.',
+    howToActivate: 'Cancelling a reservation with booked segments is blocked - cancel the flight segments first, then the reservation.',
     type: 'Database Guard',
     badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
   },
@@ -42,8 +87,8 @@ const TRIGGERS = [
     name: 'trg_ticket_issue_check',
     table: 'Ticket',
     timing: 'BEFORE INSERT',
-    effect: 'Integrity guard: prevents ticket generation without verified payment, for invalid passengers, or duplicate tickets',
-    howToActivate: 'Attempting a Ticket insert without a successful payment, for a passenger not on the reservation, or duplicating a ticket is blocked by the ticket trigger.',
+    effect: 'Integrity guard: prevents ticket generation without verified payment, for invalid passengers, duplicate tickets, or a wrong total (total must equal fare plus tax).',
+    howToActivate: 'Attempting a Ticket insert without a successful payment, for a passenger not on the reservation, a duplicate ticket, or a mismatched total is blocked by the ticket trigger.',
     type: 'Database Guard',
     badgeColor: 'bg-amber-50 text-amber-700 border-amber-200',
   },
@@ -53,6 +98,24 @@ const TRIGGERS = [
     timing: 'BEFORE INSERT',
     effect: 'Aircraft consistency guard: guarantees assigned seat belongs to the flight\'s configured aircraft',
     howToActivate: 'Attempting a SeatAssignment whose seat belongs to a different aircraft is blocked by the seat trigger.',
+    type: 'Database Guard',
+    badgeColor: 'bg-amber-50 text-amber-700 border-amber-200',
+  },
+  {
+    name: 'trg_seat_assignment_validate_insert',
+    table: 'SeatAssignment',
+    timing: 'BEFORE INSERT',
+    effect: 'Validity guard: the passenger must belong to the reservation, and an active seat requires a booked segment.',
+    howToActivate: 'Assigning a seat to a passenger who is not on the reservation, or activating a seat on a segment that is not booked, is blocked.',
+    type: 'Database Guard',
+    badgeColor: 'bg-amber-50 text-amber-700 border-amber-200',
+  },
+  {
+    name: 'trg_seat_assignment_validate_update',
+    table: 'SeatAssignment',
+    timing: 'BEFORE UPDATE',
+    effect: 'Validity guard: same checks as insert, plus the seat\'s aircraft must match the flight\'s aircraft when the seat is changed or reactivated.',
+    howToActivate: 'Changing a seat assignment to a passenger not on the reservation, activating a seat on an unbooked segment, or moving a seat to a different aircraft is blocked.',
     type: 'Database Guard',
     badgeColor: 'bg-amber-50 text-amber-700 border-amber-200',
   },
@@ -147,7 +210,7 @@ export default function TriggersPage({ token, email, role, onBackToHome, onMyTri
                 <span>ℹ</span> Operational Behavior Notice
               </h3>
               <p className="text-sm leading-relaxed">
-                The booking and cancel triggers fire visibly in the app on every book and cancel, while the refund, ticket, and seat triggers are database guards demonstrated by blocked attempts, since the current UI has no refund, ticket-issue, or seat-picker actions.
+                The segment inventory triggers fire visibly in the app on every book and cancel (seats-left drops on booking and returns on cancelling), and the seat-release trigger frees the seat. The passenger, reservation, refund, ticket, and seat-validation triggers are database guards demonstrated by blocked attempts, since the current UI has no refund, ticket-issue, or seat-picker actions.
               </p>
             </div>
 
@@ -155,7 +218,7 @@ export default function TriggersPage({ token, email, role, onBackToHome, onMyTri
             <div className="bg-white rounded-3xl shadow-[0_4px_20px_rgb(0,0,0,0.05)] border border-gray-200 overflow-hidden mb-10">
               <div className="px-6 py-5 border-b border-gray-100 bg-gray-50/60">
                 <h2 className="text-lg font-bold text-gray-900">Trigger Specifications Table</h2>
-                <p className="text-xs text-gray-500 mt-0.5">6 Database triggers implemented across system tables</p>
+                <p className="text-xs text-gray-500 mt-0.5">13 Database triggers implemented across system tables</p>
               </div>
 
               <div className="overflow-x-auto">
