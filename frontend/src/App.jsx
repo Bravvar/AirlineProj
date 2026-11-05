@@ -257,8 +257,10 @@ export default function App() {
   // Home Page Layout
   return (
     <div className="min-h-screen bg-white font-sans p-4">
-      <div className="relative h-[calc(100vh-2rem)] min-h-[700px] flex flex-col rounded-[2.5rem] overflow-hidden shadow-2xl">
-        <div className="absolute inset-0 pointer-events-none z-0">
+      <div className="relative min-h-[calc(100vh-2rem)] pb-12 flex flex-col">
+        
+        {/* Background Layer */}
+        <div className="absolute inset-0 rounded-[2.5rem] overflow-hidden shadow-2xl pointer-events-none z-0">
           <div
             className="w-full h-full bg-cover bg-center transition-all duration-1000 ease-in-out"
             style={{ backgroundImage: `url(${currentBg.src})` }}
@@ -267,7 +269,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Custom Top Bar matching the screenshot */}
+        {/* Custom Top Bar */}
         <header className="relative z-30 flex justify-between items-center px-8 py-6 w-full">
           <div className="cursor-pointer flex items-center gap-2" onClick={() => goHome()}>
             <Logo light={true} />
@@ -300,7 +302,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="relative z-30 flex-grow flex flex-col justify-center items-center px-4 w-full mt-[-40px]">
+        <div className="relative z-30 flex-grow flex flex-col justify-start items-center px-4 w-full mt-4">
           <HeroSearch
             activeTab={activeTab}
             setActiveTab={handleTabChange}
@@ -310,17 +312,6 @@ export default function App() {
               setCurrentPage('payment-success');
             }}
           />
-        </div>
-
-        <div className="relative z-10 flex justify-end px-10 pb-10 pointer-events-none">
-          <div className="flex items-center">
-            <span
-              key={currentBg.name}
-              className="text-white font-bold text-lg drop-shadow-lg tracking-wide animate-in fade-in zoom-in-95 duration-500"
-            >
-              {currentBg.name}
-            </span>
-          </div>
         </div>
       </div>
 

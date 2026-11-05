@@ -387,6 +387,18 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         const rows = Array.isArray(data) ? data : [];
         setResults(rows);
 
+        // FIX: Automatically fetch fares for all returned flights
+        if (rows.length > 0) {
+          const faresPromises = rows.map((flight) => fetch(`${API_URL}/api/flights/${flight.flightId}/fares`).then(r => r.json()).catch(() => []));
+          const faresResults = await Promise.all(faresPromises);
+          
+          const newFaresByFlight = {};
+          rows.forEach((flight, index) => {
+            newFaresByFlight[flight.flightId] = Array.isArray(faresResults[index]) ? faresResults[index] : [];
+          });
+          setFaresByFlight(newFaresByFlight);
+        }
+
         if (rows.length > 0 && params.has('date')) {
           const iso = params.get('date');
           const exact = rows.some((f) => String(f.departureDate).slice(0, 10) === iso);
@@ -427,7 +439,22 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     try {
       const res = await fetch(`${API_URL}/api/flights?${params.toString()}`);
       const data = await res.json();
-      setReturnResults(Array.isArray(data) ? data : []);
+      const rows = Array.isArray(data) ? data : [];
+      setReturnResults(rows);
+
+      // FIX: Automatically fetch fares for all return flights
+      if (rows.length > 0) {
+        const faresPromises = rows.map((flight) => fetch(`${API_URL}/api/flights/${flight.flightId}/fares`).then(r => r.json()).catch(() => []));
+        const faresResults = await Promise.all(faresPromises);
+        
+        setFaresByFlight(prev => {
+          const newFares = { ...prev };
+          rows.forEach((flight, index) => {
+            newFares[flight.flightId] = Array.isArray(faresResults[index]) ? faresResults[index] : [];
+          });
+          return newFares;
+        });
+      }
     } catch {
       setReturnResults([]);
     }
@@ -544,7 +571,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   };
 
   return (
-    <div className="relative z-50 w-full max-w-5xl mx-auto flex flex-col items-center mt-4">
+    <div className="relative z-[60] w-full max-w-5xl mx-auto flex flex-col items-center mt-4">
 
       <div className="mb-5">
         <TabToggle activeTab={currentTab} setActiveTab={setActiveTab} isDarkBackground={true} />
@@ -674,7 +701,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         </div>
 
         {currentTab === 'flights' && showCalendar && (
-          <div ref={calendarRef} className="absolute top-full mt-2 left-0 w-full max-w-3xl bg-white rounded-3xl shadow-2xl p-6 z-50 text-gray-800 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div ref={calendarRef} className="absolute top-full mt-2 left-0 w-full max-w-3xl bg-white rounded-3xl shadow-2xl p-6 z-[100] text-gray-800 animate-in fade-in slide-in-from-top-2 duration-200">
             <div className="flex justify-between items-center mb-4 px-2">
               <button
                 onClick={() => setMonthOffset(monthOffset - 1)}
@@ -711,7 +738,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         )}
 
         {currentTab === 'flights' && showTravelers && (
-          <div ref={travelersRef} className="absolute top-full mt-2 right-0 w-[340px] bg-white rounded-3xl shadow-2xl p-6 z-50 text-gray-800 animate-in fade-in slide-in-from-top-2 duration-200 border border-gray-100">
+          <div ref={travelersRef} className="absolute top-full mt-2 right-0 w-[340px] bg-white rounded-3xl shadow-2xl p-6 z-[100] text-gray-800 animate-in fade-in slide-in-from-top-2 duration-200 border border-gray-100">
             <div className="flex flex-col gap-5">
               {[
                 { id: 'adults', label: 'Adults', sub: 'Age 12+' },
