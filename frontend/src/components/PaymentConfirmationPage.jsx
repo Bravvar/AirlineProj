@@ -14,6 +14,15 @@ export default function PaymentConfirmationPage({
 
   if (!details) return null;
 
+  const AIRLINES = {
+    LA: 'LATAM Airlines', AI: 'Air India', NZ: 'Air New Zealand',
+    QF: 'Qantas', AZ: 'ITA Airways', JL: 'Japan Airlines',
+    AA: 'American Airlines', UA: 'United Airlines', DL: 'Delta Air Lines',
+    JB: 'JetBlue', WN: 'Southwest Airlines',
+  };
+  const airlineCode = (details.flightNumber || '').slice(0, 2).toUpperCase();
+  const airlineName = AIRLINES[airlineCode] || 'Airline';
+
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 pb-20">
       
@@ -62,15 +71,14 @@ export default function PaymentConfirmationPage({
 
             <div className="flex items-center justify-between mb-8">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 font-bold">UA</div>
+                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 font-bold">{airlineCode || '--'}</div>
                 <div>
-                  <p className="font-bold text-gray-900">{details.airline || 'United Airlines'}</p>
+                  <p className="font-bold text-gray-900">{airlineName}</p>
                   <p className="text-xs text-gray-500">{details.flightNumber}</p>
                 </div>
               </div>
               <div className="text-center">
-                <p className="font-bold text-gray-900">{details.duration || '15h 22m'}</p>
-                <p className="text-xs text-gray-500">{details.stops || '1 Stop via Network'}</p>
+                <p className="font-bold text-gray-900">{details.stops || 'Non-stop'}</p>
               </div>
               <div>
                 <span className="px-3 py-1 rounded-md border border-blue-600 text-blue-600 text-xs font-bold block text-center">View Fare Rules</span>
@@ -84,8 +92,8 @@ export default function PaymentConfirmationPage({
             <div className="flex items-center justify-between mb-8">
               <div className="text-center">
                 <p className="text-sm text-gray-500 font-semibold mb-1">Start Journey</p>
-                <p className="text-lg font-bold text-gray-900">{details.departureTime || '05:55 AM'}</p>
-                <p className="text-xs text-gray-500">| {details.origin || 'Maine'}</p>
+                <p className="text-lg font-bold text-gray-900">{details.departureTime || ''}</p>
+                <p className="text-xs text-gray-500">| {details.origin || ''}</p>
               </div>
               <div className="flex-1 flex flex-col items-center px-4">
                 <div className="w-full flex items-center gap-2">
@@ -98,8 +106,8 @@ export default function PaymentConfirmationPage({
               </div>
               <div className="text-center">
                 <p className="text-sm text-gray-500 font-semibold mb-1">End Journey</p>
-                <p className="text-lg font-bold text-gray-900">{details.arrivalTime || '06:20 PM'}</p>
-                <p className="text-xs text-gray-500">| {details.destination || 'Canada'}</p>
+                <p className="text-lg font-bold text-gray-900">{details.arrivalTime || ''}</p>
+                <p className="text-xs text-gray-500">| {details.destination || ''}</p>
               </div>
             </div>
 
@@ -107,18 +115,13 @@ export default function PaymentConfirmationPage({
               <div className="relative border-l-2 border-dashed border-gray-300 ml-4 pl-6 space-y-8">
                 <div className="relative">
                   <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-blue-600 border-4 border-gray-50"></div>
-                  <p className="text-lg font-bold text-gray-900">05:55 AM <span className="text-sm font-medium text-gray-600 ml-2">Maine</span></p>
-                  <p className="text-sm text-gray-500">8h 15m</p>
+                  <p className="text-lg font-bold text-gray-900">{details.departureTime || ''} <span className="text-sm font-medium text-gray-600 ml-2">{details.origin || ''}</span></p>
+                  <p className="text-sm text-gray-500">Departure</p>
                 </div>
                 <div className="relative">
                   <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-gray-300 border-4 border-gray-50"></div>
-                  <p className="text-lg font-bold text-gray-900">01:10 PM <span className="text-sm font-medium text-gray-600 ml-2">Kingstone</span></p>
-                  <p className="text-sm text-gray-500">45m | 1 Stop</p>
-                </div>
-                <div className="relative">
-                  <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-gray-300 border-4 border-gray-50"></div>
-                  <p className="text-lg font-bold text-gray-900">06:20 PM <span className="text-sm font-medium text-gray-600 ml-2">Canada</span></p>
-                  <p className="text-sm text-gray-500">6h 22m</p>
+                  <p className="text-lg font-bold text-gray-900">{details.arrivalTime || ''} <span className="text-sm font-medium text-gray-600 ml-2">{details.destination || ''}</span></p>
+                  <p className="text-sm text-gray-500">Arrival · Non-stop</p>
                 </div>
               </div>
               
@@ -136,7 +139,7 @@ export default function PaymentConfirmationPage({
 
             <div className="bg-red-50 text-red-600 text-sm p-4 rounded-xl flex items-center gap-2 border border-red-100">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-              Check-in baggage is not included for PQI-YYZ. You can buy extra baggage from the airline counter.
+              Check-in baggage is not included for {details.origin}-{details.destination}. You can buy extra baggage from the airline counter.
             </div>
           </div>
 
