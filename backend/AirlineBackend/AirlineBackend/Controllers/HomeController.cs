@@ -113,13 +113,20 @@ public class HomeController : ControllerBase
         _context.UserAccount.Add(data);
         await _context.SaveChangesAsync();
 
-        if (createdPassenger != null && _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) FROM MembershipAccount WHERE passenger_id = {0}", createdPassenger.PassengerId).FirstOrDefault() == 0)
+        try
         {
-            var newMemberId = "MEM-" + (100000 + createdPassenger.PassengerId).ToString();
-            await _context.Database.ExecuteSqlRawAsync("INSERT INTO MembershipAccount (passenger_id, membership_number, enrollment_date, points_balance, membership_status) VALUES ({0}, {1}, {2}, {3}, {4})", createdPassenger.PassengerId, newMemberId, DateTime.Today, 0, "Active");
+            if (createdPassenger != null && _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM MembershipAccount WHERE passenger_id = {0}", createdPassenger.PassengerId).FirstOrDefault() == 0)
+            {
+                var newMemberId = "MEM-" + (100000 + createdPassenger.PassengerId).ToString();
+                await _context.Database.ExecuteSqlRawAsync("INSERT INTO MembershipAccount (passenger_id, membership_number, enrollment_date, points_balance, membership_status) VALUES ({0}, {1}, {2}, {3}, {4})", createdPassenger.PassengerId, newMemberId, DateTime.Today, 0, "Active");
+            }
+        }
+        catch
+        {
         }
 
-        return Ok("Account created");
+        var tokenString = GenerateJSONWebToken(data);
+        return Ok(new { token = tokenString, role = data.Role, email = data.Email });
     }
 
     [HttpGet("auth/me")]
@@ -234,6 +241,14 @@ public class HomeController : ControllerBase
     }
 
     [AllowAnonymous]
+    [HttpGet("routes")]
+    public IActionResult Routes()
+    {
+        var data = _context.Database.SqlQueryRaw<RouteRow>(@"SELECT DISTINCT origin_airport_code AS Origin, destination_airport_code AS Destination FROM Flight WHERE flight_status <> 'Cancelled' ORDER BY origin_airport_code, destination_airport_code").ToList();
+        return Ok(data);
+    }
+
+    [AllowAnonymous]
     [HttpGet("deals")]
     public IActionResult Deals()
     {
@@ -250,8 +265,9 @@ public class HomeController : ControllerBase
             JOIN CabinClass cc ON cc.cabin_class_id = ff.cabin_class_id
             JOIN FareClass fc ON fc.fare_class_id = ff.fare_class_id
             WHERE ff.available_inventory > 0 AND f.flight_status <> 'Cancelled' AND f.departure_date >= CURDATE()
-            ORDER BY ff.current_price LIMIT 12").ToList();
-        return Ok(data);
+            ORDER BY ff.current_price").ToList();
+        var deals = data.GroupBy(d => d.Destination).Select(g => g.OrderBy(d => d.CurrentPrice).First()).OrderBy(d => d.CurrentPrice).Take(12).ToList();
+        return Ok(deals);
     }
 
     [HttpGet("reservations/mine")]
@@ -426,7 +442,7 @@ public class HomeController : ControllerBase
                     return BadRequest("Seat is not on this flight.");
                 }
 
-                var taken = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) FROM SeatAssignment WHERE flight_id = {0} AND seat_id = {1} AND active_seat = 1", fare.FlightId, selectedSeatId).FirstOrDefault() > 0;
+                var taken = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM SeatAssignment WHERE flight_id = {0} AND seat_id = {1} AND active_seat = 1", fare.FlightId, selectedSeatId).FirstOrDefault() > 0;
                 if (taken) { await transaction.RollbackAsync(); return BadRequest("That seat was just taken."); }
 
                 await _context.Database.ExecuteSqlRawAsync(
@@ -632,9 +648,9 @@ public class HomeController : ControllerBase
         if (add.origin == add.destination) return BadRequest("Origin and destination must differ");
         if (add.arrival <= add.departure) return BadRequest("Arrival must be after departure");
 
-        if (_context.Database.SqlQueryRaw<long>("SELECT COUNT(*) FROM Airport WHERE airport_code = {0}", add.origin).FirstOrDefault() == 0) return BadRequest("Unknown origin airport");
-        if (_context.Database.SqlQueryRaw<long>("SELECT COUNT(*) FROM Airport WHERE airport_code = {0}", add.destination).FirstOrDefault() == 0) return BadRequest("Unknown destination airport");
-        if (_context.Database.SqlQueryRaw<long>("SELECT COUNT(*) FROM Aircraft WHERE aircraft_id = {0}", add.aircraftId).FirstOrDefault() == 0) return BadRequest("Unknown aircraft");
+        if (_context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM Airport WHERE airport_code = {0}", add.origin).FirstOrDefault() == 0) return BadRequest("Unknown origin airport");
+        if (_context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM Airport WHERE airport_code = {0}", add.destination).FirstOrDefault() == 0) return BadRequest("Unknown destination airport");
+        if (_context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM Aircraft WHERE aircraft_id = {0}", add.aircraftId).FirstOrDefault() == 0) return BadRequest("Unknown aircraft");
 
         var flight = new Flight
         {
@@ -672,8 +688,8 @@ public class HomeController : ControllerBase
 
         if (!_context.Flight.Any(f => f.FlightId == id)) return NotFound("No flight like that");
         if (add.price < 0 || add.allocatedCapacity <= 0) return BadRequest("Price and capacity must be positive");
-        if (_context.Database.SqlQueryRaw<long>("SELECT COUNT(*) FROM CabinClass WHERE cabin_class_id = {0}", add.cabinClassId).FirstOrDefault() == 0) return BadRequest("Unknown cabin class");
-        if (_context.Database.SqlQueryRaw<long>("SELECT COUNT(*) FROM FareClass WHERE fare_class_id = {0}", add.fareClassId).FirstOrDefault() == 0) return BadRequest("Unknown fare class");
+        if (_context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM CabinClass WHERE cabin_class_id = {0}", add.cabinClassId).FirstOrDefault() == 0) return BadRequest("Unknown cabin class");
+        if (_context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM FareClass WHERE fare_class_id = {0}", add.fareClassId).FirstOrDefault() == 0) return BadRequest("Unknown fare class");
 
         var fare = new FlightFare
         {
@@ -732,10 +748,10 @@ public class HomeController : ControllerBase
         if (role != "Employee" && role != "Supervisor") return StatusCode(403, "Staff only");
         if (string.IsNullOrEmpty(confirmation))
         {
-            var all = _context.Database.SqlQueryRaw<StaffReservationRow>(@"SELECT r.reservation_id AS ReservationId, r.confirmation_number AS ConfirmationNumber, (SELECT COUNT(*) FROM ReservationPassenger rp WHERE rp.reservation_id = r.reservation_id) AS PassengerCount, r.trip_type AS TripType, r.reservation_status AS ReservationStatus FROM Reservation r ORDER BY r.reservation_id DESC").ToList();
+            var all = _context.Database.SqlQueryRaw<StaffReservationRow>(@"SELECT r.reservation_id AS ReservationId, r.confirmation_number AS ConfirmationNumber, (SELECT COUNT(*) AS Value FROM ReservationPassenger rp WHERE rp.reservation_id = r.reservation_id) AS PassengerCount, r.trip_type AS TripType, r.reservation_status AS ReservationStatus FROM Reservation r ORDER BY r.reservation_id DESC").ToList();
             return Ok(all);
         }
-        var filtered = _context.Database.SqlQueryRaw<StaffReservationRow>(@"SELECT r.reservation_id AS ReservationId, r.confirmation_number AS ConfirmationNumber, (SELECT COUNT(*) FROM ReservationPassenger rp WHERE rp.reservation_id = r.reservation_id) AS PassengerCount, r.trip_type AS TripType, r.reservation_status AS ReservationStatus FROM Reservation r WHERE r.confirmation_number LIKE {0} ORDER BY r.reservation_id DESC", "%" + confirmation + "%").ToList();
+        var filtered = _context.Database.SqlQueryRaw<StaffReservationRow>(@"SELECT r.reservation_id AS ReservationId, r.confirmation_number AS ConfirmationNumber, (SELECT COUNT(*) AS Value FROM ReservationPassenger rp WHERE rp.reservation_id = r.reservation_id) AS PassengerCount, r.trip_type AS TripType, r.reservation_status AS ReservationStatus FROM Reservation r WHERE r.confirmation_number LIKE {0} ORDER BY r.reservation_id DESC", "%" + confirmation + "%").ToList();
         return Ok(filtered);
     }
 
@@ -754,15 +770,15 @@ public class HomeController : ControllerBase
     {
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (role != "Supervisor") return StatusCode(403, "Supervisors only");
-        var totalUsers = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) FROM UserAccount").FirstOrDefault();
-        var totalFlights = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) FROM Flight").FirstOrDefault();
-        var reservations = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) FROM Reservation").FirstOrDefault();
-        var confirmedReservations = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) FROM Reservation WHERE reservation_status = 'Confirmed'").FirstOrDefault();
-        var delayedFlights = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) FROM Flight WHERE flight_status = 'Delayed'").FirstOrDefault();
-        var cancelledFlights = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) FROM Flight WHERE flight_status = 'Cancelled'").FirstOrDefault();
-        var inventoryIssues = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) FROM FlightFare WHERE available_inventory <= 0").FirstOrDefault();
-        var payments = _context.Database.SqlQueryRaw<decimal>("SELECT COALESCE(SUM(amount), 0) FROM Payment WHERE payment_status = 'Successful' AND transaction_type = 'Payment'").FirstOrDefault();
-        var refunds = _context.Database.SqlQueryRaw<decimal>("SELECT COALESCE(SUM(amount), 0) FROM Payment WHERE payment_status = 'Successful' AND transaction_type = 'Refund'").FirstOrDefault();
+        var totalUsers = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM UserAccount").FirstOrDefault();
+        var totalFlights = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM Flight").FirstOrDefault();
+        var reservations = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM Reservation").FirstOrDefault();
+        var confirmedReservations = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM Reservation WHERE reservation_status = 'Confirmed'").FirstOrDefault();
+        var delayedFlights = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM Flight WHERE flight_status = 'Delayed'").FirstOrDefault();
+        var cancelledFlights = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM Flight WHERE flight_status = 'Cancelled'").FirstOrDefault();
+        var inventoryIssues = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM FlightFare WHERE available_inventory <= 0").FirstOrDefault();
+        var payments = _context.Database.SqlQueryRaw<decimal>("SELECT COALESCE(SUM(amount), 0) AS Value FROM Payment WHERE payment_status = 'Successful' AND transaction_type = 'Payment'").FirstOrDefault();
+        var refunds = _context.Database.SqlQueryRaw<decimal>("SELECT COALESCE(SUM(amount), 0) AS Value FROM Payment WHERE payment_status = 'Successful' AND transaction_type = 'Refund'").FirstOrDefault();
         return Ok(new { totalUsers = totalUsers, totalRevenue = payments - refunds, totalFlights = totalFlights, reservations = reservations, confirmedReservations = confirmedReservations, delayedFlights = delayedFlights, cancelledFlights = cancelledFlights, inventoryIssues = inventoryIssues });
     }
 
@@ -801,6 +817,7 @@ public class Report3Row { public string ConfirmationNumber { get; set; } public 
 public class Report4Row { public string FlightNumber { get; set; } public string CabinName { get; set; } public int FareClassId { get; set; } public int AvailableInventory { get; set; } public int AllocatedCapacity { get; set; } public decimal PctFull { get; set; } }
 public class Report5Row { public string Passenger { get; set; } public string ConfirmationNumber { get; set; } public string ReservationStatus { get; set; } public string TripType { get; set; } public decimal TotalAmount { get; set; } public long Tickets { get; set; } }
 public class Report6Row { public string ConfirmationNumber { get; set; } public string TransactionReference { get; set; } public decimal Amount { get; set; } public string ApprovedBy { get; set; } public string EmployeeRole { get; set; } public DateTime PaymentDateTime { get; set; } }
+public class RouteRow { public string Origin { get; set; } public string Destination { get; set; } }
 public class AirportRow { public string AirportCode { get; set; } public string AirportName { get; set; } public string City { get; set; } public string? StateProvince { get; set; } public string Country { get; set; } }
 public class DealRow { public int FlightId { get; set; } public string FlightNumber { get; set; } public string Origin { get; set; } public string Destination { get; set; } public DateTime DepartureDate { get; set; } public TimeSpan DepartureTime { get; set; } public DateTime ArrivalDate { get; set; } public TimeSpan ArrivalTime { get; set; } public string FlightStatus { get; set; } public string CabinName { get; set; } public string FareClassName { get; set; } public int FlightFareId { get; set; } public decimal CurrentPrice { get; set; } public int AvailableInventory { get; set; } }
 public class FareRow { public int FlightFareId { get; set; } public int FlightId { get; set; } public int CabinClassId { get; set; } public string CabinName { get; set; } public int FareClassId { get; set; } public string FareClassName { get; set; } public bool Refundable { get; set; } public bool ChangesAllowed { get; set; } public decimal ChangeFee { get; set; } public int CheckedBagsIncluded { get; set; } public int CarryOnBagsIncluded { get; set; } public bool SeatSelectionIncluded { get; set; } public decimal BasePrice { get; set; } public decimal CurrentPrice { get; set; } public int AllocatedCapacity { get; set; } public int AvailableInventory { get; set; } }
