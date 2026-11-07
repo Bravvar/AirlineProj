@@ -220,13 +220,8 @@ public class HomeController : ControllerBase
     [HttpGet("flights/{id}/seats")]
     public IActionResult FlightSeats(int id)
     {
-        var occupiedSeats = _context.Database.SqlQueryRaw<string>(@"
-            SELECT s.seat_number 
-            FROM SeatAssignment sa
-            JOIN Seat s ON s.seat_id = sa.seat_id
-            WHERE sa.flight_id = {0} AND sa.active_seat = 1", id).ToList();
-        
-        return Ok(occupiedSeats);
+        var data = _context.Database.SqlQueryRaw<int>("SELECT seat_id FROM SeatAssignment WHERE flight_id = {0} AND active_seat = 1", id).ToList();
+        return Ok(data);
     }
 
     [AllowAnonymous]
@@ -322,6 +317,7 @@ public class HomeController : ControllerBase
         var account = _context.UserAccount.FirstOrDefault(i => i.UserAccountId == int.Parse(userId));
         if (account == null) return BadRequest("Account not found");
 
+
         int passengerId;
         if (account.PassengerId != null)
         {
@@ -372,43 +368,12 @@ public class HomeController : ControllerBase
             if (returnFlight.FlightStatus == "Cancelled") return BadRequest("Return flight is cancelled");
         }
 
-        // Process Seats
-        var requestedSeatStrings = book.seats ?? new List<string>();
-        var validSeatIds = new List<int>();
-        decimal seatFeeTotal = 0;
+        var seatIds = book.seats ?? new List<int>();
 
-        if (requestedSeatStrings.Any())
-        {
-            // 1. Get all seat records for this specific aircraft
-            var aircraftSeats = _context.Seat.Where(s => s.AircraftId == flight.AircraftId).ToList();
-            
-            // 2. Map the requested string names (e.g., "A1") to actual database IDs
-            foreach (var seatStr in requestedSeatStrings)
-            {
-                var seat = aircraftSeats.FirstOrDefault(s => s.SeatNumber == seatStr);
-                if (seat != null)
-                {
-                    validSeatIds.Add(seat.SeatId);
-                }
-            }
 
-            // 3. Check if any requested seats are already taken
-            if (validSeatIds.Any())
-            {
-                var alreadyTaken = _context.Database.SqlQueryRaw<int>(@"
-                    SELECT seat_id 
-                    FROM SeatAssignment 
-                    WHERE flight_id = {0} AND active_seat = 1 AND seat_id IN ({1})", 
-                    flight.FlightId, string.Join(",", validSeatIds)).ToList();
+        int? selectedSeatId = seatIds.Count > 0 ? seatIds[0] : (int?)null;
 
-                if (alreadyTaken.Any())
-                {
-                    return BadRequest("One or more selected seats have just been taken. Please select different seats.");
-                }
-                
-                seatFeeTotal = validSeatIds.Count * 25.00m;
-            }
-        }
+        decimal seatFeeTotal = selectedSeatId.HasValue ? 25 : 0;
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
         try
@@ -427,7 +392,6 @@ public class HomeController : ControllerBase
             _context.Reservation.Add(reservation);
             await _context.SaveChangesAsync();
 
-            // FIXED: Insert Passenger BEFORE Segment so triggers pass
             var passenger = new ReservationPassenger
             {
                 ReservationId = reservation.ReservationId,
@@ -436,9 +400,7 @@ public class HomeController : ControllerBase
                 MealSelection = null
             };
             _context.ReservationPassenger.Add(passenger);
-            await _context.SaveChangesAsync();
 
-            // FIXED: Insert Segment and explicitly SaveChanges so the trigger fires correctly
             var segment = new ReservationSegment
             {
                 ReservationId = reservation.ReservationId,
@@ -467,18 +429,27 @@ public class HomeController : ControllerBase
                 await _context.SaveChangesAsync();
             }
 
-            // FIXED: Assign Seats
-            if (validSeatIds.Any())
+
+            if (selectedSeatId.HasValue)
             {
-                foreach (var sId in validSeatIds)
+                var seatAircraftIds = _context.Database.SqlQueryRaw<int>("SELECT aircraft_id FROM Seat WHERE seat_id = {0}", selectedSeatId).ToList();
+                if (seatAircraftIds.Count == 0) { await transaction.RollbackAsync(); return BadRequest("Seat does not exist."); }
+
+
+                if (seatAircraftIds[0] != flight.AircraftId)
                 {
-                    await _context.Database.ExecuteSqlRawAsync(
-                        "INSERT INTO SeatAssignment (reservation_segment_id, reservation_passenger_id, seat_id, flight_id, assignment_date_time, seat_fee, active_seat) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, 1)",
-                        segment.ReservationSegmentId, passenger.ReservationPassengerId, sId, fare.FlightId, DateTime.Now, 25);
+                    await transaction.RollbackAsync();
+                    return BadRequest("Seat is not on this flight.");
                 }
+
+                var taken = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM SeatAssignment WHERE flight_id = {0} AND seat_id = {1} AND active_seat = 1", fare.FlightId, selectedSeatId).FirstOrDefault() > 0;
+                if (taken) { await transaction.RollbackAsync(); return BadRequest("That seat was just taken."); }
+
+                await _context.Database.ExecuteSqlRawAsync(
+                    "INSERT INTO SeatAssignment (reservation_segment_id, reservation_passenger_id, seat_id, flight_id, assignment_date_time, seat_fee, active_seat) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, 1)",
+                    segment.ReservationSegmentId, passenger.ReservationPassengerId, selectedSeatId, fare.FlightId, DateTime.Now, 25);
             }
 
-            // FIXED: Add Payment
             var paymentReference = "PAY" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper();
             await _context.Database.ExecuteSqlRawAsync(
                 "INSERT INTO Payment (reservation_id, employee_id, payment_date_time, amount, payment_method, payment_status, transaction_reference, transaction_type) VALUES ({0}, NULL, {1}, {2}, 'Card (demo)', 'Successful', {3}, 'Payment')",
@@ -486,32 +457,11 @@ public class HomeController : ControllerBase
 
             await transaction.CommitAsync();
 
-            // Return full details for the Payment Confirmation page
-            return Ok(new { 
-                reservationId = reservation.ReservationId, 
-                confirmationNumber = reservation.ConfirmationNumber, 
-                reservationStatus = reservation.ReservationStatus, 
-                totalAmount = reservation.TotalAmount,
-                flightNumber = flight.FlightNumber,
-                origin = flight.OriginAirportCode,
-                destination = flight.DestinationAirportCode,
-                departureTime = flight.DepartureTime.ToString(@"hh\:mm"),
-                arrivalTime = flight.ArrivalTime.ToString(@"hh\:mm")
-            });
+            return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount });
         }
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
-            
-            // Extract specific trigger errors to show the user exactly what went wrong
-            var innerMsg = ex.InnerException?.Message ?? "";
-            if (innerMsg.Contains("Cannot book a segment without passengers"))
-                return BadRequest("Booking failed: Passenger must be added before the segment.");
-            if (innerMsg.Contains("Add passengers before booking flight segments"))
-                return BadRequest("Booking failed: You cannot add passengers after the flight segment is booked.");
-            if (innerMsg.Contains("Seat does not belong to the aircraft"))
-                return BadRequest("Booking failed: The selected seat does not belong to this aircraft.");
-                
             return StatusCode(500, "Internal Server Error: " + ex.Message);
         }
     }
@@ -539,6 +489,7 @@ public class HomeController : ControllerBase
         await using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {
+
             foreach (var segment in segments)
             {
                 if (segment.SegmentStatus != "Cancelled")
@@ -549,6 +500,7 @@ public class HomeController : ControllerBase
                 }
             }
             await _context.SaveChangesAsync();
+
 
             reservation.ReservationStatus = "Cancelled";
             await _context.SaveChangesAsync();
@@ -587,8 +539,10 @@ public class HomeController : ControllerBase
 
         if (reservation.ReservationStatus == "Cancelled") return BadRequest("Cannot modify a cancelled booking");
 
+
         if (mod.additionalCheckedBags != null && (mod.additionalCheckedBags < 0 || mod.additionalCheckedBags > 5))
             return BadRequest("Extra checked bags must be between 0 and 5");
+
 
         if (mod.phone != null && mod.phone.Any(char.IsLetter))
             return BadRequest("Phone number must contain digits only");
@@ -641,24 +595,51 @@ public class HomeController : ControllerBase
     }
 
     [HttpGet("reports")]
-    public IActionResult Reports()
+    public IActionResult Reports(string? origin, string? destination, DateTime? startDate, DateTime? endDate, int? minTickets)
     {
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (role != "Employee" && role != "Supervisor") return StatusCode(403, "Reports are for staff only");
 
-        var report1 = _context.Database.SqlQueryRaw<Report1Row>(@"SELECT f.flight_number AS FlightNumber, f.origin_airport_code AS Origin, f.destination_airport_code AS Destination, COUNT(DISTINCT t.ticket_id) AS TicketsSold, COALESCE(SUM(DISTINCT t.total_fare_paid), 0.00) AS Revenue FROM Flight f LEFT JOIN ReservationSegment rs ON rs.flight_id = f.flight_id LEFT JOIN Ticket t ON t.reservation_id = rs.reservation_id AND t.ticket_status <> 'Cancelled' GROUP BY f.flight_id, f.flight_number, f.origin_airport_code, f.destination_airport_code ORDER BY revenue DESC").ToList();
+        // Optional filters for report1 (Revenue by Flight) and the other flight/payment reports.
+        // origin/destination are airport codes; startDate/endDate filter by flight departure date
+        // (or payment date for report3/report6); minTickets keeps only flights that sold at least that many tickets.
+        var fWhere = new List<string>();
+        var fArgs = new List<object>();
+        int fi = 0;
+        if (!string.IsNullOrEmpty(origin)) { fWhere.Add($"f.origin_airport_code = {{{fi}}}"); fArgs.Add(origin); fi++; }
+        if (!string.IsNullOrEmpty(destination)) { fWhere.Add($"f.destination_airport_code = {{{fi}}}"); fArgs.Add(destination); fi++; }
+        if (startDate.HasValue) { fWhere.Add($"f.departure_date >= {{{fi}}}"); fArgs.Add(startDate.Value); fi++; }
+        if (endDate.HasValue) { fWhere.Add($"f.departure_date <= {{{fi}}}"); fArgs.Add(endDate.Value); fi++; }
+        string fWhereSql = fWhere.Count > 0 ? " WHERE " + string.Join(" AND ", fWhere) : "";
+        string fHavingSql = minTickets.HasValue ? $" HAVING COUNT(DISTINCT t.ticket_id) >= {minTickets.Value}" : "";
+        var pWhere = new List<string>();
+        var pArgs = new List<object>();
+        int pi = 0;
+        if (startDate.HasValue) { pWhere.Add($"p.payment_date_time >= {{{pi}}}"); pArgs.Add(startDate.Value); pi++; }
+        if (endDate.HasValue) { pWhere.Add($"p.payment_date_time <= {{{pi}}}"); pArgs.Add(endDate.Value); pi++; }
+        string pWhereSql = pWhere.Count > 0 ? " WHERE " + string.Join(" AND ", pWhere) : "";
+        var p6Where = new List<string>();
+        var p6Args = new List<object>();
+        int p6i = 0;
+        if (startDate.HasValue) { p6Where.Add($"pay.payment_date_time >= {{{p6i}}}"); p6Args.Add(startDate.Value); p6i++; }
+        if (endDate.HasValue) { p6Where.Add($"pay.payment_date_time <= {{{p6i}}}"); p6Args.Add(endDate.Value); p6i++; }
+        string p6WhereSql = p6Where.Count > 0 ? " WHERE pay.transaction_type = 'Refund' AND " + string.Join(" AND ", p6Where) : " WHERE pay.transaction_type = 'Refund'";
+
+        var report1 = _context.Database.SqlQueryRaw<Report1Row>(@"SELECT f.flight_number AS FlightNumber, f.origin_airport_code AS Origin, f.destination_airport_code AS Destination, COUNT(DISTINCT t.ticket_id) AS TicketsSold, COALESCE(SUM(DISTINCT t.total_fare_paid), 0.00) AS Revenue FROM Flight f LEFT JOIN ReservationSegment rs ON rs.flight_id = f.flight_id LEFT JOIN Ticket t ON t.reservation_id = rs.reservation_id AND t.ticket_status <> 'Cancelled'" + fWhereSql + @" GROUP BY f.flight_id, f.flight_number, f.origin_airport_code, f.destination_airport_code" + fHavingSql + @" ORDER BY revenue DESC", fArgs.ToArray()).ToList();
 
         var report2 = _context.Database.SqlQueryRaw<Report2Row>(@"SELECT p.passenger_id AS PassengerId, CONCAT(p.first_name,' ',p.last_name) AS Passenger, p.email AS Email, m.membership_number AS MembershipNumber, m.points_balance AS PointsBalance, m.membership_status AS MembershipStatus, CASE WHEN m.points_balance >= 25000 THEN 'Gold' WHEN m.points_balance >= 10000 THEN 'Silver' WHEN m.points_balance >= 1000 THEN 'Bronze' WHEN m.points_balance = 0 THEN 'Inactive' ELSE 'Basic' END AS Tier FROM Passenger p LEFT JOIN MembershipAccount m ON m.passenger_id = p.passenger_id ORDER BY m.points_balance DESC").ToList();
 
-        var report3 = _context.Database.SqlQueryRaw<Report3Row>(@"SELECT r.confirmation_number AS ConfirmationNumber, p.transaction_reference AS TransactionReference, p.transaction_type AS TransactionType, p.amount AS Amount, p.payment_status AS PaymentStatus, CONCAT(COALESCE(e.first_name,'—'),' ',COALESCE(e.last_name,'')) AS ProcessedBy, e.employee_role AS EmployeeRole, p.payment_date_time AS PaymentDateTime FROM Payment p JOIN Reservation r ON r.reservation_id = p.reservation_id LEFT JOIN Employee e ON e.employee_id = p.employee_id ORDER BY p.payment_date_time").ToList();
+        var report3 = _context.Database.SqlQueryRaw<Report3Row>(@"SELECT r.confirmation_number AS ConfirmationNumber, p.transaction_reference AS TransactionReference, p.transaction_type AS TransactionType, p.amount AS Amount, p.payment_status AS PaymentStatus, CONCAT(COALESCE(e.first_name,'—'),' ',COALESCE(e.last_name,'')) AS ProcessedBy, e.employee_role AS EmployeeRole, p.payment_date_time AS PaymentDateTime FROM Payment p JOIN Reservation r ON r.reservation_id = p.reservation_id LEFT JOIN Employee e ON e.employee_id = p.employee_id" + pWhereSql + @" ORDER BY p.payment_date_time", pArgs.ToArray()).ToList();
 
-        var report4 = _context.Database.SqlQueryRaw<Report4Row>(@"SELECT f.flight_number AS FlightNumber, cc.cabin_name AS CabinName, ff.fare_class_id AS FareClassId, ff.available_inventory AS AvailableInventory, ff.allocated_capacity AS AllocatedCapacity, ROUND(100.0 * (ff.allocated_capacity - ff.available_inventory) / ff.allocated_capacity, 1) AS PctFull FROM FlightFare ff JOIN Flight f ON f.flight_id = ff.flight_id JOIN CabinClass cc ON cc.cabin_class_id = ff.cabin_class_id ORDER BY f.flight_number, ff.fare_class_id").ToList();
+        var report4 = _context.Database.SqlQueryRaw<Report4Row>(@"SELECT f.flight_number AS FlightNumber, cc.cabin_name AS CabinName, ff.fare_class_id AS FareClassId, ff.available_inventory AS AvailableInventory, ff.allocated_capacity AS AllocatedCapacity, ROUND(100.0 * (ff.allocated_capacity - ff.available_inventory) / ff.allocated_capacity, 1) AS PctFull FROM FlightFare ff JOIN Flight f ON f.flight_id = ff.flight_id JOIN CabinClass cc ON cc.cabin_class_id = ff.cabin_class_id" + fWhereSql + @" ORDER BY f.flight_number, ff.fare_class_id", fArgs.ToArray()).ToList();
 
         var report5 = _context.Database.SqlQueryRaw<Report5Row>(@"SELECT CONCAT(p.first_name,' ',p.last_name) AS Passenger, r.confirmation_number AS ConfirmationNumber, r.reservation_status AS ReservationStatus, r.trip_type AS TripType, r.total_amount AS TotalAmount, COUNT(DISTINCT t.ticket_id) AS Tickets FROM Passenger p JOIN ReservationPassenger rp ON rp.passenger_id = p.passenger_id JOIN Reservation r ON r.reservation_id = rp.reservation_id LEFT JOIN Ticket t ON t.reservation_id = r.reservation_id AND t.passenger_id = p.passenger_id GROUP BY p.passenger_id, r.reservation_id ORDER BY p.last_name, r.booking_date").ToList();
 
-        var report6 = _context.Database.SqlQueryRaw<Report6Row>(@"SELECT r.confirmation_number AS ConfirmationNumber, pay.transaction_reference AS TransactionReference, pay.amount AS Amount, CONCAT(e.first_name,' ',e.last_name) AS ApprovedBy, e.employee_role AS EmployeeRole, pay.payment_date_time AS PaymentDateTime FROM Payment pay JOIN Reservation r ON r.reservation_id = pay.reservation_id JOIN Employee e ON e.employee_id = pay.employee_id WHERE pay.transaction_type = 'Refund' ORDER BY pay.payment_date_time").ToList();
+        var report6 = _context.Database.SqlQueryRaw<Report6Row>(@"SELECT r.confirmation_number AS ConfirmationNumber, pay.transaction_reference AS TransactionReference, pay.amount AS Amount, CONCAT(e.first_name,' ',e.last_name) AS ApprovedBy, e.employee_role AS EmployeeRole, pay.payment_date_time AS PaymentDateTime FROM Payment pay JOIN Reservation r ON r.reservation_id = pay.reservation_id JOIN Employee e ON e.employee_id = pay.employee_id " + p6WhereSql + @" ORDER BY pay.payment_date_time", p6Args.ToArray()).ToList();
 
-        return Ok(new { report1, report2, report3, report4, report5, report6 });
+        var report7 = _context.Database.SqlQueryRaw<Report7Row>(@"SELECT f.origin_airport_code AS Airport, COUNT(DISTINCT t.ticket_id) AS TicketsSold, COALESCE(SUM(DISTINCT t.total_fare_paid), 0.00) AS Revenue FROM Flight f LEFT JOIN ReservationSegment rs ON rs.flight_id = f.flight_id LEFT JOIN Ticket t ON t.reservation_id = rs.reservation_id AND t.ticket_status <> 'Cancelled' GROUP BY f.origin_airport_code ORDER BY Revenue DESC").ToList();
+
+        return Ok(new { report1, report2, report3, report4, report5, report6, report7 });
     }
 
     [HttpGet("queries")]
@@ -667,17 +648,17 @@ public class HomeController : ControllerBase
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (role != "Employee" && role != "Supervisor") return StatusCode(403, "Queries are for staff only");
 
-        if (string.IsNullOrEmpty(confirmation)) confirmation = "ARS1001";
+        if (string.IsNullOrEmpty(confirmation)) confirmation = null;
 
         var query1 = _context.Database.SqlQueryRaw<Query1Row>(@"SELECT f.flight_number AS FlightNumber, f.origin_airport_code AS OriginAirportCode, f.destination_airport_code AS DestinationAirportCode, f.departure_date AS DepartureDate, f.departure_time AS DepartureTime, cc.cabin_name AS CabinName, fc.fare_class_name AS FareClassName, ff.current_price AS CurrentPrice, ff.available_inventory AS AvailableInventory FROM Flight f JOIN FlightFare ff ON ff.flight_id = f.flight_id JOIN CabinClass cc ON cc.cabin_class_id = ff.cabin_class_id JOIN FareClass fc ON fc.fare_class_id = ff.fare_class_id WHERE f.origin_airport_code = 'JFK' AND f.destination_airport_code = 'LAX' AND f.departure_date = '2026-10-15' AND ff.available_inventory > 0 ORDER BY ff.current_price").ToList();
 
-        var query2 = _context.Database.SqlQueryRaw<Query2Row>(@"SELECT r.confirmation_number AS ConfirmationNumber, CONCAT(p.first_name,' ',p.last_name) AS Passenger, rp.meal_selection AS MealSelection, rp.additional_checked_bags AS AdditionalCheckedBags, rs.segment_number AS SegmentNumber, f.flight_number AS FlightNumber, rs.fare_price_at_booking AS FarePriceAtBooking, t.ticket_number AS TicketNumber, t.ticket_status AS TicketStatus FROM Reservation r JOIN ReservationPassenger rp ON rp.reservation_id = r.reservation_id JOIN Passenger p ON p.passenger_id = rp.passenger_id LEFT JOIN ReservationSegment rs ON rs.reservation_id = r.reservation_id LEFT JOIN Flight f ON f.flight_id = rs.flight_id LEFT JOIN TicketSegment ts ON ts.reservation_segment_id = rs.reservation_segment_id LEFT JOIN Ticket t ON t.ticket_id = ts.ticket_id AND t.passenger_id = p.passenger_id WHERE r.confirmation_number = {0} ORDER BY rs.segment_number, p.last_name", confirmation).ToList();
+        var query2 = _context.Database.SqlQueryRaw<Query2Row>(@"SELECT r.confirmation_number AS ConfirmationNumber, CONCAT(p.first_name,' ',p.last_name) AS Passenger, rp.meal_selection AS MealSelection, rp.additional_checked_bags AS AdditionalCheckedBags, rs.segment_number AS SegmentNumber, f.flight_number AS FlightNumber, rs.fare_price_at_booking AS FarePriceAtBooking, t.ticket_number AS TicketNumber, t.ticket_status AS TicketStatus FROM Reservation r JOIN ReservationPassenger rp ON rp.reservation_id = r.reservation_id JOIN Passenger p ON p.passenger_id = rp.passenger_id LEFT JOIN ReservationSegment rs ON rs.reservation_id = r.reservation_id LEFT JOIN Flight f ON f.flight_id = rs.flight_id LEFT JOIN TicketSegment ts ON ts.reservation_segment_id = rs.reservation_segment_id LEFT JOIN Ticket t ON t.ticket_id = ts.ticket_id AND t.passenger_id = p.passenger_id WHERE r.confirmation_number = COALESCE({0}, r.confirmation_number) ORDER BY rs.segment_number, p.last_name", confirmation).ToList();
 
         var query3 = _context.Database.SqlQueryRaw<Query3Row>(@"SELECT r.confirmation_number AS ConfirmationNumber, e.email AS SupervisorEmail, p.amount AS Amount, p.payment_date_time AS PaymentDateTime FROM Payment p JOIN Reservation r ON r.reservation_id = p.reservation_id JOIN Employee e ON e.employee_id = p.employee_id WHERE p.transaction_type = 'Refund' AND e.employee_role = 'Supervisor' ORDER BY p.payment_date_time").ToList();
 
         var query4 = _context.Database.SqlQueryRaw<Query4Row>(@"SELECT r.confirmation_number AS ConfirmationNumber, CONCAT(p.first_name,' ',p.last_name) AS Passenger, r.reservation_status AS ReservationStatus, COALESCE(SUM(CASE WHEN pay.transaction_type='Refund' AND pay.payment_status='Refunded' THEN pay.amount ELSE 0 END), 0.00) AS RefundedAmount FROM Reservation r JOIN ReservationPassenger rp ON rp.reservation_id = r.reservation_id JOIN Passenger p ON p.passenger_id = rp.passenger_id LEFT JOIN Payment pay ON pay.reservation_id = r.reservation_id WHERE r.reservation_status = 'Cancelled' GROUP BY r.reservation_id, p.passenger_id").ToList();
 
-        var query5 = _context.Database.SqlQueryRaw<Query5Row>(@"SELECT r.confirmation_number AS ConfirmationNumber, CONCAT(p.first_name,' ',p.last_name) AS Passenger, t.ticket_number AS TicketNumber, f.flight_number AS FlightNumber, rs.segment_number AS SegmentNumber, rs.segment_status AS SegmentStatus, rs.fare_price_at_booking AS FarePriceAtBooking FROM TicketSegment ts JOIN Ticket t ON t.ticket_id = ts.ticket_id JOIN ReservationSegment rs ON rs.reservation_segment_id = ts.reservation_segment_id JOIN Reservation r ON r.reservation_id = t.reservation_id JOIN Passenger p ON p.passenger_id = t.passenger_id JOIN Flight f ON f.flight_id = rs.flight_id WHERE r.confirmation_number = {0} ORDER BY p.last_name, rs.segment_number", confirmation).ToList();
+        var query5 = _context.Database.SqlQueryRaw<Query5Row>(@"SELECT r.confirmation_number AS ConfirmationNumber, CONCAT(p.first_name,' ',p.last_name) AS Passenger, t.ticket_number AS TicketNumber, f.flight_number AS FlightNumber, rs.segment_number AS SegmentNumber, rs.segment_status AS SegmentStatus, rs.fare_price_at_booking AS FarePriceAtBooking FROM TicketSegment ts JOIN Ticket t ON t.ticket_id = ts.ticket_id JOIN ReservationSegment rs ON rs.reservation_segment_id = ts.reservation_segment_id JOIN Reservation r ON r.reservation_id = t.reservation_id JOIN Passenger p ON p.passenger_id = t.passenger_id JOIN Flight f ON f.flight_id = rs.flight_id WHERE r.confirmation_number = COALESCE({0}, r.confirmation_number) ORDER BY p.last_name, rs.segment_number", confirmation).ToList();
 
         return Ok(new { query1, query2, query3, query4, query5 });
     }
@@ -849,10 +830,9 @@ public class HomeController : ControllerBase
     }
 }
 
-// --- UPDATED RECORD TYPES ---
 public record Payload(string email, string password);
 public record RegisterPayload(string email, string password, int? passengerId, string? firstName, string? lastName, string? Phone, DateTime? dateOfBirth);
-public record BookingPayload(int flightFareId, int? returnFareId, List<string>? seats); // Changed to List<string> for seat IDs like "A1"
+public record BookingPayload(int flightFareId, int? returnFareId, List<int>? seats);
 public record ModifyPayload(string? phone, string? address, string? mealSelection, int? additionalCheckedBags);
 public record AddFlightPayload(string flightNumber, string origin, string destination, int aircraftId, DateTime departure, DateTime arrival);
 public record AddFarePayload(int cabinClassId, int fareClassId, decimal price, int allocatedCapacity);
@@ -864,6 +844,7 @@ public class Report3Row { public string ConfirmationNumber { get; set; } public 
 public class Report4Row { public string FlightNumber { get; set; } public string CabinName { get; set; } public int FareClassId { get; set; } public int AvailableInventory { get; set; } public int AllocatedCapacity { get; set; } public decimal PctFull { get; set; } }
 public class Report5Row { public string Passenger { get; set; } public string ConfirmationNumber { get; set; } public string ReservationStatus { get; set; } public string TripType { get; set; } public decimal TotalAmount { get; set; } public long Tickets { get; set; } }
 public class Report6Row { public string ConfirmationNumber { get; set; } public string TransactionReference { get; set; } public decimal Amount { get; set; } public string ApprovedBy { get; set; } public string EmployeeRole { get; set; } public DateTime PaymentDateTime { get; set; } }
+public class Report7Row { public string Airport { get; set; } public long TicketsSold { get; set; } public decimal Revenue { get; set; } }
 public class RouteRow { public string Origin { get; set; } public string Destination { get; set; } }
 public class AirportRow { public string AirportCode { get; set; } public string AirportName { get; set; } public string City { get; set; } public string? StateProvince { get; set; } public string Country { get; set; } }
 public class DealRow { public int FlightId { get; set; } public string FlightNumber { get; set; } public string Origin { get; set; } public string Destination { get; set; } public DateTime DepartureDate { get; set; } public TimeSpan DepartureTime { get; set; } public DateTime ArrivalDate { get; set; } public TimeSpan ArrivalTime { get; set; } public string FlightStatus { get; set; } public string CabinName { get; set; } public string FareClassName { get; set; } public int FlightFareId { get; set; } public decimal CurrentPrice { get; set; } public int AvailableInventory { get; set; } }

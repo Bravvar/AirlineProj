@@ -17,17 +17,18 @@ function formatCell(val) {
   return String(val);
 }
 
-function DataTable({ rows }) {
+function DataTable({ rows, columns, hiddenColumns }) {
   if (!rows || rows.length === 0) {
     return <p className="text-gray-400 text-sm px-6 py-8 text-center">No records available.</p>;
   }
-  const columns = Object.keys(rows[0]);
+  const visibleColumns = (columns && columns.length > 0 ? columns : Object.keys(rows[0]))
+    .filter((c) => !(hiddenColumns && hiddenColumns.has(c)));
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left border-collapse text-sm">
         <thead>
           <tr className="border-b border-gray-200 bg-gray-50/30 text-xs font-semibold text-gray-600 uppercase tracking-wider">
-            {columns.map((c) => (
+            {visibleColumns.map((c) => (
               <th key={c} className="px-6 py-3.5 whitespace-nowrap">{c}</th>
             ))}
           </tr>
@@ -35,13 +36,51 @@ function DataTable({ rows }) {
         <tbody className="divide-y divide-gray-100">
           {rows.map((row, idx) => (
             <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
-              {columns.map((c) => (
+              {visibleColumns.map((c) => (
                 <td key={c} className="px-6 py-3.5 whitespace-nowrap text-gray-800">{formatCell(row[c])}</td>
               ))}
             </tr>
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function QueryColumnsToggle({ columns, hiddenColumns, onToggle }) {
+  const [open, setOpen] = useState(false);
+  if (!columns || columns.length === 0) return null;
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 px-3 py-2 rounded-xl shadow-sm transition-colors"
+      >
+        Columns
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 z-[100] p-2">
+          <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-2 pt-1">
+            Toggle Columns
+          </div>
+          {columns.map((c) => {
+            const isHidden = hiddenColumns && hiddenColumns.has(c);
+            return (
+              <label key={c} className="flex items-center gap-3 px-2 py-1.5 hover:bg-gray-50 rounded-lg cursor-pointer transition-colors">
+                <input
+                  type="checkbox"
+                  checked={!isHidden}
+                  onChange={() => onToggle(c)}
+                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                />
+                <span className={`text-sm ${isHidden ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
+                  {c}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -53,6 +92,18 @@ export default function QueriesPage({ token, email, role, onBackToHome, onMyTrip
   const [errorMsg, setErrorMsg] = useState('');
   const [search, setSearch] = useState('');
   const [queryFilters, setQueryFilters] = useState({});
+  const [hiddenColumns, setHiddenColumns] = useState({});
+
+  const toggleColumn = (queryKey, col) => {
+    setHiddenColumns((prev) => {
+      const next = { ...prev };
+      const set = new Set(next[queryKey] || []);
+      if (set.has(col)) set.delete(col);
+      else set.add(col);
+      next[queryKey] = set;
+      return next;
+    });
+  };
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
@@ -184,6 +235,8 @@ export default function QueriesPage({ token, email, role, onBackToHome, onMyTrip
             <div className="flex flex-col gap-8">
               {visibleQueries.map((def) => {
                 const rows = data?.[def.key] ?? [];
+                const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+                const hidden = hiddenColumns[def.key] || new Set();
                 const qf = (queryFilters[def.key] || '').trim().toLowerCase();
                 const filteredRows = !qf ? rows : rows.filter(row => Object.values(row).some(v => String(v ?? '').toLowerCase().includes(qf)));
                 return (
@@ -197,7 +250,7 @@ export default function QueriesPage({ token, email, role, onBackToHome, onMyTrip
                         {def.key}
                       </span>
                     </div>
-                    <div className="px-6 pt-4">
+                    <div className="px-6 pt-4 flex items-start justify-between gap-3">
                       <input
                         type="text"
                         value={queryFilters[def.key] || ''}
@@ -205,8 +258,13 @@ export default function QueriesPage({ token, email, role, onBackToHome, onMyTrip
                         placeholder="Filter these results..."
                         className="w-full max-w-md bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2 text-sm outline-none focus:border-blue-500"
                       />
+                      <QueryColumnsToggle
+                        columns={columns}
+                        hiddenColumns={hidden}
+                        onToggle={(col) => toggleColumn(def.key, col)}
+                      />
                     </div>
-                    <DataTable rows={filteredRows} />
+                    <DataTable rows={filteredRows} columns={columns} hiddenColumns={hidden} />
                   </div>
                 );
               })}

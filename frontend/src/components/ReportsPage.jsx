@@ -77,6 +77,15 @@ const REPORT_DEFINITIONS = [
       { key: 'paymentDateTime', label: 'Payment Date & Time' },
     ],
   },
+  {
+    key: 'report7',
+    title: 'Revenue by Airport',
+    columns: [
+      { key: 'airport', label: 'Airport' },
+      { key: 'ticketsSold', label: 'Tickets Sold' },
+      { key: 'revenue', label: 'Revenue' },
+    ],
+  },
 ];
 
 function formatCell(row, key) {
@@ -288,16 +297,26 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
   const [errorMsg, setErrorMsg] = useState('');
   const [activeTab, setActiveTab] = useState('all');
   const [search, setSearch] = useState('');
-  const [hiddenColumns, setHiddenColumns] = useState({}); 
+  const [hiddenColumns, setHiddenColumns] = useState({});
+  const [reportFilters, setReportFilters] = useState({ origin: '', destination: '', startDate: '', endDate: '', minTickets: '' });
+  const [filtersApplied, setFiltersApplied] = useState(false);
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
-  const fetchReports = useCallback(async () => {
+  const fetchReports = useCallback(async (filters) => {
     if (!token) return;
     setLoading(true);
     setErrorMsg('');
+    const params = new URLSearchParams();
+    const f = filters || {};
+    if (f.origin && f.origin.trim()) params.set('origin', f.origin.trim().toUpperCase());
+    if (f.destination && f.destination.trim()) params.set('destination', f.destination.trim().toUpperCase());
+    if (f.startDate) params.set('startDate', f.startDate);
+    if (f.endDate) params.set('endDate', f.endDate);
+    if (f.minTickets !== '' && f.minTickets !== undefined && f.minTickets !== null) params.set('minTickets', String(f.minTickets));
+    const qs = params.toString();
     try {
-      const res = await fetch(`${API_URL}/api/reports`, {
+      const res = await fetch(`${API_URL}/api/reports${qs ? `?${qs}` : ''}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const text = await res.text();
@@ -334,6 +353,19 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
       next[reportKey] = set;
       return next;
     });
+  };
+
+  const applyFilters = () => {
+    const anySet = reportFilters.origin.trim() || reportFilters.destination.trim() || reportFilters.startDate || reportFilters.endDate || reportFilters.minTickets !== '';
+    setFiltersApplied(Boolean(anySet));
+    fetchReports(reportFilters);
+  };
+
+  const clearFilters = () => {
+    const empty = { origin: '', destination: '', startDate: '', endDate: '', minTickets: '' };
+    setReportFilters(empty);
+    setFiltersApplied(false);
+    fetchReports(empty);
   };
 
   const visibleReports = activeTab === 'all'
@@ -405,7 +437,7 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
                 <p className="text-gray-500 text-sm">Real-time reports, flight load factors, and payment audits.</p>
               </div>
               <button
-                onClick={fetchReports}
+                onClick={() => fetchReports(reportFilters)}
                 disabled={loading}
                 className="self-start md:self-auto flex items-center gap-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold px-4 py-2 rounded-xl text-sm shadow-sm transition-all disabled:opacity-50"
               >
@@ -422,6 +454,79 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-5 py-2.5 text-sm outline-none focus:border-blue-500"
               />
+            </div>
+
+            <div className="bg-white rounded-3xl border border-gray-200 p-4 mb-6">
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="flex flex-col gap-1 text-xs font-semibold text-gray-600">
+                  Origin
+                  <input
+                    type="text"
+                    placeholder="e.g. JFK"
+                    value={reportFilters.origin}
+                    onChange={(e) => setReportFilters({ ...reportFilters, origin: e.target.value })}
+                    className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 w-28 uppercase"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs font-semibold text-gray-600">
+                  Destination
+                  <input
+                    type="text"
+                    placeholder="e.g. LAX"
+                    value={reportFilters.destination}
+                    onChange={(e) => setReportFilters({ ...reportFilters, destination: e.target.value })}
+                    className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 w-28 uppercase"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs font-semibold text-gray-600">
+                  From date
+                  <input
+                    type="date"
+                    value={reportFilters.startDate}
+                    onChange={(e) => setReportFilters({ ...reportFilters, startDate: e.target.value })}
+                    className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs font-semibold text-gray-600">
+                  To date
+                  <input
+                    type="date"
+                    value={reportFilters.endDate}
+                    onChange={(e) => setReportFilters({ ...reportFilters, endDate: e.target.value })}
+                    className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs font-semibold text-gray-600">
+                  Min. tickets sold
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 3"
+                    value={reportFilters.minTickets}
+                    onChange={(e) => setReportFilters({ ...reportFilters, minTickets: e.target.value })}
+                    className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 w-28"
+                  />
+                </label>
+                <button
+                  onClick={applyFilters}
+                  disabled={loading}
+                  className="bg-[#0066ff] hover:bg-blue-700 text-white font-semibold px-5 py-2 rounded-xl text-sm shadow-sm disabled:opacity-50"
+                >
+                  Apply filters
+                </button>
+                {filtersApplied && (
+                  <button
+                    onClick={clearFilters}
+                    disabled={loading}
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-800 disabled:opacity-50"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-3">
+                Origin, destination and dates filter the flight reports (Revenue by Flight, Flight load factor); dates also filter the payment reports (Payment / refund audit, Refund audit). Min. tickets applies to Revenue by Flight only. Membership, booking history and Revenue by Airport are not filtered.
+              </p>
             </div>
 
             {errorMsg && (
