@@ -261,7 +261,7 @@ export default function SignInModal({ show, onHide }) {
         }
 
         if (accountTab === 'user' && data.role !== 'Member') {
-          setFormError('This login is for member accounts, use the Admin tab');
+          setFormError('This login is for member accounts, use the Staff tab');
           return;
         }
 
@@ -437,7 +437,7 @@ export default function SignInModal({ show, onHide }) {
               accountTab === 'admin' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'
             }`}
           >
-            Admin
+            Staff
           </button>
         </div>
 

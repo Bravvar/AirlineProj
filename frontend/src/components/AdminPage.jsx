@@ -8,6 +8,9 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
   const [overview, setOverview] = useState(null);
   const [users, setUsers] = useState([]);
   const [flights, setFlights] = useState([]);
+  const [userSearch, setUserSearch] = useState('');
+  const [userRole, setUserRole] = useState('all');
+  const [flightSearch, setFlightSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -33,6 +36,19 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
     };
     load();
   }, [tab, token]);
+
+  const filteredUsers = users.filter(u => {
+    const q = userSearch.trim().toLowerCase();
+    const matchesSearch = !q || (u.email || '').toLowerCase().includes(q) || (u.role || '').toLowerCase().includes(q);
+    const matchesRole = userRole === 'all' || (userRole === 'staff' ? (u.role === 'Employee' || u.role === 'Supervisor') : u.role === 'Member');
+    return matchesSearch && matchesRole;
+  });
+  const staffCount = users.filter(u => u.role === 'Employee' || u.role === 'Supervisor').length;
+  const memberCount = users.filter(u => u.role === 'Member').length;
+  const filteredFlights = flights.filter(f => {
+    const q = flightSearch.trim().toLowerCase();
+    return !q || (f.flightNumber || '').toLowerCase().includes(q) || (f.originAirportCode || '').toLowerCase().includes(q) || (f.destinationAirportCode || '').toLowerCase().includes(q) || (f.flightStatus || '').toLowerCase().includes(q);
+  });
 
   return (
     <div className="min-h-screen bg-[#F4F6F9] flex flex-col font-sans text-gray-900">
@@ -98,8 +114,16 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
           <p className="text-gray-400 text-sm px-2 py-8">Loading flights...</p>
         )}
         {tab === 'flights' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {flights.map(f => (
+          <>
+            <input
+              type="text"
+              value={flightSearch}
+              onChange={(e) => setFlightSearch(e.target.value)}
+              placeholder="Search flights by number, route, or status..."
+              className="w-full max-w-md bg-white border border-gray-200 rounded-2xl px-5 py-3 text-sm font-medium outline-none focus:border-[#0066ff] focus:ring-2 focus:ring-blue-100 shadow-sm mb-6"
+            />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {filteredFlights.map(f => (
               <div key={f.flightId} className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
                 <div className="flex justify-between items-start mb-4">
                   <div>
@@ -121,8 +145,9 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
                   ))}
                 </div>
               </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </>
         )}
 
         {tab === 'management' && (
@@ -133,7 +158,33 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
           <p className="text-gray-400 text-sm px-2 py-8">Loading users...</p>
         )}
         {tab === 'users' && (
-          <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+          <>
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center mb-4">
+              <input
+                type="text"
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                placeholder="Search users by email or role..."
+                className="flex-1 max-w-md bg-white border border-gray-200 rounded-2xl px-5 py-3 text-sm font-medium outline-none focus:border-[#0066ff] focus:ring-2 focus:ring-blue-100 shadow-sm"
+              />
+              <div className="flex gap-2">
+                {[
+                  { id: 'all', label: 'All' },
+                  { id: 'staff', label: 'Staff' },
+                  { id: 'member', label: 'Members' },
+                ].map(r => (
+                  <button
+                    key={r.id}
+                    onClick={() => setUserRole(r.id)}
+                    className={`px-4 py-2 rounded-full text-sm font-semibold cursor-pointer ${userRole === r.id ? 'bg-[#0066ff] text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+              <span className="text-sm text-gray-500 font-medium">{staffCount} staff · {memberCount} members · {users.length} total</span>
+            </div>
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
             <table className="w-full text-sm text-left">
               <thead className="bg-gray-50 text-gray-500 font-semibold border-b border-gray-100">
                 <tr>
@@ -144,7 +195,7 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
                 </tr>
               </thead>
               <tbody>
-                {users.map(u => (
+                {filteredUsers.map(u => (
                   <tr key={u.userAccountId} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50">
                     <td className="px-8 py-4 font-medium">{u.email}</td>
                     <td className="px-8 py-4">
@@ -160,7 +211,8 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
       </main>
     </div>

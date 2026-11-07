@@ -4,9 +4,7 @@ import { API_URL } from '../config';
 const AIRCRAFT_OPTIONS = [
   { id: 1, label: 'Aircraft 1 (Active)' },
   { id: 2, label: 'Aircraft 2 (Active)' },
-  { id: 3, label: 'Aircraft 3 (Maintenance)' },
   { id: 4, label: 'Aircraft 4 (Active)' },
-  { id: 5, label: 'Aircraft 5 (Retired)' },
 ];
 
 const CABIN_OPTIONS = [
@@ -35,6 +33,7 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
   const [departure, setDeparture] = useState('');
   const [arrival, setArrival] = useState('');
   const [loadingFlight, setLoadingFlight] = useState(false);
+  const nowMin = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   const [flightSuccess, setFlightSuccess] = useState('');
   const [flightError, setFlightError] = useState('');
 
@@ -91,6 +90,14 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
     }
     if (!departure || !arrival) {
       setFlightError('Departure and Arrival date & time are required.');
+      return;
+    }
+    if (new Date(departure) < new Date()) {
+      setFlightError('Departure cannot be in the past.');
+      return;
+    }
+    if (new Date(arrival) <= new Date(departure)) {
+      setFlightError('Arrival must be after departure.');
       return;
     }
 
@@ -317,6 +324,7 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
                 <input
                   type="datetime-local"
                   value={departure}
+                  min={nowMin}
                   onChange={(e) => setDeparture(e.target.value)}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 outline-none focus:border-blue-500"
                 />
@@ -327,6 +335,7 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
                 <input
                   type="datetime-local"
                   value={arrival}
+                  min={departure || nowMin}
                   onChange={(e) => setArrival(e.target.value)}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 outline-none focus:border-blue-500"
                 />

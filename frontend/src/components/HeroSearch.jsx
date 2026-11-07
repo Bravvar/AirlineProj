@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { API_URL } from '../config';
 import CheckoutModal from './CheckoutModal';
-import SeatSelectionModal from './SeatSelectionModal';
 import TabToggle from './TabToggle';
 
 export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn }) {
@@ -30,11 +29,9 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   const [showAllReturn, setShowAllReturn] = useState(false);
   const [selectedOutboundFare, setSelectedOutboundFare] = useState(null);
 
-  const [showSeatModal, setShowSeatModal] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [selectedFlightFare, setSelectedFlightFare] = useState(null);
   const [checkoutTotal, setCheckoutTotal] = useState(0);
-  const [selectedSeatsForCheckout, setSelectedSeatsForCheckout] = useState([]);
 
   const [airports, setAirports] = useState(null);
   const [routes, setRoutes] = useState(null);
@@ -139,7 +136,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
   useEffect(() => {
     function handleClickOutsideResults(event) {
-      if (showCheckoutModal || showSeatModal) return;
+      if (showCheckoutModal) return;
       if (!resultsPanelRef.current) return;
       if (resultsPanelRef.current.contains(event.target)) return;
       if (results === null && returnResults === null) return;
@@ -156,7 +153,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
     document.addEventListener('mousedown', handleClickOutsideResults);
     return () => document.removeEventListener('mousedown', handleClickOutsideResults);
-  }, [results, returnResults, showCheckoutModal, showSeatModal]);
+  }, [results, returnResults, showCheckoutModal]);
 
   const distinctOrigins = routes ? new Set(routes.map((r) => r.origin)) : null;
   const distinctDestinations = routes ? new Set(routes.map((r) => r.destination)) : null;
@@ -498,9 +495,8 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       returnFare: returnFareObj,
       outboundFare: outboundFareObj,
     });
-    
-    setSelectedSeatsForCheckout([]);
-    setShowSeatModal(true);
+    setCheckoutTotal((outboundFareObj?.currentPrice || 0) + (returnFareObj?.currentPrice || 0));
+    setShowCheckoutModal(true);
   };
 
   const selectReturnFare = (returnFlight, returnFare) => {
@@ -517,36 +513,28 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       returnFlight,
       returnFare,
     });
-    
-    setSelectedSeatsForCheckout([]);
-    setShowSeatModal(true);
-  };
-
-  const handleSeatsSelected = (seats, totalWithSeats) => {
-    setSelectedSeatsForCheckout(seats);
-    setCheckoutTotal(totalWithSeats);
-    setShowSeatModal(false);
+    setCheckoutTotal((outboundFareObj?.currentPrice || 0) + (returnFare?.currentPrice || 0));
     setShowCheckoutModal(true);
   };
 
-  const handlePaymentSuccess = (confirmationNumber, bookingDetails) => {
+  const handlePaymentSuccess = (confirmationNumber) => {
     setShowCheckoutModal(false);
     setBookingMessage(`Successfully booked! Confirmation #${confirmationNumber}`);
     setFaresByFlight({});
     setSelectedOutboundFare(null);
     setReturnResults(null);
-    
+    const bookedFlight = selectedFlightFare?.flight;
     if (onBooked) {
       onBooked({
         passengerName: sessionStorage.getItem('email')?.split('@')[0] || 'Passenger',
         email: sessionStorage.getItem('email'),
         confirmationNumber: confirmationNumber,
         totalAmount: checkoutTotal,
-        flightNumber: bookingDetails?.flightNumber || 'FL-123',
-        origin: bookingDetails?.origin || from,
-        destination: bookingDetails?.destination || to,
-        departureTime: bookingDetails?.departureTime || '08:00 AM',
-        arrivalTime: bookingDetails?.arrivalTime || '11:15 AM',
+        flightNumber: bookedFlight?.flightNumber || '',
+        origin: bookedFlight?.originAirportCode || from,
+        destination: bookedFlight?.destinationAirportCode || to,
+        departureTime: bookedFlight?.departureTime ? String(bookedFlight.departureTime).substring(0, 5) : '',
+        arrivalTime: bookedFlight?.arrivalTime ? String(bookedFlight.arrivalTime).substring(0, 5) : '',
         duration: '3h 15m',
         stops: 'Non-stop'
       });
@@ -579,6 +567,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
       <div className="w-full flex flex-col items-center relative z-30">
         {currentTab === 'flights' && (
+          <>
           <div className="flex gap-8 mb-4 ml-4 self-start">
             <label className="flex items-center gap-3 cursor-pointer group">
               <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${tripType === 'round-trip' ? 'border-white' : 'border-white/60 group-hover:border-white'}`}>
@@ -596,6 +585,12 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
               <input type="radio" className="hidden" checked={tripType === 'one-way'} onChange={() => { clearResults(); setTripType('one-way'); setEndDate(null); }} />
             </label>
           </div>
+          <p className="text-white/90 text-xs font-medium drop-shadow-md mb-4 ml-4 self-start">
+            {tripType === 'round-trip'
+              ? 'Round-trip: you will pick a return flight too, and the total covers both the outbound and return legs.'
+              : 'One-way: outbound flight only, no return flight.'}
+          </p>
+          </>
         )}
 
         <div className="w-full bg-white rounded-full shadow-2xl flex items-center p-1.5 min-h-[64px] relative z-30">
@@ -927,21 +922,12 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
       {selectedFlightFare && (
         <>
-          <SeatSelectionModal
-            show={showSeatModal}
-            onHide={() => setShowSeatModal(false)}
-            flightId={selectedFlightFare.flight.flightId}
-            farePrice={selectedFlightFare.fare.currentPrice + (selectedFlightFare.returnFare?.currentPrice || 0)}
-            onProceed={handleSeatsSelected}
-          />
-          
           <CheckoutModal
             show={showCheckoutModal}
             onHide={() => setShowCheckoutModal(false)}
             fareId={selectedFlightFare.fare.flightFareId}
             returnFareId={selectedFlightFare.returnFare?.flightFareId ?? null}
             totalPrice={checkoutTotal}
-            selectedSeats={selectedSeatsForCheckout}
             tripType={tripType}
             onSuccess={handlePaymentSuccess}
           />

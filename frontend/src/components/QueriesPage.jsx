@@ -52,6 +52,7 @@ export default function QueriesPage({ token, email, role, onBackToHome, onMyTrip
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [search, setSearch] = useState('');
+  const [queryFilters, setQueryFilters] = useState({});
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
@@ -183,18 +184,29 @@ export default function QueriesPage({ token, email, role, onBackToHome, onMyTrip
             <div className="flex flex-col gap-8">
               {visibleQueries.map((def) => {
                 const rows = data?.[def.key] ?? [];
+                const qf = (queryFilters[def.key] || '').trim().toLowerCase();
+                const filteredRows = !qf ? rows : rows.filter(row => Object.values(row).some(v => String(v ?? '').toLowerCase().includes(qf)));
                 return (
                   <div key={def.key} className="bg-white rounded-3xl shadow border border-gray-200 overflow-hidden">
-                    <div className="px-6 py-5 border-b border-gray-100 bg-gray-50/60 flex justify-between items-center">
+                    <div className="px-6 py-5 border-b border-gray-100 bg-gray-50/60 flex justify-between items-center gap-4">
                       <div>
                         <h2 className="text-lg font-bold">{def.title}</h2>
-                        <p className="text-xs text-gray-500 mt-0.5">{rows.length} {rows.length === 1 ? 'record' : 'records'}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{filteredRows.length} of {rows.length} {rows.length === 1 ? 'record' : 'records'}</p>
                       </div>
                       <span className="text-xs font-mono uppercase bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-semibold border border-blue-100">
                         {def.key}
                       </span>
                     </div>
-                    <DataTable rows={rows} />
+                    <div className="px-6 pt-4">
+                      <input
+                        type="text"
+                        value={queryFilters[def.key] || ''}
+                        onChange={(e) => setQueryFilters(prev => ({ ...prev, [def.key]: e.target.value }))}
+                        placeholder="Filter these results..."
+                        className="w-full max-w-md bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2 text-sm outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <DataTable rows={filteredRows} />
                   </div>
                 );
               })}

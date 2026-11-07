@@ -7,6 +7,7 @@ export default function EmployeePage({ token, email, onBackToHome, onToggleSideb
   const [flights, setFlights] = useState(null);
   const [reservations, setReservations] = useState(null);
   const [search, setSearch] = useState('');
+  const [flightSearch, setFlightSearch] = useState('');
   const [manifest, setManifest] = useState(null);
   const [selectedRes, setSelectedRes] = useState(null);
   const [error, setError] = useState('');
@@ -63,7 +64,7 @@ export default function EmployeePage({ token, email, onBackToHome, onToggleSideb
         <div className="flex gap-2 mb-8 flex-wrap">
           {[
             { id: 'flights', label: 'Flight Status' },
-            { id: 'reservations', label: 'Passengers' },
+            { id: 'reservations', label: 'Purchased Flights' },
           ].map(item => (
             <button
               key={item.id}
@@ -83,8 +84,19 @@ export default function EmployeePage({ token, email, onBackToHome, onToggleSideb
 
         {tab === 'flights' && (
           flights === null ? <p className="text-gray-500">Loading…</p> :
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {flights.map(f => (
+          <div className="flex flex-col gap-6">
+            <input
+              type="text"
+              value={flightSearch}
+              onChange={(e) => setFlightSearch(e.target.value)}
+              placeholder="Search flights by number, route, status, or date..."
+              className="w-full max-w-md bg-white border border-gray-200 rounded-2xl px-5 py-3 text-sm font-medium outline-none focus:border-[#0066ff] focus:ring-2 focus:ring-blue-100 shadow-sm"
+            />
+            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+              {flights.filter(f => {
+                const q = flightSearch.trim().toLowerCase();
+                return !q || (f.flightNumber || '').toLowerCase().includes(q) || (f.originAirportCode || '').toLowerCase().includes(q) || (f.destinationAirportCode || '').toLowerCase().includes(q) || (f.flightStatus || '').toLowerCase().includes(q) || String(f.departureDate || '').includes(q);
+              }).map(f => (
               <div key={f.flightId} className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm relative overflow-hidden">
                 <div className="flex justify-between items-start mb-6">
                   <div>
@@ -110,7 +122,8 @@ export default function EmployeePage({ token, email, onBackToHome, onToggleSideb
                   <p className="text-xs text-amber-700 bg-amber-50 rounded-xl px-3 py-2 mt-3">{f.statusReason}</p>
                 )}
               </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
 

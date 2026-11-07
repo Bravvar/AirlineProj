@@ -50,8 +50,8 @@ export default function PaymentConfirmationPage({
         />
         <div className="absolute inset-0 bg-black/40"></div>
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4 pt-16">
-          <h1 className="text-4xl font-extrabold text-white mb-2 drop-shadow-lg">Complete Your Booking</h1>
-          <p className="text-white/90 text-lg drop-shadow-md">Please complete booking & fly toward your destination.</p>
+          <h1 className="text-4xl font-extrabold text-white mb-2 drop-shadow-lg">Booking Confirmed</h1>
+          <p className="text-white/90 text-lg drop-shadow-md">Your flight is booked. Here are your trip details.</p>
         </div>
       </div>
 
@@ -81,7 +81,6 @@ export default function PaymentConfirmationPage({
                 <p className="font-bold text-gray-900">{details.stops || 'Non-stop'}</p>
               </div>
               <div>
-                <span className="px-3 py-1 rounded-md border border-blue-600 text-blue-600 text-xs font-bold block text-center">View Fare Rules</span>
                 <div className="flex gap-1 mt-1 justify-center">
                   <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">NON-REFUNDABLE</span>
                   <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">Economy (B)</span>

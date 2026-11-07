@@ -41,6 +41,27 @@ export default function CheckoutModal({ show, onHide, fareId, returnFareId, tota
     e.preventDefault();
     setLoading(true);
     setError('');
+
+    // Expiry must be a real month/year and not in the past.
+    const expMatch = expiry.match(/^(\d{2})\/(\d{2})$/);
+    if (!expMatch) {
+      setError('Enter a valid expiry date (MM/YY).');
+      setLoading(false);
+      return;
+    }
+    const expMonth = parseInt(expMatch[1], 10);
+    const expYear = 2000 + parseInt(expMatch[2], 10);
+    if (expMonth < 1 || expMonth > 12) {
+      setError('Expiry month must be 01-12.');
+      setLoading(false);
+      return;
+    }
+    const expEnd = new Date(expYear, expMonth, 0, 23, 59, 59);
+    if (expEnd < new Date()) {
+      setError('This card is expired.');
+      setLoading(false);
+      return;
+    }
     
     const token = sessionStorage.getItem('token');
     const controller = new AbortController();
