@@ -45,6 +45,8 @@ builder.Services.AddDbContext<ApplicationDbContext>(
             dbContextOptions => dbContextOptions
                 .UseMySql(connectionString, serverVersion));
 
+builder.Services.AddHostedService<CancellationWorker>();
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -69,8 +71,6 @@ public class ApplicationDbContext : DbContext
     public DbSet<Reservation> Reservation { get; set; }
     public DbSet<ReservationPassenger> ReservationPassenger { get; set; }
     public DbSet<ReservationSegment> ReservationSegment { get; set; }
-    public DbSet<SeatAssignment> SeatAssignment { get; set; }
-
 
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options)
@@ -273,33 +273,4 @@ public class ReservationSegment
 
     [Column("cancellation_reason")]
     public string? CancellationReason { get; set; }
-}
-
-[Table("SeatAssignment")]
-public class SeatAssignment
-{
-    [Key]
-    [Column("seat_assignment_id")]
-    public int seat_assignment_id { get; set; }
-
-    [Column("reservation_segment_id")]
-    public int reservation_segment_id { get; set; }
-
-    [Column("reservation_passenger_id")]
-    public int reservation_passenger_id { get; set; }
-
-    [Column("seat_id")]
-    public int seat_id { get; set; }
-
-    [Column("assignment_date_time")]
-    public DateTime assignment_date_time { get; set; }
-
-    [Column("seat_fee")]
-    public decimal seat_fee { get; set; }
-
-    [Column("flight_id")]
-    public int flight_id { get; set; }
-
-    [Column("active_seat")]
-    public byte? active_seat { get; set; }
 }
