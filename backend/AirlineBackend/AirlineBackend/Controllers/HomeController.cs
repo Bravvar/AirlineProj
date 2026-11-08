@@ -743,21 +743,52 @@ public class HomeController : ControllerBase
         return Ok(new { flightFareId = fare.FlightFareId });
     }
 
-    [HttpPut("flights/{id}/cancel")]
-    public async Task<IActionResult> CancelFlight(int id)
+
+[HttpPut("flights/{id}/cancel")]
+public async Task<IActionResult> CancelFlight(int id)
+{
+    var role = User.FindFirst(ClaimTypes.Role)?.Value;
+
+    if (role != "Employee" && role != "Supervisor")
+        return StatusCode(403, "Staff only");
+
+    var flight = await _context.Flight
+        .FirstOrDefaultAsync(f => f.FlightId == id);
+
+    if (flight == null)
+        return NotFound("Flight not found");
+
+    if (flight.FlightStatus != "Cancelled")
     {
-        var role = User.FindFirst(ClaimTypes.Role)?.Value;
-        if (role != "Employee" && role != "Supervisor") return StatusCode(403, "Staff only");
-
-        var flight = _context.Flight.FirstOrDefault(i => i.FlightId == id);
-        if (flight == null) return NotFound("No flight like that");
-        if (flight.FlightStatus == "Cancelled") return BadRequest("Flight is already cancelled");
-
         flight.FlightStatus = "Cancelled";
         await _context.SaveChangesAsync();
-
-        return Ok(new { flightId = flight.FlightId, flightNumber = flight.FlightNumber, flightStatus = flight.FlightStatus });
     }
+
+    try
+    {
+        await _context.Database.ExecuteSqlInterpolatedAsync(
+            $"CALL process_flight_cancellation({id})"
+        );
+    }
+    catch (Exception)
+    {
+        return StatusCode(
+            500,
+            "Flight cancellation processing failed. " +
+            "The cancellation may be pending. " +
+            "Please contact an administrator."
+        );
+    }
+
+    return Ok(new
+    {
+        flightId = flight.FlightId,
+        flightNumber = flight.FlightNumber,
+        flightStatus = "Cancelled",
+        cancellationProcessed = true
+    });
+}
+
 
     [HttpGet("staff/flights")]
     public IActionResult StaffFlights()

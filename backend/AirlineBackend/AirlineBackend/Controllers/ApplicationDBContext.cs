@@ -42,6 +42,23 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<MembershipAccount>().ToTable("MembershipAccount");
         modelBuilder.Entity<Seat>().ToTable("Seat");
         modelBuilder.Entity<Flight>().ToTable("Flight");
+
+modelBuilder.Entity<Flight>(entity =>
+{
+    entity.Property(f => f.FlightId).HasColumnName("flight_id");
+    entity.Property(f => f.FlightNumber).HasColumnName("flight_number");
+    entity.Property(f => f.OriginAirportCode).HasColumnName("origin_airport_code");
+    entity.Property(f => f.DestinationAirportCode).HasColumnName("destination_airport_code");
+    entity.Property(f => f.AircraftId).HasColumnName("aircraft_id");
+    entity.Property(f => f.DepartureDate).HasColumnName("departure_date");
+    entity.Property(f => f.DepartureTime).HasColumnName("departure_time");
+    entity.Property(f => f.ArrivalDate).HasColumnName("arrival_date");
+    entity.Property(f => f.ArrivalTime).HasColumnName("arrival_time");
+    entity.Property(f => f.FlightStatus).HasColumnName("flight_status");
+    entity.Property(f => f.StatusReason).HasColumnName("status_reason");
+    entity.Property(f => f.OverbookingCapacity).HasColumnName("overbooking_capacity");
+});
+
         modelBuilder.Entity<ReservationPassenger>().ToTable("ReservationPassenger");
         modelBuilder.Entity<SpecialServiceRequest>().ToTable("SpecialServiceRequest");
         modelBuilder.Entity<Payment>().ToTable("Payment");
@@ -51,6 +68,36 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<SeatAssignment>().ToTable("SeatAssignment");
         modelBuilder.Entity<TicketSegment>().ToTable("TicketSegment");
         modelBuilder.Entity<UserAccount>().ToTable("UserAccount");
+
+modelBuilder.Entity<UserAccount>(entity =>
+{
+    entity.HasKey(u => u.UserAccountId);
+
+    entity.Property(u => u.UserAccountId)
+        .HasColumnName("user_account_id");
+
+    entity.Property(u => u.Email)
+        .HasColumnName("email");
+
+    entity.Property(u => u.PasswordHash)
+        .HasColumnName("password_hash");
+
+    entity.Property(u => u.Role)
+        .HasColumnName("role");
+
+    entity.Property(u => u.EmployeeId)
+        .HasColumnName("employee_id");
+
+    entity.Property(u => u.PassengerId)
+        .HasColumnName("passenger_id");
+
+    entity.Property(u => u.CreatedAt)
+        .HasColumnName("created_at");
+
+    entity.Property(u => u.LastLogin)
+        .HasColumnName("last_login");
+});
+
     }
 }
 
