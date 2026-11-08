@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.ComponentModel.DataAnnotations;
@@ -7,8 +7,14 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var connectionString = "server=db75049.public.databaseasp.net;port=3306;database=db75049;user=db75049_Keshav;password=;SslMode=Preferred";
-var serverVersion = new MySqlServerVersion(new Version(8, 4, 6));
+
+var connectionString = builder.Configuration.GetConnectionString("AirlineDb")
+    ?? throw new InvalidOperationException(
+        "Database connection string is not configured."
+    );
+
+var serverVersion = ServerVersion.AutoDetect(connectionString);
+
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
