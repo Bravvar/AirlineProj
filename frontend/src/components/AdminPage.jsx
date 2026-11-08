@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Logo from './Logo';
 import { API_URL } from '../config';
 import StaffFlightManagement from './StaffFlightManagement';
+import RefundManagement from './RefundManagement';
 
 export default function AdminPage({ token, email, onBackToHome, onToggleSidebar }) {
   const [tab, setTab] = useState('overview');
@@ -23,7 +24,9 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
       try {
         const headers = { Authorization: `Bearer ${token}` };
         const paths = { overview: 'admin/overview', users: 'admin/users', flights: 'admin/flights' };
-        if(!paths[tab]) return;
+        if (!paths[tab]) {
+  setLoading(false);
+  return;}
         const res = await fetch(`${API_URL}/api/${paths[tab]}`, { headers });
         if (!res.ok) { setError('Could not load data.'); return; }
         setError('');
@@ -73,6 +76,7 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
             { id: 'flights', label: 'Fleet & Fares' },
             { id: 'management', label: 'Add & Cancel Flights' },
             { id: 'users', label: 'Users & Roles' },
+            { id: 'refunds', label: 'Refund Management' },
           ].map(item => (
             <button
               key={item.id}
@@ -153,6 +157,9 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
         {tab === 'management' && (
           <StaffFlightManagement token={token} />
         )}
+        {tab === 'refunds' && (
+  <RefundManagement token={token} />
+)}
 
         {tab === 'users' && loading && users.length === 0 && (
           <p className="text-gray-400 text-sm px-2 py-8">Loading users...</p>
