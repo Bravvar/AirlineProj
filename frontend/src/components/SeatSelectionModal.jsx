@@ -230,13 +230,17 @@ export default function SeatSelectionModal({
             <p className="text-xl font-extrabold text-blue-600">${finalPrice.toFixed(2)}</p>
           </div>
         </div>
-        <button
-          onClick={() => onProceed(selectedSeatIds, finalPrice)}
-          disabled={selectedSeatIds.length === 0}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isBooking ? 'Confirm' : 'Save Seat'}
-        </button>
+
+        <div className="max-w-md mx-auto">
+          <button
+            onClick={() => onProceed(selectedSeatIds, finalPrice)}
+            disabled={selectedSeatIds.length === 0}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isBooking ? 'Confirm' : 'Save Seat'}
+          </button>
+        </div>
+
       </div>
     </div>
   );
