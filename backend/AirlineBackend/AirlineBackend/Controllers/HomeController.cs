@@ -1214,6 +1214,7 @@ public class HomeController : ControllerBase
         f.flight_number AS FlightNumber,
         f.origin_airport_code AS Origin,
         f.destination_airport_code AS Destination,
+        f.flight_status AS FlightStatus,
         COUNT(DISTINCT CASE
             WHEN t.ticket_id IS NOT NULL
              AND rs.segment_status <> 'Cancelled'
@@ -1279,7 +1280,7 @@ public class HomeController : ControllerBase
         if (report4_minPctFull.HasValue) lfHaving.Add($"PctFull >= {report4_minPctFull.Value.ToString(inv)}");
         if (report4_maxPctFull.HasValue) lfHaving.Add($"PctFull <= {report4_maxPctFull.Value.ToString(inv)}");
         string lfHavingSql = lfHaving.Count > 0 ? " HAVING " + string.Join(" AND ", lfHaving) : "";
-        var report4 = _context.Database.SqlQueryRaw<Report4Row>(@"SELECT f.flight_number AS FlightNumber, cc.cabin_name AS CabinName, ff.fare_class_id AS FareClassId, ff.available_inventory AS AvailableInventory, ff.allocated_capacity AS AllocatedCapacity, ROUND(100.0 * (ff.allocated_capacity - ff.available_inventory) / ff.allocated_capacity, 1) AS PctFull FROM FlightFare ff JOIN Flight f ON f.flight_id = ff.flight_id JOIN CabinClass cc ON cc.cabin_class_id = ff.cabin_class_id" + lfWhereSql + lfHavingSql + @" ORDER BY f.flight_number, ff.fare_class_id", lfArgs.ToArray()).ToList();
+        var report4 = _context.Database.SqlQueryRaw<Report4Row>(@"SELECT f.flight_number AS FlightNumber, f.flight_status AS FlightStatus, cc.cabin_name AS CabinName, ff.fare_class_id AS FareClassId, ff.available_inventory AS AvailableInventory, ff.allocated_capacity AS AllocatedCapacity, ROUND(100.0 * (ff.allocated_capacity - ff.available_inventory) / ff.allocated_capacity, 1) AS PctFull FROM FlightFare ff JOIN Flight f ON f.flight_id = ff.flight_id JOIN CabinClass cc ON cc.cabin_class_id = ff.cabin_class_id" + lfWhereSql + lfHavingSql + @" ORDER BY f.flight_number, ff.fare_class_id", lfArgs.ToArray()).ToList();
 
         var aWhere = new List<string>();
         var aArgs = new List<object>();
@@ -1603,10 +1604,10 @@ public record AddFlightPayload(string flightNumber, string origin, string destin
 public record AddFarePayload(int cabinClassId, int fareClassId, decimal price, int allocatedCapacity);
 
 
-public class Report1Row { public string FlightNumber { get; set; } public string Origin { get; set; } public string Destination { get; set; } public long TicketsSold { get; set; } public decimal Revenue { get; set; } }
+public class Report1Row { public string FlightNumber { get; set; } public string Origin { get; set; } public string Destination { get; set; } public string FlightStatus { get; set; } public long TicketsSold { get; set; } public decimal Revenue { get; set; } }
 public class Report2Row { public int PassengerId { get; set; } public string Passenger { get; set; } public string Email { get; set; } public string? MembershipNumber { get; set; } public int? PointsBalance { get; set; } public string? MembershipStatus { get; set; } public string Tier { get; set; } }
 public class Report3Row { public string ConfirmationNumber { get; set; } public string TransactionReference { get; set; } public string TransactionType { get; set; } public decimal Amount { get; set; } public string PaymentStatus { get; set; } public string ProcessedBy { get; set; } public string? EmployeeRole { get; set; } public DateTime PaymentDateTime { get; set; } }
-public class Report4Row { public string FlightNumber { get; set; } public string CabinName { get; set; } public int FareClassId { get; set; } public int AvailableInventory { get; set; } public int AllocatedCapacity { get; set; } public decimal PctFull { get; set; } }
+public class Report4Row { public string FlightNumber { get; set; } public string FlightStatus { get; set; } public string CabinName { get; set; } public int FareClassId { get; set; } public int AvailableInventory { get; set; } public int AllocatedCapacity { get; set; } public decimal PctFull { get; set; } }
 public class Report5Row { public string Passenger { get; set; } public string ConfirmationNumber { get; set; } public string ReservationStatus { get; set; } public string TripType { get; set; } public decimal TotalAmount { get; set; } public long Tickets { get; set; } }
 public class Report6Row { public string ConfirmationNumber { get; set; } public string TransactionReference { get; set; } public decimal Amount { get; set; } public string ApprovedBy { get; set; } public string EmployeeRole { get; set; } public DateTime PaymentDateTime { get; set; } }
 public class Report7Row { public string Airport { get; set; } public long TicketsSold { get; set; } public decimal Revenue { get; set; } }
