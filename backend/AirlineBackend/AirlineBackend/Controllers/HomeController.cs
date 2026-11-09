@@ -925,50 +925,50 @@ public class HomeController : ControllerBase
     }
 
 
-    [HttpPut("flights/{id}/cancel")]
-    public async Task<IActionResult> CancelFlight(int id)
+[HttpPut("flights/{id}/cancel")]
+public async Task<IActionResult> CancelFlight(int id)
+{
+    var role = User.FindFirst(ClaimTypes.Role)?.Value;
+
+    if (role != "Employee" && role != "Supervisor")
+        return StatusCode(403, "Staff only");
+
+    var flight = await _context.Flight
+        .FirstOrDefaultAsync(f => f.FlightId == id);
+
+    if (flight == null)
+        return NotFound("Flight not found");
+
+    if (flight.FlightStatus != "Cancelled")
     {
-        var role = User.FindFirst(ClaimTypes.Role)?.Value;
-
-        if (role != "Employee" && role != "Supervisor")
-            return StatusCode(403, "Staff only");
-
-        var flight = await _context.Flight
-            .FirstOrDefaultAsync(f => f.FlightId == id);
-
-        if (flight == null)
-            return NotFound("Flight not found");
-
-        if (flight.FlightStatus != "Cancelled")
-        {
-            flight.FlightStatus = "Cancelled";
-            await _context.SaveChangesAsync();
-        }
-
-        try
-        {
-            await _context.Database.ExecuteSqlInterpolatedAsync(
-                $"CALL process_flight_cancellation({id})"
-            );
-        }
-        catch (Exception)
-        {
-            return StatusCode(
-                500,
-                "Flight cancellation processing failed. " +
-                "The cancellation may be pending. " +
-                "Please contact an administrator."
-            );
-        }
-
-        return Ok(new
-        {
-            flightId = flight.FlightId,
-            flightNumber = flight.FlightNumber,
-            flightStatus = "Cancelled",
-            cancellationProcessed = true
-        });
+        flight.FlightStatus = "Cancelled";
+        await _context.SaveChangesAsync();
     }
+
+    try
+    {
+        await _context.Database.ExecuteSqlInterpolatedAsync(
+            $"CALL process_flight_cancellation({id})"
+        );
+    }
+    catch (Exception)
+    {
+        return StatusCode(
+            500,
+            "Flight cancellation processing failed. " +
+            "The cancellation may be pending. " +
+            "Please contact an administrator."
+        );
+    }
+
+    return Ok(new
+    {
+        flightId = flight.FlightId,
+        flightNumber = flight.FlightNumber,
+        flightStatus = "Cancelled",
+        cancellationProcessed = true
+    });
+}
 
 
     [HttpGet("staff/flights")]

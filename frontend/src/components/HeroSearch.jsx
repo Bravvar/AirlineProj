@@ -4,7 +4,7 @@ import CheckoutModal from './CheckoutModal';
 import TabToggle from './TabToggle';
 
 export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn }) {
-  const currentTab = (activeTab === 'deals') ? activeTab : 'flights';
+  const currentTab = activeTab === 'deals' ? activeTab : 'flights';
 
   const [tripType, setTripType] = useState('round-trip');
   const [showCalendar, setShowCalendar] = useState(false);
@@ -13,7 +13,12 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   const [monthOffset, setMonthOffset] = useState(0);
 
   const [showTravelers, setShowTravelers] = useState(false);
-  const [travelers, setTravelers] = useState({ adults: 1, children: 0, infantsSeat: 0, infantsLap: 0 });
+  const [travelers, setTravelers] = useState({
+    adults: 1,
+    children: 0,
+    infantsSeat: 0,
+    infantsLap: 0,
+  });
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [results, setResults] = useState(null);
@@ -50,19 +55,13 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   const toRef = useRef(null);
   const resultsPanelRef = useRef(null);
 
+  // Start the calendar at the first month that has flights in the DB,
+  // not necessarily the current month. Fixes "flights aren't popping up".
   const now = new Date();
-  const BASE_DATE = { month: now.getMonth(), year: now.getFullYear() };
-
-  const clearResults = () => {
-    if (showAllOutbound) setShowAllOutbound(false);
-    if (showAllReturn) setShowAllReturn(false);
-    if (results !== null) setResults(null);
-    if (returnResults !== null) setReturnResults(null);
-    if (selectedOutboundFare) setSelectedOutboundFare(null);
-    if (bookingMessage) setBookingMessage('');
-    if (bookingError) setBookingError('');
-    if (fallbackWarning) setFallbackWarning('');
-  };
+  const [baseDate, setBaseDate] = useState({
+    month: now.getMonth(),
+    year: now.getFullYear(),
+  });
 
   useEffect(() => {
     let ignore = false;
@@ -83,10 +82,12 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         }
       })
       .catch((err) => {
-        console.warn('GET /api/routes returned error or empty, falling back to with-flights airports:', err.message);
+        console.warn('GET /api/routes failed, falling back to with-flights airports:', err.message);
         if (!ignore) setRoutes(null);
       });
-    return () => { ignore = true; };
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -102,17 +103,49 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       .catch(() => {
         if (!ignore) setAirports(null);
       });
-    return () => { ignore = true; };
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  // Advance the calendar to the first month that has any scheduled flight.
+  useEffect(() => {
+    let ignore = false;
+    fetch(`${API_URL}/api/flights`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (ignore || !Array.isArray(data) || data.length === 0) return;
+        const earliest = data
+          .map((f) => String(f.departureDate).slice(0, 10))
+          .filter(Boolean)
+          .sort()[0];
+        if (earliest) {
+          const d = new Date(earliest + 'T00:00:00');
+          setBaseDate({ month: d.getMonth(), year: d.getFullYear() });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   useEffect(() => {
     function handleClickOutside(event) {
-      if (calendarRef.current && !calendarRef.current.contains(event.target) &&
-          dateTriggerRef.current && !dateTriggerRef.current.contains(event.target)) {
+      if (
+        calendarRef.current &&
+        !calendarRef.current.contains(event.target) &&
+        dateTriggerRef.current &&
+        !dateTriggerRef.current.contains(event.target)
+      ) {
         setShowCalendar(false);
       }
-      if (travelersRef.current && !travelersRef.current.contains(event.target) &&
-          travelersTriggerRef.current && !travelersTriggerRef.current.contains(event.target)) {
+      if (
+        travelersRef.current &&
+        !travelersRef.current.contains(event.target) &&
+        travelersTriggerRef.current &&
+        !travelersTriggerRef.current.contains(event.target)
+      ) {
         setShowTravelers(false);
       }
       if (fromRef.current && !fromRef.current.contains(event.target)) setShowFromDropdown(false);
@@ -155,16 +188,33 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     return () => document.removeEventListener('mousedown', handleClickOutsideResults);
   }, [results, returnResults, showCheckoutModal]);
 
+  const clearResults = () => {
+    if (showAllOutbound) setShowAllOutbound(false);
+    if (showAllReturn) setShowAllReturn(false);
+    if (results !== null) setResults(null);
+    if (returnResults !== null) setReturnResults(null);
+    if (selectedOutboundFare) setSelectedOutboundFare(null);
+    if (bookingMessage) setBookingMessage('');
+    if (bookingError) setBookingError('');
+    if (fallbackWarning) setFallbackWarning('');
+  };
+
   const distinctOrigins = routes ? new Set(routes.map((r) => r.origin)) : null;
   const distinctDestinations = routes ? new Set(routes.map((r) => r.destination)) : null;
 
-  const validDestinationsForFrom = (routes && from.trim())
-    ? new Set(routes.filter((r) => r.origin === from.trim().toUpperCase()).map((r) => r.destination))
-    : distinctDestinations;
+  const validDestinationsForFrom =
+    routes && from.trim()
+      ? new Set(
+          routes.filter((r) => r.origin === from.trim().toUpperCase()).map((r) => r.destination)
+        )
+      : distinctDestinations;
 
-  const validOriginsForTo = (routes && to.trim())
-    ? new Set(routes.filter((r) => r.destination === to.trim().toUpperCase()).map((r) => r.origin))
-    : distinctOrigins;
+  const validOriginsForTo =
+    routes && to.trim()
+      ? new Set(
+          routes.filter((r) => r.destination === to.trim().toUpperCase()).map((r) => r.origin)
+        )
+      : distinctOrigins;
 
   const handleSelectFrom = (airportCode) => {
     clearResults();
@@ -205,7 +255,9 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
     if (routes && routes.length > 0) {
       if (newFrom) {
-        const allowedDests = new Set(routes.filter((r) => r.origin === newFrom).map((r) => r.destination));
+        const allowedDests = new Set(
+          routes.filter((r) => r.origin === newFrom).map((r) => r.destination)
+        );
         if (newTo && !allowedDests.has(newTo)) {
           newTo = '';
         }
@@ -267,7 +319,10 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         (year === startDate.year && monthIndex < startDate.month) ||
         (year === startDate.year && monthIndex === startDate.month && day < startDate.day);
       if (isBeforeStart) setStartDate({ day, month: monthIndex, year });
-      else { setEndDate({ day, month: monthIndex, year }); setShowCalendar(false); }
+      else {
+        setEndDate({ day, month: monthIndex, year });
+        setShowCalendar(false);
+      }
     } else if (startDate && endDate) {
       setStartDate({ day, month: monthIndex, year });
       setEndDate(null);
@@ -278,20 +333,30 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
   const getDateDisplay = () => {
     if (startDate && endDate && tripType === 'round-trip') {
-      const startMonth = new Date(startDate.year, startDate.month).toLocaleString('default', { month: 'short' });
-      const endMonth = new Date(endDate.year, endDate.month).toLocaleString('default', { month: 'short' });
+      const startMonth = new Date(startDate.year, startDate.month).toLocaleString('default', {
+        month: 'short',
+      });
+      const endMonth = new Date(endDate.year, endDate.month).toLocaleString('default', {
+        month: 'short',
+      });
       return `${startMonth} ${startDate.day} - ${endMonth} ${endDate.day}`;
     }
     if (startDate) {
-      const startMonth = new Date(startDate.year, startDate.month).toLocaleString('default', { month: 'short' });
+      const startMonth = new Date(startDate.year, startDate.month).toLocaleString('default', {
+        month: 'short',
+      });
       return `${startMonth} ${startDate.day}`;
     }
     return tripType === 'round-trip' ? 'Add dates' : 'Add date';
   };
 
   const getDisplayedMonth = (offset) => {
-    const d = new Date(BASE_DATE.year, BASE_DATE.month + monthOffset + offset, 1);
-    return { month: d.getMonth(), year: d.getFullYear(), label: d.toLocaleString('default', { month: 'long', year: 'numeric' }) };
+    const d = new Date(baseDate.year, baseDate.month + monthOffset + offset, 1);
+    return {
+      month: d.getMonth(),
+      year: d.getFullYear(),
+      label: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
+    };
   };
 
   const leftMonth = getDisplayedMonth(0);
@@ -306,22 +371,31 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
     return (
       <div className="grid grid-cols-7 gap-y-1 gap-x-1">
-        {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
-          <div key={d} className="text-xs text-gray-500 font-semibold py-2 text-center">{d}</div>
+        {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => (
+          <div key={d} className="text-xs text-gray-500 font-semibold py-2 text-center">
+            {d}
+          </div>
         ))}
         {allSlots.map((day, idx) => {
           if (day === null) return <div key={`empty-${idx}`} className="h-10 w-10" />;
 
-          const isStart = startDate && startDate.day === day && startDate.month === monthIndex && startDate.year === year;
-          const isEnd = endDate && endDate.day === day && endDate.month === monthIndex && endDate.year === year;
+          const isStart =
+            startDate && startDate.day === day && startDate.month === monthIndex && startDate.year === year;
+          const isEnd =
+            endDate && endDate.day === day && endDate.month === monthIndex && endDate.year === year;
 
-          let btnClasses = "h-10 w-10 mx-auto flex flex-col items-center justify-center rounded-xl text-sm font-medium transition-all ";
+          let btnClasses =
+            'h-10 w-10 mx-auto flex flex-col items-center justify-center rounded-xl text-sm font-medium transition-all ';
 
-          if (isStart || isEnd) btnClasses += "bg-blue-600 text-white shadow-md cursor-pointer";
-          else btnClasses += "text-gray-800 hover:bg-gray-100 cursor-pointer";
+          if (isStart || isEnd) btnClasses += 'bg-blue-600 text-white shadow-md cursor-pointer';
+          else btnClasses += 'text-gray-800 hover:bg-gray-100 cursor-pointer';
 
           return (
-            <div key={`${monthIndex}-${day}`} onClick={() => handleDateClick(day, monthIndex, year)} className={btnClasses}>
+            <div
+              key={`${monthIndex}-${day}`}
+              onClick={() => handleDateClick(day, monthIndex, year)}
+              className={btnClasses}
+            >
               <span>{day}</span>
             </div>
           );
@@ -332,17 +406,40 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
   const updateTraveler = (type, operation) => {
     clearResults();
-    setTravelers(prev => {
+    setTravelers((prev) => {
       const newCount = operation === 'add' ? prev[type] + 1 : prev[type] - 1;
       if (newCount < 0) return prev;
-      if (type === 'adults' && newCount === 0 && (prev.children > 0 || prev.infantsSeat > 0 || prev.infantsLap > 0)) return prev;
+      if (
+        type === 'adults' &&
+        newCount === 0 &&
+        (prev.children > 0 || prev.infantsSeat > 0 || prev.infantsLap > 0)
+      )
+        return prev;
       const totalCurrent = prev.adults + prev.children + prev.infantsSeat + prev.infantsLap;
       if (operation === 'add' && totalCurrent >= 9) return prev;
       return { ...prev, [type]: newCount };
     });
   };
 
-  const totalTravelers = travelers.adults + travelers.children + travelers.infantsSeat + travelers.infantsLap;
+  const totalTravelers =
+    travelers.adults + travelers.children + travelers.infantsSeat + travelers.infantsLap;
+
+  const loadFaresForFlights = async (rows) => {
+    if (!rows || rows.length === 0) return;
+    const faresPromises = rows.map((flight) =>
+      fetch(`${API_URL}/api/flights/${flight.flightId}/fares`)
+        .then((r) => r.json())
+        .catch(() => [])
+    );
+    const faresResults = await Promise.all(faresPromises);
+    setFaresByFlight((prev) => {
+      const next = { ...prev };
+      rows.forEach((flight, index) => {
+        next[flight.flightId] = Array.isArray(faresResults[index]) ? faresResults[index] : [];
+      });
+      return next;
+    });
+  };
 
   const handleSearch = async () => {
     if (currentTab !== 'flights') return;
@@ -367,42 +464,42 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     if (from.trim()) params.set('origin', from.trim().toUpperCase());
     if (to.trim()) params.set('destination', to.trim().toUpperCase());
     if (startDate) {
-      const d = `${startDate.year}-${String(startDate.month + 1).padStart(2, '0')}-${String(startDate.day).padStart(2, '0')}`;
+      const d = `${startDate.year}-${String(startDate.month + 1).padStart(2, '0')}-${String(
+        startDate.day
+      ).padStart(2, '0')}`;
       params.set('date', d);
     }
 
-    const url = `${API_URL}/api/flights?${params.toString()}`;
-
     try {
-      const res = await fetch(url);
+      const res = await fetch(`${API_URL}/api/flights?${params.toString()}`);
       const data = await res.json();
 
       if (!res.ok) {
         setBookingError(typeof data === 'string' ? data : 'Search failed.');
         setResults([]);
-      } else {
-        const rows = Array.isArray(data) ? data : [];
-        setResults(rows);
+        setSearching(false);
+        return;
+      }
 
-        // FIX: Automatically fetch fares for all returned flights
-        if (rows.length > 0) {
-          const faresPromises = rows.map((flight) => fetch(`${API_URL}/api/flights/${flight.flightId}/fares`).then(r => r.json()).catch(() => []));
-          const faresResults = await Promise.all(faresPromises);
-          
-          const newFaresByFlight = {};
-          rows.forEach((flight, index) => {
-            newFaresByFlight[flight.flightId] = Array.isArray(faresResults[index]) ? faresResults[index] : [];
-          });
-          setFaresByFlight(newFaresByFlight);
-        }
+      let rows = Array.isArray(data) ? data : [];
 
-        if (rows.length > 0 && params.has('date')) {
-          const iso = params.get('date');
-          const exact = rows.some((f) => String(f.departureDate).slice(0, 10) === iso);
-          if (!exact) {
-            setFallbackWarning(`No flights found on ${iso}. Showing the next available flights for this route instead.`);
-          }
+      // FIX: If a date filter returns zero flights, retry without it.
+      if (rows.length === 0 && params.has('date')) {
+        params.delete('date');
+        const retry = await fetch(`${API_URL}/api/flights?${params.toString()}`);
+        const retryData = await retry.json();
+        if (Array.isArray(retryData) && retryData.length > 0) {
+          rows = retryData;
+          setFallbackWarning(
+            'No flights on the selected date. Showing the next available flights for this route.'
+          );
         }
+      }
+
+      setResults(rows);
+
+      if (rows.length > 0) {
+        await loadFaresForFlights(rows);
       }
     } catch {
       setResults([]);
@@ -429,28 +526,29 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     if (to.trim()) params.set('origin', to.trim().toUpperCase());
     if (from.trim()) params.set('destination', from.trim().toUpperCase());
     if (endDate) {
-      const d = `${endDate.year}-${String(endDate.month + 1).padStart(2, '0')}-${String(endDate.day).padStart(2, '0')}`;
+      const d = `${endDate.year}-${String(endDate.month + 1).padStart(2, '0')}-${String(
+        endDate.day
+      ).padStart(2, '0')}`;
       params.set('date', d);
     }
 
     try {
       const res = await fetch(`${API_URL}/api/flights?${params.toString()}`);
       const data = await res.json();
-      const rows = Array.isArray(data) ? data : [];
-      setReturnResults(rows);
+      let rows = Array.isArray(data) ? data : [];
 
-      // FIX: Automatically fetch fares for all return flights
+      if (rows.length === 0 && params.has('date')) {
+        params.delete('date');
+        const retry = await fetch(`${API_URL}/api/flights?${params.toString()}`);
+        const retryData = await retry.json();
+        if (Array.isArray(retryData) && retryData.length > 0) {
+          rows = retryData;
+        }
+      }
+
+      setReturnResults(rows);
       if (rows.length > 0) {
-        const faresPromises = rows.map((flight) => fetch(`${API_URL}/api/flights/${flight.flightId}/fares`).then(r => r.json()).catch(() => []));
-        const faresResults = await Promise.all(faresPromises);
-        
-        setFaresByFlight(prev => {
-          const newFares = { ...prev };
-          rows.forEach((flight, index) => {
-            newFares[flight.flightId] = Array.isArray(faresResults[index]) ? faresResults[index] : [];
-          });
-          return newFares;
-        });
+        await loadFaresForFlights(rows);
       }
     } catch {
       setReturnResults([]);
@@ -488,7 +586,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
     const returnFareObj = isReturn ? fare : null;
     const outboundFareObj = selectedOutboundFare?.fare || fare;
-    
+
     setSelectedFlightFare({
       flight,
       fare: outboundFareObj,
@@ -523,6 +621,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     setFaresByFlight({});
     setSelectedOutboundFare(null);
     setReturnResults(null);
+
     const bookedFlight = selectedFlightFare?.flight;
     if (onBooked) {
       onBooked({
@@ -534,18 +633,22 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         flightNumber: bookedFlight?.flightNumber || '',
         origin: bookedFlight?.originAirportCode || from,
         destination: bookedFlight?.destinationAirportCode || to,
-        departureTime: bookedFlight?.departureTime ? String(bookedFlight.departureTime).substring(0, 5) : '',
-        arrivalTime: bookedFlight?.arrivalTime ? String(bookedFlight.arrivalTime).substring(0, 5) : '',
+        departureTime: bookedFlight?.departureTime
+          ? String(bookedFlight.departureTime).substring(0, 5)
+          : '',
+        arrivalTime: bookedFlight?.arrivalTime
+          ? String(bookedFlight.arrivalTime).substring(0, 5)
+          : '',
         duration: '3h 15m',
-        stops: 'Non-stop'
+        stops: 'Non-stop',
       });
     }
   };
 
   const searchIcon = (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="11" cy="11" r="7" stroke="white" strokeWidth="2.5"/>
-      <path d="M16.5 16.5L21 21" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+      <circle cx="11" cy="11" r="7" stroke="white" strokeWidth="2.5" />
+      <path d="M16.5 16.5L21 21" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
     </svg>
   );
 
@@ -553,7 +656,8 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     const bits = [];
     if (fare.cabinName) bits.push(fare.cabinName);
     bits.push(fare.refundable ? 'Refundable' : 'Non-refundable');
-    if (fare.checkedBagsIncluded > 0) bits.push(`${fare.checkedBagsIncluded} checked bag${fare.checkedBagsIncluded > 1 ? 's' : ''}`);
+    if (fare.checkedBagsIncluded > 0)
+      bits.push(`${fare.checkedBagsIncluded} checked bag${fare.checkedBagsIncluded > 1 ? 's' : ''}`);
     if (fare.changesAllowed && fare.changeFee > 0) bits.push(`Change fee $${fare.changeFee}`);
     if (!fare.changesAllowed) bits.push('No changes');
     return bits.join(' · ');
@@ -561,7 +665,6 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
   return (
     <div className="relative z-[60] w-full max-w-5xl mx-auto flex flex-col items-center mt-4">
-
       <div className="mb-5">
         <TabToggle activeTab={currentTab} setActiveTab={setActiveTab} isDarkBackground={true} />
       </div>
@@ -569,28 +672,55 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       <div className="w-full flex flex-col items-center relative z-30">
         {currentTab === 'flights' && (
           <>
-          <div className="flex gap-8 mb-4 ml-4 self-start">
-            <label className="flex items-center gap-3 cursor-pointer group">
-              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${tripType === 'round-trip' ? 'border-white' : 'border-white/60 group-hover:border-white'}`}>
-                {tripType === 'round-trip' && <div className="w-3 h-3 rounded-full bg-white" />}
-              </div>
-              <span className="text-white text-sm font-medium drop-shadow-md">Round-trip</span>
-              <input type="radio" className="hidden" checked={tripType === 'round-trip'} onChange={() => { clearResults(); setTripType('round-trip'); }} />
-            </label>
+            <div className="flex gap-8 mb-4 ml-4 self-start">
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <div
+                  className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                    tripType === 'round-trip'
+                      ? 'border-white'
+                      : 'border-white/60 group-hover:border-white'
+                  }`}
+                >
+                  {tripType === 'round-trip' && <div className="w-3 h-3 rounded-full bg-white" />}
+                </div>
+                <span className="text-white text-sm font-medium drop-shadow-md">Round-trip</span>
+                <input
+                  type="radio"
+                  className="hidden"
+                  checked={tripType === 'round-trip'}
+                  onChange={() => {
+                    clearResults();
+                    setTripType('round-trip');
+                  }}
+                />
+              </label>
 
-            <label className="flex items-center gap-3 cursor-pointer group">
-              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${tripType === 'one-way' ? 'border-white' : 'border-white/60 group-hover:border-white'}`}>
-                {tripType === 'one-way' && <div className="w-3 h-3 rounded-full bg-white" />}
-              </div>
-              <span className="text-white text-sm font-medium drop-shadow-md">One-way</span>
-              <input type="radio" className="hidden" checked={tripType === 'one-way'} onChange={() => { clearResults(); setTripType('one-way'); setEndDate(null); }} />
-            </label>
-          </div>
-          <p className="text-white/90 text-xs font-medium drop-shadow-md mb-4 ml-4 self-start">
-            {tripType === 'round-trip'
-              ? 'Round-trip: you will pick a return flight too, and the total covers both the outbound and return legs.'
-              : 'One-way: outbound flight only, no return flight.'}
-          </p>
+              <label className="flex items-center gap-3 cursor-pointer group">
+                <div
+                  className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                    tripType === 'one-way' ? 'border-white' : 'border-white/60 group-hover:border-white'
+                  }`}
+                >
+                  {tripType === 'one-way' && <div className="w-3 h-3 rounded-full bg-white" />}
+                </div>
+                <span className="text-white text-sm font-medium drop-shadow-md">One-way</span>
+                <input
+                  type="radio"
+                  className="hidden"
+                  checked={tripType === 'one-way'}
+                  onChange={() => {
+                    clearResults();
+                    setTripType('one-way');
+                    setEndDate(null);
+                  }}
+                />
+              </label>
+            </div>
+            <p className="text-white/90 text-xs font-medium drop-shadow-md mb-4 ml-4 self-start">
+              {tripType === 'round-trip'
+                ? 'Round-trip: you will pick a return flight too, and the total covers both the outbound and return legs.'
+                : 'One-way: outbound flight only, no return flight.'}
+            </p>
           </>
         )}
 
@@ -604,27 +734,44 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                   placeholder="City or Airport"
                   value={from}
                   onChange={(e) => {
-                    setFrom(e.target.value); setShowFromDropdown(true); setShowToDropdown(false);
-                    setShowCalendar(false); setShowTravelers(false); clearResults();
+                    setFrom(e.target.value);
+                    setShowFromDropdown(true);
+                    setShowToDropdown(false);
+                    setShowCalendar(false);
+                    setShowTravelers(false);
+                    clearResults();
                   }}
                   onFocus={() => {
-                    setShowFromDropdown(true); setShowToDropdown(false);
-                    setShowCalendar(false); setShowTravelers(false); clearResults();
+                    setShowFromDropdown(true);
+                    setShowToDropdown(false);
+                    setShowCalendar(false);
+                    setShowTravelers(false);
+                    clearResults();
                   }}
                   className="w-full outline-none text-sm font-medium text-gray-900 placeholder-gray-400 bg-transparent"
                 />
                 {showFromDropdown && airports && (
                   <div className="absolute top-full mt-3 left-0 w-[340px] max-w-[90vw] bg-white rounded-2xl shadow-2xl p-2 z-[110] text-gray-800 border border-gray-100 max-h-[300px] overflow-y-auto">
                     {fromMatches.length === 0 ? (
-                      <div className="p-3 text-xs text-gray-400 text-center">No matching airports</div>
+                      <div className="p-3 text-xs text-gray-400 text-center">
+                        No matching airports
+                      </div>
                     ) : (
                       fromMatches.map((a) => (
-                        <div key={a.airportCode} onMouseDown={() => handleSelectFrom(a.airportCode || a.AirportCode)} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors">
+                        <div
+                          key={a.airportCode}
+                          onMouseDown={() => handleSelectFrom(a.airportCode || a.AirportCode)}
+                          className="flex items-center justify-between p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors"
+                        >
                           <div className="flex flex-col min-w-0 pr-2">
-                            <span className="font-bold text-gray-900 text-sm truncate">{a.city}, {a.stateProvince || a.country}</span>
+                            <span className="font-bold text-gray-900 text-sm truncate">
+                              {a.city}, {a.stateProvince || a.country}
+                            </span>
                             <span className="text-xs text-gray-500 truncate">{a.airportName}</span>
                           </div>
-                          <span className="font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md text-xs border border-blue-100 flex-shrink-0">{a.airportCode}</span>
+                          <span className="font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md text-xs border border-blue-100 flex-shrink-0">
+                            {a.airportCode}
+                          </span>
                         </div>
                       ))
                     )}
@@ -632,7 +779,13 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                 )}
               </div>
 
-              <button type="button" onClick={handleSwap} className="text-gray-400 hover:text-gray-600 px-2 text-lg transition-colors cursor-pointer">⇄</button>
+              <button
+                type="button"
+                onClick={handleSwap}
+                className="text-gray-400 hover:text-gray-600 px-2 text-lg transition-colors cursor-pointer"
+              >
+                ⇄
+              </button>
 
               <div ref={toRef} className="flex-1 px-5 py-1 relative">
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">To</div>
@@ -641,27 +794,44 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                   placeholder="City or Airport"
                   value={to}
                   onChange={(e) => {
-                    setTo(e.target.value); setShowToDropdown(true); setShowFromDropdown(false);
-                    setShowCalendar(false); setShowTravelers(false); clearResults();
+                    setTo(e.target.value);
+                    setShowToDropdown(true);
+                    setShowFromDropdown(false);
+                    setShowCalendar(false);
+                    setShowTravelers(false);
+                    clearResults();
                   }}
                   onFocus={() => {
-                    setShowToDropdown(true); setShowFromDropdown(false);
-                    setShowCalendar(false); setShowTravelers(false); clearResults();
+                    setShowToDropdown(true);
+                    setShowFromDropdown(false);
+                    setShowCalendar(false);
+                    setShowTravelers(false);
+                    clearResults();
                   }}
                   className="w-full outline-none text-sm font-medium text-gray-900 placeholder-gray-400 bg-transparent"
                 />
                 {showToDropdown && airports && (
                   <div className="absolute top-full mt-3 left-0 w-[340px] max-w-[90vw] bg-white rounded-2xl shadow-2xl p-2 z-[110] text-gray-800 border border-gray-100 max-h-[300px] overflow-y-auto">
                     {toMatches.length === 0 ? (
-                      <div className="p-3 text-xs text-gray-400 text-center">No matching airports</div>
+                      <div className="p-3 text-xs text-gray-400 text-center">
+                        No matching airports
+                      </div>
                     ) : (
                       toMatches.map((a) => (
-                        <div key={a.airportCode} onMouseDown={() => handleSelectTo(a.airportCode || a.AirportCode)} className="flex items-center justify-between p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors">
+                        <div
+                          key={a.airportCode}
+                          onMouseDown={() => handleSelectTo(a.airportCode || a.AirportCode)}
+                          className="flex items-center justify-between p-2.5 rounded-xl hover:bg-blue-50 cursor-pointer transition-colors"
+                        >
                           <div className="flex flex-col min-w-0 pr-2">
-                            <span className="font-bold text-gray-900 text-sm truncate">{a.city}, {a.stateProvince || a.country}</span>
+                            <span className="font-bold text-gray-900 text-sm truncate">
+                              {a.city}, {a.stateProvince || a.country}
+                            </span>
                             <span className="text-xs text-gray-500 truncate">{a.airportName}</span>
                           </div>
-                          <span className="font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md text-xs border border-blue-100 flex-shrink-0">{a.airportCode}</span>
+                          <span className="font-mono font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md text-xs border border-blue-100 flex-shrink-0">
+                            {a.airportCode}
+                          </span>
                         </div>
                       ))
                     )}
@@ -671,16 +841,46 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
               <div className="w-px h-10 bg-gray-200"></div>
 
-              <div ref={dateTriggerRef} className="flex-1 px-5 py-1 cursor-pointer group date-trigger" onClick={() => { setShowCalendar(!showCalendar); setShowTravelers(false); setShowFromDropdown(false); setShowToDropdown(false); clearResults(); }}>
-                <div className="text-xs text-gray-500 font-semibold mb-0.5">{tripType === 'round-trip' ? 'Dates' : 'Date'}</div>
-                <div className={`text-sm font-medium transition-colors ${startDate ? 'text-gray-900' : 'text-gray-400 group-hover:text-gray-600'}`}>
-                  {startDate ? getDateDisplay() : (tripType === 'round-trip' ? 'Add dates' : 'Add date')}
+              <div
+                ref={dateTriggerRef}
+                className="flex-1 px-5 py-1 cursor-pointer group date-trigger"
+                onClick={() => {
+                  setShowCalendar(!showCalendar);
+                  setShowTravelers(false);
+                  setShowFromDropdown(false);
+                  setShowToDropdown(false);
+                  clearResults();
+                }}
+              >
+                <div className="text-xs text-gray-500 font-semibold mb-0.5">
+                  {tripType === 'round-trip' ? 'Dates' : 'Date'}
+                </div>
+                <div
+                  className={`text-sm font-medium transition-colors ${
+                    startDate ? 'text-gray-900' : 'text-gray-400 group-hover:text-gray-600'
+                  }`}
+                >
+                  {startDate
+                    ? getDateDisplay()
+                    : tripType === 'round-trip'
+                    ? 'Add dates'
+                    : 'Add date'}
                 </div>
               </div>
 
               <div className="w-px h-10 bg-gray-200"></div>
 
-              <div ref={travelersTriggerRef} className="flex-1 px-5 py-1 cursor-pointer group" onClick={() => { setShowTravelers(!showTravelers); setShowCalendar(false); setShowFromDropdown(false); setShowToDropdown(false); clearResults(); }}>
+              <div
+                ref={travelersTriggerRef}
+                className="flex-1 px-5 py-1 cursor-pointer group"
+                onClick={() => {
+                  setShowTravelers(!showTravelers);
+                  setShowCalendar(false);
+                  setShowFromDropdown(false);
+                  setShowToDropdown(false);
+                  clearResults();
+                }}
+              >
                 <div className="text-xs text-gray-500 font-semibold mb-0.5">Travelers</div>
                 <div className="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors">
                   {totalTravelers} {totalTravelers === 1 ? 'traveler' : 'travelers'}
@@ -690,14 +890,20 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
           )}
 
           <div className="pr-1.5 pl-3">
-            <button onClick={handleSearch} className="bg-[#0066ff] hover:bg-blue-700 transition-colors w-[50px] h-[50px] rounded-full flex items-center justify-center shadow-md hover:shadow-lg hover:scale-105 cursor-pointer">
+            <button
+              onClick={handleSearch}
+              className="bg-[#0066ff] hover:bg-blue-700 transition-colors w-[50px] h-[50px] rounded-full flex items-center justify-center shadow-md hover:shadow-lg hover:scale-105 cursor-pointer"
+            >
               {searchIcon}
             </button>
           </div>
         </div>
 
         {currentTab === 'flights' && showCalendar && (
-          <div ref={calendarRef} className="absolute top-full mt-2 left-0 w-full max-w-3xl bg-white rounded-3xl shadow-2xl p-6 z-[100] text-gray-800 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div
+            ref={calendarRef}
+            className="absolute top-full mt-2 left-0 w-full max-w-3xl bg-white rounded-3xl shadow-2xl p-6 z-[100] text-gray-800 animate-in fade-in slide-in-from-top-2 duration-200"
+          >
             <div className="flex justify-between items-center mb-4 px-2">
               <button
                 onClick={() => setMonthOffset(monthOffset - 1)}
@@ -718,15 +924,14 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
               </button>
             </div>
             <div className="flex gap-8">
-              <div className="flex-1">
-                {renderMonth(leftMonth.month, leftMonth.year)}
-              </div>
-              <div className="flex-1">
-                {renderMonth(rightMonth.month, rightMonth.year)}
-              </div>
+              <div className="flex-1">{renderMonth(leftMonth.month, leftMonth.year)}</div>
+              <div className="flex-1">{renderMonth(rightMonth.month, rightMonth.year)}</div>
             </div>
             <div className="flex justify-end mt-4 pt-4 border-t border-gray-100">
-              <button onClick={() => setShowCalendar(false)} className="text-sm font-semibold text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-lg cursor-pointer">
+              <button
+                onClick={() => setShowCalendar(false)}
+                className="text-sm font-semibold text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-lg cursor-pointer"
+              >
                 Done
               </button>
             </div>
@@ -734,7 +939,10 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         )}
 
         {currentTab === 'flights' && showTravelers && (
-          <div ref={travelersRef} className="absolute top-full mt-2 right-0 w-[340px] bg-white rounded-3xl shadow-2xl p-6 z-[100] text-gray-800 animate-in fade-in slide-in-from-top-2 duration-200 border border-gray-100">
+          <div
+            ref={travelersRef}
+            className="absolute top-full mt-2 right-0 w-[340px] bg-white rounded-3xl shadow-2xl p-6 z-[100] text-gray-800 animate-in fade-in slide-in-from-top-2 duration-200 border border-gray-100"
+          >
             <div className="flex flex-col gap-5">
               {[
                 { id: 'adults', label: 'Adults', sub: 'Age 12+' },
@@ -755,7 +963,9 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                     >
                       -
                     </button>
-                    <span className="w-4 text-center font-semibold text-gray-900">{travelers[type.id]}</span>
+                    <span className="w-4 text-center font-semibold text-gray-900">
+                      {travelers[type.id]}
+                    </span>
                     <button
                       onClick={() => updateTraveler(type.id, 'add')}
                       className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-600 hover:border-gray-400 transition-colors cursor-pointer"
@@ -767,7 +977,10 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
               ))}
             </div>
             <div className="flex justify-end mt-6 pt-4 border-t border-gray-100">
-              <button onClick={() => setShowTravelers(false)} className="text-sm font-semibold text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-lg cursor-pointer">
+              <button
+                onClick={() => setShowTravelers(false)}
+                className="text-sm font-semibold text-blue-600 hover:bg-blue-50 px-4 py-2 rounded-lg cursor-pointer"
+              >
                 Done
               </button>
             </div>
@@ -776,7 +989,10 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       </div>
 
       {currentTab === 'flights' && (searching || results !== null) && (
-        <div ref={resultsPanelRef} className="w-full bg-white rounded-3xl shadow-2xl mt-4 p-6 text-gray-800 relative z-10 max-h-[500px] overflow-y-auto">
+        <div
+          ref={resultsPanelRef}
+          className="w-full bg-white rounded-3xl shadow-2xl mt-4 p-6 text-gray-800 relative z-10 max-h-[500px] overflow-y-auto"
+        >
           <div className="flex justify-between items-center mb-4 sticky top-0 bg-white z-20 pb-2">
             <h3 className="text-lg font-bold text-gray-900">Flight Results</h3>
             {searching && <span className="text-sm text-gray-500 animate-pulse">Searching...</span>}
@@ -799,142 +1015,225 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
           )}
 
           {searching ? (
-             <div className="py-10 text-center text-gray-500">Loading flights...</div>
+            <div className="py-10 text-center text-gray-500">Loading flights...</div>
           ) : results && results.length === 0 ? (
-            <div className="py-10 text-center text-gray-500">No flights found for this route and date.</div>
-          ) : results && results.length > 0 && (
-            <div className="flex flex-col gap-3">
-              {(showAllOutbound ? results : results.slice(0, RESULTS_LIMIT)).map((flight) => {
-                const departureTime = flight.departureTime ? String(flight.departureTime).substring(0, 5) : '';
-                const arrivalTime = flight.arrivalTime ? String(flight.arrivalTime).substring(0, 5) : '';
-                const depDate = String(flight.departureDate).slice(0, 10);
-                
-                return (
-                  <div key={flight.flightId} className="border border-gray-100 rounded-2xl p-4 flex flex-col gap-3 hover:shadow-md transition-shadow bg-white">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-gray-900">{flight.originAirportCode} → {flight.destinationAirportCode}</span>
-                          <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">{flight.flightNumber}</span>
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                            flight.flightStatus === 'Cancelled' ? 'bg-red-50 text-red-700' :
-                            flight.flightStatus === 'Delayed' ? 'bg-amber-50 text-amber-700' :
-                            'bg-green-50 text-green-700'
-                          }`}>{flight.flightStatus}</span>
-                        </div>
-                        <div className="text-sm text-gray-500 mt-1">
-                          {depDate} | {departureTime} - {arrivalTime}
-                        </div>
-                      </div>
-                      {selectedOutboundFare?.flight.flightId === flight.flightId && (
-                        <span className="text-xs font-semibold text-blue-600">Selected</span>
-                      )}
-                    </div>
+            <div className="py-10 text-center text-gray-500">
+              No flights found for this route and date.
+            </div>
+          ) : (
+            results &&
+            results.length > 0 && (
+              <div className="flex flex-col gap-3">
+                {(showAllOutbound ? results : results.slice(0, RESULTS_LIMIT)).map((flight) => {
+                  const departureTime = flight.departureTime
+                    ? String(flight.departureTime).substring(0, 5)
+                    : '';
+                  const arrivalTime = flight.arrivalTime
+                    ? String(flight.arrivalTime).substring(0, 5)
+                    : '';
+                  const depDate = String(flight.departureDate).slice(0, 10);
 
-                    {selectedOutboundFare?.flight.flightId !== flight.flightId && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {(faresByFlight[flight.flightId] || []).length > 0 ? (
-                          faresByFlight[flight.flightId].map((fare) => (
-                            <button
-                              key={fare.flightFareId}
-                              onClick={() => initiateBooking(flight, fare)}
-                              disabled={isStaff}
-                              title={isStaff ? 'Staff accounts cannot book flights.' : undefined}
-                              className="flex flex-col items-start border border-gray-200 rounded-xl px-4 py-2 hover:border-blue-500 hover:bg-blue-50 transition-colors text-left group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-gray-200 disabled:hover:bg-transparent"
+                  return (
+                    <div
+                      key={flight.flightId}
+                      className="border border-gray-100 rounded-2xl p-4 flex flex-col gap-3 hover:shadow-md transition-shadow bg-white"
+                    >
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-gray-900">
+                              {flight.originAirportCode} → {flight.destinationAirportCode}
+                            </span>
+                            <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                              {flight.flightNumber}
+                            </span>
+                            <span
+                              className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                                flight.flightStatus === 'Cancelled'
+                                  ? 'bg-red-50 text-red-700'
+                                  : flight.flightStatus === 'Delayed'
+                                  ? 'bg-amber-50 text-amber-700'
+                                  : 'bg-green-50 text-green-700'
+                              }`}
                             >
-                              <span className="text-sm font-bold text-gray-900 group-hover:text-blue-700">${fare.currentPrice}</span>
-                              <span className="text-xs text-gray-500">{fare.cabinName} - {fare.fareClassName}</span>
-                              <span className="text-[10px] text-gray-400 mt-0.5">{fareDescriptor(fare)}</span>
-                              {isStaff && (<span className="text-[10px] text-gray-400 mt-0.5">Staff can't book</span>)}
-                            </button>
-                          ))
-                        ) : (
-                          <div className="text-xs text-gray-400 py-2">No fares available for this flight.</div>
+                              {flight.flightStatus}
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-500 mt-1">
+                            {depDate} | {departureTime} - {arrivalTime}
+                          </div>
+                        </div>
+                        {selectedOutboundFare?.flight.flightId === flight.flightId && (
+                          <span className="text-xs font-semibold text-blue-600">Selected</span>
                         )}
                       </div>
-                    )}
 
-                    {selectedOutboundFare?.flight.flightId === flight.flightId && returnResults !== null && (
-                      <div className="mt-3 bg-gray-50 rounded-xl p-3 border border-gray-200">
-                        <div className="flex justify-between items-center mb-2">
-                          <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wide">Select Return Flight</h4>
-                          <button onClick={handleChangeOutbound} className="text-xs text-blue-600 font-semibold hover:underline">Change Outbound</button>
-                        </div>
-                        {returnSearching ? (
-                          <div className="text-xs text-gray-500 py-2">Searching for return flights...</div>
-                        ) : returnResults.length === 0 ? (
-                          <div className="text-xs text-gray-500 py-2">No return flights found for this route and date.</div>
-                        ) : (
-                          <div className="flex flex-col gap-2">
-                            {(showAllReturn ? returnResults : returnResults.slice(0, RESULTS_LIMIT)).map((rFlight) => {
-                              const rDepTime = rFlight.departureTime ? String(rFlight.departureTime).substring(0, 5) : '';
-                              const rArrTime = rFlight.arrivalTime ? String(rFlight.arrivalTime).substring(0, 5) : '';
-                              const rDepDate = String(rFlight.departureDate).slice(0, 10);
-                              
-                              return (
-                                <div key={rFlight.flightId} className="bg-white border border-gray-200 rounded-lg p-2 flex flex-col gap-1">
-                                  <div className="flex justify-between items-center">
-                                    <span className="text-xs font-bold text-gray-800">{rFlight.originAirportCode} → {rFlight.destinationAirportCode}</span>
-                                    <span className="text-xs text-gray-500">{rDepDate} | {rDepTime} - {rArrTime}</span>
-                                  </div>
-                                  <div className="flex flex-wrap gap-1 mt-1">
-                                    {(faresByFlight[rFlight.flightId] || []).length > 0 ? (
-                                      faresByFlight[rFlight.flightId].map((rFare) => (
-                                        <button
-                                          key={rFare.flightFareId}
-                                          onClick={() => selectReturnFare(rFlight, rFare)}
-                                          disabled={isStaff}
-                                          title={isStaff ? 'Staff accounts cannot book flights.' : undefined}
-                                          className="text-left border border-blue-200 bg-blue-50 rounded-md px-2 py-1 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-50"
-                                        >
-                                          <div className="text-xs font-bold text-blue-800">${rFare.currentPrice} <span className="font-normal text-blue-600">- {rFare.cabinName}</span></div>
-                                          <div className="text-[9px] text-gray-500 mt-0.5">{fareDescriptor(rFare)}</div>
-                                          {isStaff && (<div className="text-[9px] text-gray-400 mt-0.5">Staff can't book</div>)}
-                                        </button>
-                                      ))
-                                    ) : (
-                                      <div className="text-[10px] text-gray-400 py-1">No fares available.</div>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                            {returnResults.length > RESULTS_LIMIT && (
-                              <button onClick={() => setShowAllReturn(!showAllReturn)} className="text-xs text-blue-600 font-semibold text-center mt-2 hover:underline">
-                                {showAllReturn ? 'Show Less' : `Show All (${returnResults.length})`}
+                      {selectedOutboundFare?.flight.flightId !== flight.flightId && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {(faresByFlight[flight.flightId] || []).length > 0 ? (
+                            faresByFlight[flight.flightId].map((fare) => (
+                              <button
+                                key={fare.flightFareId}
+                                onClick={() => initiateBooking(flight, fare)}
+                                disabled={isStaff}
+                                title={isStaff ? 'Staff accounts cannot book flights.' : undefined}
+                                className="flex flex-col items-start border border-gray-200 rounded-xl px-4 py-2 hover:border-blue-500 hover:bg-blue-50 transition-colors text-left group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-gray-200 disabled:hover:bg-transparent"
+                              >
+                                <span className="text-sm font-bold text-gray-900 group-hover:text-blue-700">
+                                  ${fare.currentPrice}
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  {fare.cabinName} - {fare.fareClassName}
+                                </span>
+                                <span className="text-[10px] text-gray-400 mt-0.5">
+                                  {fareDescriptor(fare)}
+                                </span>
+                                {isStaff && (
+                                  <span className="text-[10px] text-gray-400 mt-0.5">
+                                    Staff can't book
+                                  </span>
+                                )}
                               </button>
+                            ))
+                          ) : (
+                            <div className="text-xs text-gray-400 py-2">
+                              No fares available for this flight.
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {selectedOutboundFare?.flight.flightId === flight.flightId &&
+                        returnResults !== null && (
+                          <div className="mt-3 bg-gray-50 rounded-xl p-3 border border-gray-200">
+                            <div className="flex justify-between items-center mb-2">
+                              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wide">
+                                Select Return Flight
+                              </h4>
+                              <button
+                                onClick={handleChangeOutbound}
+                                className="text-xs text-blue-600 font-semibold hover:underline"
+                              >
+                                Change Outbound
+                              </button>
+                            </div>
+                            {returnSearching ? (
+                              <div className="text-xs text-gray-500 py-2">
+                                Searching for return flights...
+                              </div>
+                            ) : returnResults.length === 0 ? (
+                              <div className="text-xs text-gray-500 py-2">
+                                No return flights found for this route and date.
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-2">
+                                {(showAllReturn
+                                  ? returnResults
+                                  : returnResults.slice(0, RESULTS_LIMIT)
+                                ).map((rFlight) => {
+                                  const rDepTime = rFlight.departureTime
+                                    ? String(rFlight.departureTime).substring(0, 5)
+                                    : '';
+                                  const rArrTime = rFlight.arrivalTime
+                                    ? String(rFlight.arrivalTime).substring(0, 5)
+                                    : '';
+                                  const rDepDate = String(rFlight.departureDate).slice(0, 10);
+
+                                  return (
+                                    <div
+                                      key={rFlight.flightId}
+                                      className="bg-white border border-gray-200 rounded-lg p-2 flex flex-col gap-1"
+                                    >
+                                      <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold text-gray-800">
+                                          {rFlight.originAirportCode} →{' '}
+                                          {rFlight.destinationAirportCode}
+                                        </span>
+                                        <span className="text-xs text-gray-500">
+                                          {rDepDate} | {rDepTime} - {rArrTime}
+                                        </span>
+                                      </div>
+                                      <div className="flex flex-wrap gap-1 mt-1">
+                                        {(faresByFlight[rFlight.flightId] || []).length > 0 ? (
+                                          faresByFlight[rFlight.flightId].map((rFare) => (
+                                            <button
+                                              key={rFare.flightFareId}
+                                              onClick={() => selectReturnFare(rFlight, rFare)}
+                                              disabled={isStaff}
+                                              title={
+                                                isStaff
+                                                  ? 'Staff accounts cannot book flights.'
+                                                  : undefined
+                                              }
+                                              className="text-left border border-blue-200 bg-blue-50 rounded-md px-2 py-1 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-50"
+                                            >
+                                              <div className="text-xs font-bold text-blue-800">
+                                                ${rFare.currentPrice}{' '}
+                                                <span className="font-normal text-blue-600">
+                                                  - {rFare.cabinName}
+                                                </span>
+                                              </div>
+                                              <div className="text-[9px] text-gray-500 mt-0.5">
+                                                {fareDescriptor(rFare)}
+                                              </div>
+                                              {isStaff && (
+                                                <div className="text-[9px] text-gray-400 mt-0.5">
+                                                  Staff can't book
+                                                </div>
+                                              )}
+                                            </button>
+                                          ))
+                                        ) : (
+                                          <div className="text-[10px] text-gray-400 py-1">
+                                            No fares available.
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                {returnResults.length > RESULTS_LIMIT && (
+                                  <button
+                                    onClick={() => setShowAllReturn(!showAllReturn)}
+                                    className="text-xs text-blue-600 font-semibold text-center mt-2 hover:underline"
+                                  >
+                                    {showAllReturn
+                                      ? 'Show Less'
+                                      : `Show All (${returnResults.length})`}
+                                  </button>
+                                )}
+                              </div>
                             )}
                           </div>
                         )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {results.length > RESULTS_LIMIT && (
-                <button onClick={() => setShowAllOutbound(!showAllOutbound)} className="text-sm text-blue-600 font-semibold text-center mt-2 hover:underline">
-                  {showAllOutbound ? 'Show Less' : `Show All (${results.length})`}
-                </button>
-              )}
-            </div>
+                    </div>
+                  );
+                })}
+                {results.length > RESULTS_LIMIT && (
+                  <button
+                    onClick={() => setShowAllOutbound(!showAllOutbound)}
+                    className="text-sm text-blue-600 font-semibold text-center mt-2 hover:underline"
+                  >
+                    {showAllOutbound ? 'Show Less' : `Show All (${results.length})`}
+                  </button>
+                )}
+              </div>
+            )
           )}
         </div>
       )}
 
       {selectedFlightFare && (
-        <>
-          <CheckoutModal
-            show={showCheckoutModal}
-            onHide={() => setShowCheckoutModal(false)}
-            fareId={selectedFlightFare.fare.flightFareId}
-            returnFareId={selectedFlightFare.returnFare?.flightFareId ?? null}
-            totalPrice={checkoutTotal}
-            tripType={tripType}
-            onSuccess={handlePaymentSuccess}
-          />
-        </>
+        <CheckoutModal
+          show={showCheckoutModal}
+          onHide={() => setShowCheckoutModal(false)}
+          fareId={selectedFlightFare.fare.flightFareId}
+          returnFareId={selectedFlightFare.returnFare?.flightFareId ?? null}
+          totalPrice={checkoutTotal}
+          tripType={tripType}
+          onSuccess={handlePaymentSuccess}
+        />
       )}
-
     </div>
   );
 }

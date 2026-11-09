@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Logo from './Logo';
 import { API_URL } from '../config';
 import CheckoutModal from './CheckoutModal';
+import SeatSelectionModal from './SeatSelectionModal';
 
 const DEAL_IMG = {
   DEL: '/landscapes/india.jpg',
@@ -13,13 +14,23 @@ const DEAL_IMG = {
 };
 const FALLBACK_IMG = '/landscapes/europe.jpg';
 
-export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onToggleSidebar }) {
+export default function DealsPage({
+  onBackToHome,
+  onSignIn,
+  onMyTrips,
+  user,
+  onToggleSidebar,
+  onBooked,
+}) {
   const [deals, setDeals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const [selectedDeal, setSelectedDeal] = useState(null);
+  const [showSeatModal, setShowSeatModal] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [checkoutTotal, setCheckoutTotal] = useState(0);
+  const [selectedSeatIds, setSelectedSeatIds] = useState([]);
   const [bookingMessage, setBookingMessage] = useState('');
   const [cityByCode, setCityByCode] = useState({});
 
@@ -49,7 +60,9 @@ export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onT
       .finally(() => {
         if (!ignore) setLoading(false);
       });
-    return () => { ignore = true; };
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -72,7 +85,9 @@ export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onT
       .catch(() => {
         if (!ignore) setCityByCode({});
       });
-    return () => { ignore = true; };
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   const handleBookDeal = (deal) => {
@@ -81,13 +96,42 @@ export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onT
       return;
     }
     setSelectedDeal(deal);
+    setSelectedSeatIds([]);
+    setShowSeatModal(true);
+  };
+
+  const handleSeatProceed = (seatIds, total) => {
+    setSelectedSeatIds(seatIds);
+    setCheckoutTotal(total);
+    setShowSeatModal(false);
     setShowCheckoutModal(true);
   };
 
   const handlePaymentSuccess = (confirmationNumber, ticketNumber) => {
+    const deal = selectedDeal;
     setShowCheckoutModal(false);
     setSelectedDeal(null);
-    setBookingMessage(`Successfully booked! Confirmation #${confirmationNumber}${ticketNumber ? ` — Ticket #${ticketNumber}` : ''} — see it in My Trips.`);
+    setSelectedSeatIds([]);
+
+    if (onBooked && deal) {
+      onBooked({
+        passengerName: sessionStorage.getItem('email')?.split('@')[0] || 'Passenger',
+        email: sessionStorage.getItem('email'),
+        confirmationNumber: confirmationNumber,
+        ticketNumber: ticketNumber,
+        totalAmount: checkoutTotal,
+        flightNumber: deal.flightNumber,
+        origin: deal.origin,
+        destination: deal.destination,
+        departureTime: deal.departureTime ? String(deal.departureTime).substring(0, 5) : '',
+        arrivalTime: deal.arrivalTime ? String(deal.arrivalTime).substring(0, 5) : '',
+        stops: 'Non-stop',
+      });
+    } else {
+      setBookingMessage(
+        `Successfully booked! Confirmation #${confirmationNumber}${ticketNumber ? ` — Ticket #${ticketNumber}` : ''} — see it in My Trips.`
+      );
+    }
   };
 
   return (
@@ -98,20 +142,46 @@ export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onT
         </div>
 
         <div className="flex items-center gap-6">
-          <button onClick={() => onBackToHome('flights')} className="text-gray-600 hover:text-gray-900 font-semibold text-sm transition-colors cursor-pointer">
+          <button
+            onClick={() => onBackToHome('flights')}
+            className="text-gray-600 hover:text-gray-900 font-semibold text-sm transition-colors cursor-pointer"
+          >
             Flights
           </button>
-          <a href="#" onClick={(e) => { e.preventDefault(); onMyTrips(); }} className="text-gray-600 font-semibold hover:text-black flex items-center gap-2 text-sm transition-colors">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <a
+            href="#"
+            onClick={(e) => {
+              e.preventDefault();
+              onMyTrips();
+            }}
+            className="text-gray-600 font-semibold hover:text-black flex items-center gap-2 text-sm transition-colors"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
             My Trips
           </a>
-          
+
           {user ? (
-            <button onClick={onToggleSidebar} className="w-10 h-10 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold shadow-md hover:scale-105 transition-transform cursor-pointer">
+            <button
+              onClick={onToggleSidebar}
+              className="w-10 h-10 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold shadow-md hover:scale-105 transition-transform cursor-pointer"
+            >
               {user.email?.charAt(0).toUpperCase()}
             </button>
           ) : (
-            <button onClick={onSignIn} className="border border-blue-600 text-blue-600 font-semibold px-6 py-2 rounded-full hover:bg-blue-50 transition-all text-sm cursor-pointer">
+            <button
+              onClick={onSignIn}
+              className="border border-blue-600 text-blue-600 font-semibold px-6 py-2 rounded-full hover:bg-blue-50 transition-all text-sm cursor-pointer"
+            >
               Sign In
             </button>
           )}
@@ -127,7 +197,10 @@ export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onT
         {bookingMessage && (
           <div className="bg-green-50 border border-green-200 text-green-800 font-semibold rounded-2xl px-5 py-4 mb-8 flex justify-between items-center">
             <span>{bookingMessage}</span>
-            <button onClick={onMyTrips} className="text-green-900 underline text-xs font-bold cursor-pointer ml-4">
+            <button
+              onClick={onMyTrips}
+              className="text-green-900 underline text-xs font-bold cursor-pointer ml-4"
+            >
               View in My Trips →
             </button>
           </div>
@@ -178,10 +251,12 @@ export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onT
                       </span>
                     </div>
                     <div className="text-gray-600 mt-1">
-                      <strong>Departs:</strong> {String(deal.departureDate).slice(0, 10)} at {deal.departureTime}
+                      <strong>Departs:</strong> {String(deal.departureDate).slice(0, 10)} at{' '}
+                      {deal.departureTime}
                     </div>
                     <div className="text-gray-600">
-                      <strong>Arrives:</strong> {String(deal.arrivalDate).slice(0, 10)} at {deal.arrivalTime}
+                      <strong>Arrives:</strong> {String(deal.arrivalDate).slice(0, 10)} at{' '}
+                      {deal.arrivalTime}
                     </div>
                     <div className="text-gray-500 mt-1">
                       {deal.cabinName} · {deal.fareClassName} · {deal.availableInventory} seats left
@@ -202,17 +277,33 @@ export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onT
       </div>
 
       {selectedDeal && (
+        <SeatSelectionModal
+          show={showSeatModal}
+          onHide={() => {
+            setShowSeatModal(false);
+            setSelectedDeal(null);
+          }}
+          flightId={selectedDeal.flightId}
+          farePrice={selectedDeal.currentPrice}
+          onProceed={handleSeatProceed}
+        />
+      )}
+
+      {selectedDeal && (
         <CheckoutModal
           show={showCheckoutModal}
-          onHide={() => { setShowCheckoutModal(false); setSelectedDeal(null); }}
+          onHide={() => {
+            setShowCheckoutModal(false);
+            setSelectedDeal(null);
+          }}
           fareId={selectedDeal.flightFareId}
           returnFareId={null}
-          totalPrice={selectedDeal.currentPrice}
+          totalPrice={checkoutTotal}
           tripType="one-way"
+          seatIds={selectedSeatIds}
           onSuccess={handlePaymentSuccess}
         />
       )}
     </div>
   );
 }
-
