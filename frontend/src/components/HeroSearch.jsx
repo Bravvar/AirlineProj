@@ -1394,9 +1394,26 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                                       className="bg-white border border-gray-200 rounded-lg p-2 flex flex-col gap-1"
                                     >
                                       <div className="flex justify-between items-center">
-                                        <span className="text-xs font-bold text-gray-800">
+                                        <span className="flex items-center gap-2 text-xs font-bold text-gray-800">
                                           {rFlight.originAirportCode} →{' '}
                                           {rFlight.destinationAirportCode}
+                                          {/* Flight number + status (the outbound card shows
+                                              these; the return card did not, so the return
+                                              flight looked blank/missing). */}
+                                          <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                                            {rFlight.flightNumber}
+                                          </span>
+                                          <span
+                                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                              rFlight.flightStatus === 'Cancelled'
+                                                ? 'bg-red-50 text-red-700'
+                                                : rFlight.flightStatus === 'Delayed'
+                                                ? 'bg-amber-50 text-amber-700'
+                                                : 'bg-green-50 text-green-700'
+                                            }`}
+                                          >
+                                            {rFlight.flightStatus}
+                                          </span>
                                         </span>
                                         <span className="text-xs text-gray-500">
                                           {rDepDate} | {rDepTime} - {rArrTime}
@@ -1499,6 +1516,11 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
           seatIds={selectedSeatIds}
           passengerCount={totalTravelers}
           onSuccess={handlePaymentSuccess}
+          summary={
+            selectedFlightFare.returnFlight
+              ? `${selectedFlightFare.flight?.flightNumber || ''} · ${selectedFlightFare.flight?.originAirportCode || ''} → ${selectedFlightFare.flight?.destinationAirportCode || ''} · ${String(selectedFlightFare.flight?.departureDate || '').slice(0, 10)} ${String(selectedFlightFare.flight?.departureTime || '').substring(0, 5)}–${String(selectedFlightFare.flight?.arrivalTime || '').substring(0, 5)}  |  Return ${selectedFlightFare.returnFlight?.flightNumber || ''} · ${selectedFlightFare.returnFlight?.originAirportCode || ''} → ${selectedFlightFare.returnFlight?.destinationAirportCode || ''} · ${String(selectedFlightFare.returnFlight?.departureDate || '').slice(0, 10)} ${String(selectedFlightFare.returnFlight?.departureTime || '').substring(0, 5)}–${String(selectedFlightFare.returnFlight?.arrivalTime || '').substring(0, 5)}`
+              : `${selectedFlightFare.flight?.flightNumber || ''} · ${selectedFlightFare.flight?.originAirportCode || ''} → ${selectedFlightFare.flight?.destinationAirportCode || ''} · ${String(selectedFlightFare.flight?.departureDate || '').slice(0, 10)} ${String(selectedFlightFare.flight?.departureTime || '').substring(0, 5)}–${String(selectedFlightFare.flight?.arrivalTime || '').substring(0, 5)}`
+          }
         />
       )}
     </div>
