@@ -11,6 +11,7 @@ const REPORT_DEFINITIONS = [
       { key: 'flightNumber', label: 'Flight Number' },
       { key: 'origin', label: 'Origin' },
       { key: 'destination', label: 'Destination' },
+      {key: 'flightStatus', label: 'Flight Status'},
       { key: 'ticketsSold', label: 'Tickets Sold' },
       { key: 'revenue', label: 'Revenue' },
     ],
@@ -50,6 +51,7 @@ const REPORT_DEFINITIONS = [
     filters: ['origin', 'destination', 'startDate', 'endDate', 'flightStatus', 'cabinName', 'minPctFull', 'maxPctFull'],
     columns: [
       { key: 'flightNumber', label: 'Flight Number' },
+      { key: 'flightStatus', label: 'Flight Number'},
       { key: 'cabinName', label: 'Cabin Name' },
       { key: 'fareClassId', label: 'Fare Class ID' },
       { key: 'availableInventory', label: 'Available Inventory' },
