@@ -237,6 +237,13 @@ export default function SeatSelectionModal({
 
   const selectedSeat = seats.find((s) => selectedSeatIds.includes(seatIdOf(s))) || null;
   const selectedCabinId = selectedSeat ? seatCabinId(selectedSeat) : null;
+  // All picked seats, in order, for the summary (not just the first one).
+  const selectedSeatNumbers = selectedSeatIds
+    .map((id) => {
+      const s = seats.find((x) => seatIdOf(x) === id);
+      return s ? seatNumOf(s) : null;
+    })
+    .filter(Boolean);
   // One fee per picked seat (per-cabin fee, summed). One traveler = one seat.
   const seatFee = selectedSeatIds.reduce(
     (sum, id) => {
@@ -405,8 +412,8 @@ export default function SeatSelectionModal({
             <div className="flex items-end justify-between mb-4 px-1">
               <div className="flex gap-5">
                 <div>
-                  <p className="text-[11px] text-gray-500 font-medium">Seat</p>
-                  <p className="text-sm font-bold text-gray-900">{selectedSeat ? seatNumOf(selectedSeat) : '—'}</p>
+                  <p className="text-[11px] text-gray-500 font-medium">Seat{selectedSeatNumbers.length > 1 ? 's' : ''}</p>
+                  <p className="text-sm font-bold text-gray-900">{selectedSeatNumbers.length > 0 ? selectedSeatNumbers.join(', ') : '—'}</p>
                 </div>
                 <div>
                   <p className="text-[11px] text-gray-500 font-medium">Class</p>
