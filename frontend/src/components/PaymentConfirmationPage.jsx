@@ -17,10 +17,10 @@ export default function PaymentConfirmationPage({
   if (!details) return null;
 
   const AIRLINES = {
-    'C10': 'Coog10 Airlines'
+    'CG': 'Coog10 Airlines'
   };
   const airlineCode = (details.flightNumber || '').slice(0, 2).toUpperCase();
-  const airlineName = AIRLINES[airlineCode] || 'Airline';
+  const airlineName = AIRLINES[airlineCode] || 'Coog10 Airlines';
 
   // Generates the fake barcode lines
   const barcodeLines = Array.from({ length: 40 }).map((_, i) => (
