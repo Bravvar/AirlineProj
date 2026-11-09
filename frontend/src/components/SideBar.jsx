@@ -14,9 +14,8 @@ export default function SideBar({ show, onHide, auth, onLogout, onNavigate }) {
 
   const homeIcon = 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6';
   const dealsIcon = 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z';
-  const tripsIcon = 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6'; // Using home icon temporarily for trips
+  const tripsIcon = 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6';
   const reportsIcon = 'M3 3v18h18M19 9l-5 5-4-4-3 3';
-  const queriesIcon = 'M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z';
   const adminIcon = 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z';
   const employeeIcon = 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z';
   const passengerIcon = 'M12 19l9 2-9-18-9 18 9-2zm0 0v-8';
@@ -29,7 +28,6 @@ export default function SideBar({ show, onHide, auth, onLogout, onNavigate }) {
       { id: 'admin', label: 'Admin Dashboard', icon: adminIcon },
       { id: 'employee', label: 'Staff Workspace', icon: employeeIcon },
       { id: 'reports', label: 'Operational Reports', icon: reportsIcon },
-      { id: 'queries', label: 'Database Queries', icon: queriesIcon },
     ];
   } else if (auth.role === 'Employee') {
     roleTitle = 'Staff Workspace';
@@ -38,7 +36,6 @@ export default function SideBar({ show, onHide, auth, onLogout, onNavigate }) {
       { id: 'deals', label: 'Deals', icon: dealsIcon },
       { id: 'employee', label: 'Flight & Passengers', icon: passengerIcon },
       { id: 'reports', label: 'Operational Reports', icon: reportsIcon },
-      { id: 'queries', label: 'Database Queries', icon: queriesIcon },
     ];
   } else {
     roleTitle = 'My Account';
@@ -52,9 +49,8 @@ export default function SideBar({ show, onHide, auth, onLogout, onNavigate }) {
   return (
     <div className="fixed inset-0 z-[200] flex justify-end">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={onHide}></div>
-      
+
       <div className="relative w-80 bg-[#0f172a] text-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 rounded-l-3xl overflow-hidden">
-        
         <div className="p-6 flex justify-between items-center border-b border-white/10">
           <h2 className="text-xl font-bold text-white">{roleTitle}</h2>
           <button onClick={onHide} className="text-gray-400 hover:text-white text-3xl leading-none cursor-pointer">&times;</button>
@@ -75,7 +71,6 @@ export default function SideBar({ show, onHide, auth, onLogout, onNavigate }) {
           ))}
         </div>
 
-        {/* Profile Picture and Email at the bottom */}
         <div className="p-6 border-t border-white/10 bg-[#0b1120]">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-12 h-12 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold text-xl shadow-md">

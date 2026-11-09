@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useState } from 'react';
 import { API_URL } from '../config';
 
@@ -17,6 +16,18 @@ export default function RefundManagement({ token }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+
+  // Supervisor refund audit
+  const [auditConfirmation, setAuditConfirmation] = useState('');
+  const [auditRows, setAuditRows] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState('');
+
+  // Cancelled reservations + refund status
+  const [cancelledConfirmation, setCancelledConfirmation] = useState('');
+  const [cancelledRows, setCancelledRows] = useState([]);
+  const [cancelledLoading, setCancelledLoading] = useState(false);
+  const [cancelledError, setCancelledError] = useState('');
 
   const loadReviews = useCallback(async () => {
     if (!token) return;
@@ -40,9 +51,49 @@ export default function RefundManagement({ token }) {
     }
   }, [token]);
 
+  const loadAudit = useCallback(async (confirmation) => {
+    if (!token) return;
+    setAuditLoading(true);
+    setAuditError('');
+    try {
+      const qs = confirmation ? `?confirmation=${encodeURIComponent(confirmation)}` : '';
+      const res = await fetch(`${API_URL}/api/admin/refunds/audit${qs}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Unable to load refund audit.');
+      const data = await res.json();
+      setAuditRows(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setAuditError(err.message);
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [token]);
+
+  const loadCancelled = useCallback(async (confirmation) => {
+    if (!token) return;
+    setCancelledLoading(true);
+    setCancelledError('');
+    try {
+      const qs = confirmation ? `?confirmation=${encodeURIComponent(confirmation)}` : '';
+      const res = await fetch(`${API_URL}/api/admin/refunds/cancelled${qs}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Unable to load cancelled reservations.');
+      const data = await res.json();
+      setCancelledRows(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setCancelledError(err.message);
+    } finally {
+      setCancelledLoading(false);
+    }
+  }, [token]);
+
   useEffect(() => {
     loadReviews();
-  }, [loadReviews]);
+    loadAudit('');
+    loadCancelled('');
+  }, [loadReviews, loadAudit, loadCancelled]);
 
   const runAction = async (review, action) => {
     const id = review.reviewId;
@@ -109,6 +160,8 @@ export default function RefundManagement({ token }) {
 
       setMessage(`Refund #${id}: ${action} successful.`);
       await loadReviews();
+      await loadAudit(auditConfirmation);
+      await loadCancelled(cancelledConfirmation);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -324,6 +377,128 @@ export default function RefundManagement({ token }) {
             </div>
           );
         })}
+      </div>
+
+      {/* Supervisor refund audit */}
+      <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
+        <div className="flex flex-wrap justify-between items-center gap-3">
+          <div>
+            <h3 className="text-lg font-bold">Supervisor Refund Audit</h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Every refund recorded with a supervisor as processor. Leave the confirmation
+              blank to see all.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              value={auditConfirmation}
+              onChange={(e) => setAuditConfirmation(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') loadAudit(auditConfirmation); }}
+              placeholder="Confirmation (blank = all)"
+              className="border border-gray-200 rounded-xl px-3 py-2 text-sm w-56 font-mono"
+            />
+            <button
+              onClick={() => loadAudit(auditConfirmation)}
+              disabled={auditLoading}
+              className="bg-[#0066ff] text-white px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
+            >
+              {auditLoading ? 'Loading...' : 'Search'}
+            </button>
+            <button
+              onClick={() => { setAuditConfirmation(''); loadAudit(''); }}
+              disabled={auditLoading}
+              className="text-xs font-semibold text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-xl disabled:opacity-50"
+            >
+              Show All
+            </button>
+          </div>
+        </div>
+        {auditError && <p className="text-red-600 mt-3 text-sm">{auditError}</p>}
+        <div className="overflow-x-auto mt-4">
+          <table className="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50/30 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                <th className="px-4 py-3">Confirmation</th>
+                <th className="px-4 py-3">Supervisor Email</th>
+                <th className="px-4 py-3">Amount</th>
+                <th className="px-4 py-3">Payment Date & Time</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {auditRows.length === 0 ? (
+                <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-400 text-sm">No records.</td></tr>
+              ) : auditRows.map((r, i) => (
+                <tr key={i} className="hover:bg-blue-50/30">
+                  <td className="px-4 py-3 font-mono">{r.confirmationNumber}</td>
+                  <td className="px-4 py-3">{r.supervisorEmail}</td>
+                  <td className="px-4 py-3">{money(r.amount)}</td>
+                  <td className="px-4 py-3">{String(r.paymentDateTime).replace('T', ' ').slice(0, 19)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Cancelled reservations and refund status */}
+      <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
+        <div className="flex flex-wrap justify-between items-center gap-3">
+          <div>
+            <h3 className="text-lg font-bold">Cancelled Reservations & Refund Status</h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Passengers on cancelled reservations with refunded amount. Leave the confirmation
+              blank to see all.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              value={cancelledConfirmation}
+              onChange={(e) => setCancelledConfirmation(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') loadCancelled(cancelledConfirmation); }}
+              placeholder="Confirmation (blank = all)"
+              className="border border-gray-200 rounded-xl px-3 py-2 text-sm w-56 font-mono"
+            />
+            <button
+              onClick={() => loadCancelled(cancelledConfirmation)}
+              disabled={cancelledLoading}
+              className="bg-[#0066ff] text-white px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
+            >
+              {cancelledLoading ? 'Loading...' : 'Search'}
+            </button>
+            <button
+              onClick={() => { setCancelledConfirmation(''); loadCancelled(''); }}
+              disabled={cancelledLoading}
+              className="text-xs font-semibold text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-xl disabled:opacity-50"
+            >
+              Show All
+            </button>
+          </div>
+        </div>
+        {cancelledError && <p className="text-red-600 mt-3 text-sm">{cancelledError}</p>}
+        <div className="overflow-x-auto mt-4">
+          <table className="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50/30 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                <th className="px-4 py-3">Confirmation</th>
+                <th className="px-4 py-3">Passenger</th>
+                <th className="px-4 py-3">Reservation Status</th>
+                <th className="px-4 py-3">Refunded Amount</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {cancelledRows.length === 0 ? (
+                <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-400 text-sm">No records.</td></tr>
+              ) : cancelledRows.map((r, i) => (
+                <tr key={i} className="hover:bg-blue-50/30">
+                  <td className="px-4 py-3 font-mono">{r.confirmationNumber}</td>
+                  <td className="px-4 py-3">{r.passenger}</td>
+                  <td className="px-4 py-3">{r.reservationStatus}</td>
+                  <td className="px-4 py-3">{money(r.refundedAmount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   );

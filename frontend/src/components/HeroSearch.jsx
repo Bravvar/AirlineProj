@@ -43,6 +43,11 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   const [showFromDropdown, setShowFromDropdown] = useState(false);
   const [showToDropdown, setShowToDropdown] = useState(false);
 
+  // Availability search mode
+  const [searchMode, setSearchMode] = useState('search'); // 'search' | 'availability'
+  const [availabilityRows, setAvailabilityRows] = useState(null);
+  const [availabilitySearching, setAvailabilitySearching] = useState(false);
+
   const RESULTS_LIMIT = 10;
   const userRole = sessionStorage.getItem('role');
   const isStaff = userRole === 'Employee' || userRole === 'Supervisor';
@@ -55,8 +60,6 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   const toRef = useRef(null);
   const resultsPanelRef = useRef(null);
 
-  // Start the calendar at the first month that has flights in the DB,
-  // not necessarily the current month. Fixes "flights aren't popping up".
   const now = new Date();
   const [baseDate, setBaseDate] = useState({
     month: now.getMonth(),
@@ -108,7 +111,6 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     };
   }, []);
 
-  // Advance the calendar to the first month that has any scheduled flight.
   useEffect(() => {
     let ignore = false;
     fetch(`${API_URL}/api/flights`)
@@ -172,12 +174,13 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       if (showCheckoutModal) return;
       if (!resultsPanelRef.current) return;
       if (resultsPanelRef.current.contains(event.target)) return;
-      if (results === null && returnResults === null) return;
+      if (results === null && returnResults === null && availabilityRows === null) return;
 
       setShowAllOutbound(false);
       setShowAllReturn(false);
       setResults(null);
       setReturnResults(null);
+      setAvailabilityRows(null);
       setSelectedOutboundFare(null);
       setBookingMessage('');
       setBookingError('');
@@ -186,13 +189,14 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
     document.addEventListener('mousedown', handleClickOutsideResults);
     return () => document.removeEventListener('mousedown', handleClickOutsideResults);
-  }, [results, returnResults, showCheckoutModal]);
+  }, [results, returnResults, availabilityRows, showCheckoutModal]);
 
   const clearResults = () => {
     if (showAllOutbound) setShowAllOutbound(false);
     if (showAllReturn) setShowAllReturn(false);
     if (results !== null) setResults(null);
     if (returnResults !== null) setReturnResults(null);
+    if (availabilityRows !== null) setAvailabilityRows(null);
     if (selectedOutboundFare) setSelectedOutboundFare(null);
     if (bookingMessage) setBookingMessage('');
     if (bookingError) setBookingError('');
@@ -441,8 +445,53 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     });
   };
 
+  const buildDateParam = (dateObj) => {
+    if (!dateObj) return null;
+    return `${dateObj.year}-${String(dateObj.month + 1).padStart(2, '0')}-${String(
+      dateObj.day
+    ).padStart(2, '0')}`;
+  };
+
+  // Flight Availability search (flight + cabin + fare + price + seats-left in one row)
+  const handleAvailabilitySearch = async () => {
+    setAvailabilitySearching(true);
+    setBookingError('');
+    setBookingMessage('');
+    setFallbackWarning('');
+    setAvailabilityRows(null);
+    setResults(null);
+    setReturnResults(null);
+    setSelectedOutboundFare(null);
+
+    const params = new URLSearchParams();
+    if (from.trim()) params.set('origin', from.trim().toUpperCase());
+    if (to.trim()) params.set('destination', to.trim().toUpperCase());
+    const dateParam = buildDateParam(startDate);
+    if (dateParam) params.set('date', dateParam);
+
+    try {
+      const res = await fetch(`${API_URL}/api/queries/availability?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok) {
+        setBookingError(typeof data === 'string' ? data : 'Availability search failed.');
+        setAvailabilityRows([]);
+        return;
+      }
+      setAvailabilityRows(Array.isArray(data) ? data : []);
+    } catch {
+      setBookingError('Unable to reach the server.');
+      setAvailabilityRows([]);
+    } finally {
+      setAvailabilitySearching(false);
+    }
+  };
+
   const handleSearch = async () => {
     if (currentTab !== 'flights') return;
+
+    if (searchMode === 'availability') {
+      return handleAvailabilitySearch();
+    }
 
     if (!from.trim() || !to.trim()) {
       setBookingError('Please enter both origin and destination.');
@@ -457,18 +506,15 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     setFaresByFlight({});
     setSelectedOutboundFare(null);
     setReturnResults(null);
+    setAvailabilityRows(null);
     setShowAllOutbound(false);
     setShowAllReturn(false);
 
     const params = new URLSearchParams();
     if (from.trim()) params.set('origin', from.trim().toUpperCase());
     if (to.trim()) params.set('destination', to.trim().toUpperCase());
-    if (startDate) {
-      const d = `${startDate.year}-${String(startDate.month + 1).padStart(2, '0')}-${String(
-        startDate.day
-      ).padStart(2, '0')}`;
-      params.set('date', d);
-    }
+    const dateParam = buildDateParam(startDate);
+    if (dateParam) params.set('date', dateParam);
 
     try {
       const res = await fetch(`${API_URL}/api/flights?${params.toString()}`);
@@ -483,7 +529,6 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
       let rows = Array.isArray(data) ? data : [];
 
-      // FIX: If a date filter returns zero flights, retry without it.
       if (rows.length === 0 && params.has('date')) {
         params.delete('date');
         const retry = await fetch(`${API_URL}/api/flights?${params.toString()}`);
@@ -525,12 +570,8 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     const params = new URLSearchParams();
     if (to.trim()) params.set('origin', to.trim().toUpperCase());
     if (from.trim()) params.set('destination', from.trim().toUpperCase());
-    if (endDate) {
-      const d = `${endDate.year}-${String(endDate.month + 1).padStart(2, '0')}-${String(
-        endDate.day
-      ).padStart(2, '0')}`;
-      params.set('date', d);
-    }
+    const dateParam = buildDateParam(endDate);
+    if (dateParam) params.set('date', dateParam);
 
     try {
       const res = await fetch(`${API_URL}/api/flights?${params.toString()}`);
@@ -721,6 +762,31 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                 ? 'Round-trip: you will pick a return flight too, and the total covers both the outbound and return legs.'
                 : 'One-way: outbound flight only, no return flight.'}
             </p>
+
+            <div className="flex gap-2 mb-3 ml-4 self-start">
+              <button
+                type="button"
+                onClick={() => { setSearchMode('search'); clearResults(); }}
+                className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+                  searchMode === 'search'
+                    ? 'bg-white text-gray-900 shadow'
+                    : 'bg-white/20 text-white hover:bg-white/30'
+                }`}
+              >
+                Search Fares
+              </button>
+              <button
+                type="button"
+                onClick={() => { setSearchMode('availability'); clearResults(); }}
+                className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+                  searchMode === 'availability'
+                    ? 'bg-white text-gray-900 shadow'
+                    : 'bg-white/20 text-white hover:bg-white/30'
+                }`}
+              >
+                Flight Availability
+              </button>
+            </div>
           </>
         )}
 
@@ -988,14 +1054,17 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         )}
       </div>
 
-      {currentTab === 'flights' && (searching || results !== null) && (
+      {currentTab === 'flights' && (searching || results !== null || availabilitySearching || availabilityRows !== null) && (
         <div
           ref={resultsPanelRef}
           className="w-full bg-white rounded-3xl shadow-2xl mt-4 p-6 text-gray-800 relative z-10 max-h-[500px] overflow-y-auto"
         >
           <div className="flex justify-between items-center mb-4 sticky top-0 bg-white z-20 pb-2">
-            <h3 className="text-lg font-bold text-gray-900">Flight Results</h3>
+            <h3 className="text-lg font-bold text-gray-900">
+              {searchMode === 'availability' ? 'Flight Availability' : 'Flight Results'}
+            </h3>
             {searching && <span className="text-sm text-gray-500 animate-pulse">Searching...</span>}
+            {availabilitySearching && <span className="text-sm text-gray-500 animate-pulse">Searching...</span>}
           </div>
 
           {bookingError && (
@@ -1014,7 +1083,50 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
             </p>
           )}
 
-          {searching ? (
+          {searchMode === 'availability' ? (
+            availabilitySearching ? (
+              <div className="py-10 text-center text-gray-500">Loading availability...</div>
+            ) : availabilityRows && availabilityRows.length === 0 ? (
+              <div className="py-10 text-center text-gray-500">
+                No available flights for these criteria.
+              </div>
+            ) : availabilityRows && availabilityRows.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50/40 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                      <th className="px-4 py-3">Flight</th>
+                      <th className="px-4 py-3">Route</th>
+                      <th className="px-4 py-3">Departure</th>
+                      <th className="px-4 py-3">Cabin</th>
+                      <th className="px-4 py-3">Fare</th>
+                      <th className="px-4 py-3">Price</th>
+                      <th className="px-4 py-3">Seats Left</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {availabilityRows.map((r, i) => (
+                      <tr key={`${r.flightNumber}-${r.cabinName}-${r.fareClassName}-${i}`} className="hover:bg-blue-50/30">
+                        <td className="px-4 py-3 font-semibold">{r.flightNumber}</td>
+                        <td className="px-4 py-3">{r.originAirportCode} → {r.destinationAirportCode}</td>
+                        <td className="px-4 py-3">
+                          {String(r.departureDate).slice(0, 10)} {r.departureTime ? String(r.departureTime).slice(0, 5) : ''}
+                        </td>
+                        <td className="px-4 py-3">{r.cabinName}</td>
+                        <td className="px-4 py-3">{r.fareClassName}</td>
+                        <td className="px-4 py-3 font-bold text-blue-700">${Number(r.currentPrice).toFixed(2)}</td>
+                        <td className="px-4 py-3">{r.availableInventory}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="py-10 text-center text-gray-500">
+                Enter search criteria and press the search button.
+              </div>
+            )
+          ) : searching ? (
             <div className="py-10 text-center text-gray-500">Loading flights...</div>
           ) : results && results.length === 0 ? (
             <div className="py-10 text-center text-gray-500">
@@ -1087,6 +1199,9 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                                 </span>
                                 <span className="text-[10px] text-gray-400 mt-0.5">
                                   {fareDescriptor(fare)}
+                                </span>
+                                <span className="text-[10px] text-gray-400 mt-0.5">
+                                  {fare.availableInventory} seat{fare.availableInventory === 1 ? '' : 's'} left
                                 </span>
                                 {isStaff && (
                                   <span className="text-[10px] text-gray-400 mt-0.5">

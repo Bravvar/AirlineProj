@@ -11,6 +11,7 @@ export default function EmployeePage({ token, email, onBackToHome, onToggleSideb
   const [manifest, setManifest] = useState(null);
   const [selectedRes, setSelectedRes] = useState(null);
   const [error, setError] = useState('');
+  const [loadingRes, setLoadingRes] = useState(false);
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
@@ -24,25 +25,52 @@ export default function EmployeePage({ token, email, onBackToHome, onToggleSideb
           const res = await fetch(`${API_URL}/api/staff/flights`, { headers });
           if (!ignore) setFlights(res.ok ? await res.json() : []);
         }
-        if (tab === 'reservations') {
-          const qs = search ? `?confirmation=${encodeURIComponent(search)}` : '';
-          const res = await fetch(`${API_URL}/api/staff/reservations${qs}`, { headers });
-          if (!ignore) setReservations(res.ok ? await res.json() : []);
-        }
       } catch {
         if (!ignore) setError('Could not load data.');
       }
     }
     load();
     return () => { ignore = true; };
-  }, [tab, token, search]);
+  }, [tab, token]);
+
+  // Reservation details search. Blank confirmation = all.
+  const loadReservations = async (confirmation) => {
+    if (!token) return;
+    setLoadingRes(true);
+    setError('');
+    try {
+      const qs = confirmation ? `?confirmation=${encodeURIComponent(confirmation)}` : '';
+      const res = await fetch(`${API_URL}/api/staff/reservations${qs}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        setError('Could not load reservations.');
+        setReservations([]);
+      } else {
+        const data = await res.json();
+        setReservations(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      setError('Could not load reservations.');
+      setReservations([]);
+    } finally {
+      setLoadingRes(false);
+    }
+  };
+
+  useEffect(() => {
+    if (tab === 'reservations') {
+      loadReservations(search);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, token]);
 
   const openManifest = async (id) => {
     setSelectedRes(id);
     setManifest(null);
     const headers = { Authorization: `Bearer ${token}` };
     const res = await fetch(`${API_URL}/api/staff/reservations/${id}/manifest`, { headers });
-    setManifest(res.ok ? await res.json() : { passengers: [], segments: [] });
+    setManifest(res.ok ? await res.json() : { passengers: [], segments: [], tickets: [] });
   };
 
   return (
@@ -102,7 +130,7 @@ export default function EmployeePage({ token, email, onBackToHome, onToggleSideb
                   <div>
                     <p className="text-xs text-gray-400 font-bold mb-1">{String(f.departureDate).slice(0,10)}</p>
                     <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                      {f.originAirportCode} 
+                      {f.originAirportCode}
                       <svg className="w-4 h-4 text-gray-300" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/></svg>
                       {f.destinationAirportCode}
                     </h3>
@@ -129,15 +157,40 @@ export default function EmployeePage({ token, email, onBackToHome, onToggleSideb
 
         {tab === 'reservations' && (
           <div className="flex flex-col gap-6">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search confirmation number..."
-              className="w-full max-w-md bg-white border border-gray-200 rounded-2xl px-5 py-3 text-sm font-medium outline-none focus:border-[#0066ff] focus:ring-2 focus:ring-blue-100 shadow-sm"
-            />
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-4">
+              <label className="text-xs font-semibold text-gray-600 mb-2 block">
+                Reservation Details — search by confirmation number (leave blank to list all)
+              </label>
+              <div className="flex flex-wrap gap-2 items-center">
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') loadReservations(search); }}
+                  placeholder="e.g. ARS1002"
+                  className="w-full max-w-md bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3 text-sm font-medium outline-none focus:border-[#0066ff] focus:ring-2 focus:ring-blue-100 font-mono"
+                />
+                <button
+                  onClick={() => loadReservations(search)}
+                  disabled={loadingRes}
+                  className="bg-[#0066ff] hover:bg-blue-700 text-white font-semibold px-5 py-3 rounded-2xl text-sm shadow-sm disabled:opacity-50"
+                >
+                  {loadingRes ? 'Searching...' : 'Search'}
+                </button>
+                <button
+                  onClick={() => { setSearch(''); loadReservations(''); }}
+                  disabled={loadingRes}
+                  className="text-xs font-semibold text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-4 py-3 rounded-2xl disabled:opacity-50"
+                >
+                  Clear / Show All
+                </button>
+              </div>
+            </div>
 
             {reservations === null ? <p className="text-gray-500">Loading…</p> :
+              reservations.length === 0 ? (
+                <p className="text-gray-400 text-sm">No reservations found.</p>
+              ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {reservations.map(r => (
                   <div key={r.reservationId} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 flex flex-col justify-between">
@@ -145,6 +198,7 @@ export default function EmployeePage({ token, email, onBackToHome, onToggleSideb
                       <div>
                         <h3 className="text-lg font-bold text-gray-900">{r.confirmationNumber}</h3>
                         <p className="text-sm text-gray-500 mt-1">{r.passengerCount} passenger{r.passengerCount !== 1 ? 's' : ''} · {r.tripType}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Reservation #{r.reservationId}</p>
                       </div>
                       <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700">
                         {r.reservationStatus}
@@ -159,14 +213,14 @@ export default function EmployeePage({ token, email, onBackToHome, onToggleSideb
                   </div>
                 ))}
               </div>
-            }
+            )}
           </div>
         )}
       </main>
 
       {selectedRes && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setSelectedRes(null)}>
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-8 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl p-8 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-2xl font-bold text-gray-900">Passenger Manifest</h3>
               <button onClick={() => setSelectedRes(null)} className="text-gray-400 hover:text-gray-700 text-3xl leading-none">&times;</button>
@@ -187,14 +241,46 @@ export default function EmployeePage({ token, email, onBackToHome, onToggleSideb
                     </div>
                   ))}
                 </div>
+
                 <h4 className="font-bold text-lg mb-3">Segments</h4>
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-2 mb-8">
                   {manifest.segments.map((s, i) => (
                     <div key={i} className="flex justify-between text-sm bg-gray-50 rounded-xl px-4 py-3 font-medium">
-                      <span className="text-gray-600">Leg {s.segmentNumber} · Flight {s.flightId}</span>
+                      <span className="text-gray-600">Leg {s.segmentNumber} · {s.flightNumber} · {s.origin} → {s.destination}</span>
                       <span className="text-[#0066ff]">{s.segmentStatus}</span>
                     </div>
                   ))}
+                </div>
+
+                {/* Ticket and Segment Drilldown */}
+                <h4 className="font-bold text-lg mb-3">Ticket & Segment Details</h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50/40 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                        <th className="px-3 py-2">Passenger</th>
+                        <th className="px-3 py-2">Ticket</th>
+                        <th className="px-3 py-2">Flight</th>
+                        <th className="px-3 py-2">Segment</th>
+                        <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">Fare</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {(manifest.tickets || []).length === 0 ? (
+                        <tr><td colSpan={6} className="px-3 py-5 text-center text-gray-400 text-sm">No tickets issued.</td></tr>
+                      ) : manifest.tickets.map((t, i) => (
+                        <tr key={i} className="hover:bg-blue-50/30">
+                          <td className="px-3 py-2">{t.passenger}</td>
+                          <td className="px-3 py-2 font-mono text-xs">{t.ticketNumber}</td>
+                          <td className="px-3 py-2">{t.flightNumber}</td>
+                          <td className="px-3 py-2">{t.segmentNumber}</td>
+                          <td className="px-3 py-2">{t.segmentStatus}</td>
+                          <td className="px-3 py-2">${Number(t.farePriceAtBooking).toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </>
             )}

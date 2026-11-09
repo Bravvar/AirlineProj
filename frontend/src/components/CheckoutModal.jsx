@@ -75,9 +75,10 @@ export default function CheckoutModal({
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
+      // seats here are integer Seat.seat_id values returned by the seat map.
       const body = {
         flightFareId: fareId,
-        seats: seatIds,
+        seats: Array.isArray(seatIds) ? seatIds.filter((n) => Number.isInteger(n) && n > 0) : [],
       };
       if (returnFareId) {
         body.returnFareId = returnFareId;

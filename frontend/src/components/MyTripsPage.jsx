@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import Logo from './Logo';
 import { API_URL } from '../config';
+import SeatSelectionModal from './SeatSelectionModal';
 
 const MEAL_OPTIONS = ['Standard', 'Vegetarian', 'Vegan', 'Kosher', 'Halal', 'Gluten Free'];
 
-function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, ticket, onLoadTicket, onRefundSuccess, isEditing, onEditStart, onEditEnd }) {
+function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, ticket, onLoadTicket, onRefundSuccess, isEditing, onEditStart, onEditEnd, onChangeSeat }) {
   const [phone, setPhone] = useState('');
   const [mealSelection, setMealSelection] = useState('');
   const [additionalCheckedBags, setAdditionalCheckedBags] = useState('');
@@ -24,32 +25,32 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, tick
     setErrorMsg('');
     setSuccessMsg('');
     setLoadingCancel(true);
-    
+
     try {
       const res = await fetch(`${API_URL}/api/reservations/${booking.reservationId}/cancel`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}` },
       });
-      
+
       const text = await res.text();
-      
+
       if (!res.ok) {
         let errMessage = text;
         try {
           const parsed = JSON.parse(text);
           errMessage = parsed.message || parsed.title || text;
         } catch { /* use raw text */ }
-        
+
         setErrorMsg(errMessage || 'Could not cancel reservation.');
         setLoadingCancel(false);
         return;
       }
-      
+
       onRefundSuccess({
         confirmationNumber: booking.confirmationNumber,
         totalAmount: booking.totalAmount,
       });
-      
+
     } catch (err) {
       console.error("Cancel error:", err);
       setErrorMsg('Unable to connect to server. Please check your connection.');
@@ -114,8 +115,7 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, tick
   const handlePhoneChange = (e) => {
     let value = e.target.value.replace(/\D/g, '');
     if (value.length > 10) value = value.substring(0, 10);
-    
-    // Format as (XXX) XXX-XXXX
+
     if (value.length > 6) {
       value = `(${value.substring(0, 3)}) ${value.substring(3, 6)}-${value.substring(6)}`;
     } else if (value.length > 3) {
@@ -208,7 +208,7 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, tick
           </p>
         )}
 
-        <div className="flex items-center gap-3 pt-2">
+        <div className="flex items-center gap-3 pt-2 flex-wrap">
           {!isCancelled && (
             <>
               <button
@@ -225,6 +225,12 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, tick
                 className="text-xs font-semibold px-4 py-2 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors"
               >
                 {isEditing ? 'Close Form' : 'Modify Trip'}
+              </button>
+              <button
+                onClick={onChangeSeat}
+                className="text-xs font-semibold px-4 py-2 rounded-xl border border-blue-300 text-blue-700 hover:bg-blue-50 transition-colors"
+              >
+                Change Seat
               </button>
               <button
                 onClick={() => { if (confirmCancel) { handleCancel(); } else { setConfirmCancel(true); } }}
@@ -318,6 +324,12 @@ export default function MyTripsPage({ token, email, onBackToHome, onSignIn, onTo
   const [loadError, setLoadError] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [showCancelled, setShowCancelled] = useState(false);
+
+  const [seatBooking, setSeatBooking] = useState(null);      // booking to change seat
+  const [seatFlightId, setSeatFlightId] = useState(null);
+  const [seatModalOpen, setSeatModalOpen] = useState(false);
+  const [seatError, setSeatError] = useState('');
+  const [seatSuccess, setSeatSuccess] = useState('');
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
@@ -417,6 +429,58 @@ export default function MyTripsPage({ token, email, onBackToHome, onSignIn, onTo
     }
   };
 
+  const openSeatModal = async (booking) => {
+    setSeatError('');
+    setSeatSuccess('');
+    // Find the first active segment's flight so the seat map loads that aircraft.
+    try {
+      const res = await fetch(`${API_URL}/api/reservations/${booking.reservationId}/segments`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      const segs = Array.isArray(data) ? data : [];
+      const active = segs.find((s) => s.segmentStatus === 'Booked') || segs[0];
+      if (!active) {
+        setSeatError('This booking has no active segment to seat.');
+        return;
+      }
+      setSeatBooking(booking);
+      setSeatFlightId(active.flightId);
+      setSeatModalOpen(true);
+    } catch {
+      setSeatError('Could not load booking segments.');
+    }
+  };
+
+  const handleSeatProceed = async (seatIds) => {
+    if (!seatBooking || seatIds.length === 0) return;
+    const seatId = seatIds[0];
+    try {
+      const res = await fetch(`${API_URL}/api/reservations/${seatBooking.reservationId}/seats`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ seatId }),
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        let msg = text || 'Could not save seat.';
+        try { const p = JSON.parse(text); msg = p.message || msg; } catch { /* raw */ }
+        setSeatError(msg);
+        return;
+      }
+      const data = JSON.parse(text);
+      setSeatModalOpen(false);
+      setSeatBooking(null);
+      setSeatSuccess(`Seat ${data.seatNumber} saved. Booking total now $${data.totalAmount}.`);
+      fetchBookings();
+    } catch {
+      setSeatError('Unable to connect to server.');
+    }
+  };
+
   const activeBookings = (bookings || []).filter((b) => showCancelled || b.reservationStatus?.toLowerCase() !== 'cancelled');
   const cancelledCount = (bookings || []).filter((b) => b.reservationStatus?.toLowerCase() === 'cancelled').length;
 
@@ -430,11 +494,11 @@ export default function MyTripsPage({ token, email, onBackToHome, onSignIn, onTo
           <button className="text-gray-600 hover:text-black transition-colors flex items-center gap-2 text-sm font-semibold">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
           </button>
-          
+
           <button className="text-blue-600 font-semibold flex items-center gap-2 text-sm">
             My Trips
           </button>
-          
+
           {token ? (
             <button onClick={onToggleSidebar} className="w-10 h-10 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold shadow-md hover:scale-105 transition-transform cursor-pointer ml-2">
               {email?.charAt(0).toUpperCase()}
@@ -477,6 +541,12 @@ export default function MyTripsPage({ token, email, onBackToHome, onSignIn, onTo
             </div>
 
             {loadError && <p className="text-sm text-red-600 font-medium mb-4">{loadError}</p>}
+            {seatError && <p className="text-sm text-red-600 font-medium mb-4">{seatError}</p>}
+            {seatSuccess && (
+              <p className="text-sm font-semibold text-green-700 bg-green-50 border border-green-200 rounded-2xl px-4 py-3 mb-4">
+                {seatSuccess}
+              </p>
+            )}
 
             {bookings === null ? (
               <p className="text-gray-500">Loading...</p>
@@ -504,6 +574,7 @@ export default function MyTripsPage({ token, email, onBackToHome, onSignIn, onTo
                     isEditing={editingId === b.reservationId}
                     onEditStart={() => setEditingId(b.reservationId)}
                     onEditEnd={() => setEditingId(null)}
+                    onChangeSeat={() => openSeatModal(b)}
                   />
                 ))}
               </div>
@@ -511,6 +582,17 @@ export default function MyTripsPage({ token, email, onBackToHome, onSignIn, onTo
           </>
         )}
       </div>
+
+      {seatBooking && seatFlightId && (
+        <SeatSelectionModal
+          show={seatModalOpen}
+          onHide={() => { setSeatModalOpen(false); setSeatBooking(null); }}
+          flightId={seatFlightId}
+          farePrice={0}
+          mode="change"
+          onProceed={(seatIds) => handleSeatProceed(seatIds)}
+        />
+      )}
     </div>
   );
 }

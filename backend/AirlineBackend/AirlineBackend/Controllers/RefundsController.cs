@@ -1,4 +1,3 @@
-
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -138,6 +137,86 @@ public class RefundsController : ControllerBase
         }
     }
 
+    // -----------------------------------------------------------------
+    // Q3 (Supervisor Refunds) — folded into Refund Management.
+    // Blank confirmation returns ALL rows.
+    // -----------------------------------------------------------------
+    [HttpGet("audit")]
+    public async Task<IActionResult> RefundAudit([FromQuery] string? confirmation)
+    {
+        if (await GetSupervisorId() == null)
+            return Forbid();
+
+        string? conf = string.IsNullOrWhiteSpace(confirmation) ? null : confirmation.Trim();
+
+        try
+        {
+            var rows = await _db.Database
+                .SqlQueryRaw<RefundAuditRow>(@"
+                    SELECT r.confirmation_number AS ConfirmationNumber,
+                           e.email AS SupervisorEmail,
+                           p.amount AS Amount,
+                           p.payment_date_time AS PaymentDateTime
+                    FROM Payment p
+                    JOIN Reservation r ON r.reservation_id = p.reservation_id
+                    JOIN Employee e ON e.employee_id = p.employee_id
+                    WHERE p.transaction_type = 'Refund'
+                      AND e.employee_role = 'Supervisor'
+                      AND ({0} IS NULL OR r.confirmation_number LIKE {1})
+                    ORDER BY p.payment_date_time",
+                    conf, conf == null ? "%" : "%" + conf + "%")
+                .ToListAsync();
+
+            return Ok(rows);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading refund audit");
+            return StatusCode(503, new { message = "Unable to load refund audit." });
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // Q4 (Cancelled reservations + refund status) — folded into Refund Management.
+    // Blank confirmation returns ALL rows.
+    // -----------------------------------------------------------------
+    [HttpGet("cancelled")]
+    public async Task<IActionResult> CancelledReservations([FromQuery] string? confirmation)
+    {
+        if (await GetSupervisorId() == null)
+            return Forbid();
+
+        string? conf = string.IsNullOrWhiteSpace(confirmation) ? null : confirmation.Trim();
+
+        try
+        {
+            var rows = await _db.Database
+                .SqlQueryRaw<CancelledRefundRow>(@"
+                    SELECT r.confirmation_number AS ConfirmationNumber,
+                           CONCAT(p.first_name, ' ', p.last_name) AS Passenger,
+                           r.reservation_status AS ReservationStatus,
+                           COALESCE(SUM(CASE WHEN pay.transaction_type = 'Refund'
+                                             AND pay.payment_status = 'Refunded'
+                                            THEN pay.amount ELSE 0 END), 0.00) AS RefundedAmount
+                    FROM Reservation r
+                    JOIN ReservationPassenger rp ON rp.reservation_id = r.reservation_id
+                    JOIN Passenger p ON p.passenger_id = rp.passenger_id
+                    LEFT JOIN Payment pay ON pay.reservation_id = r.reservation_id
+                    WHERE r.reservation_status = 'Cancelled'
+                      AND ({0} IS NULL OR r.confirmation_number LIKE {1})
+                    GROUP BY r.reservation_id, p.passenger_id",
+                    conf, conf == null ? "%" : "%" + conf + "%")
+                .ToListAsync();
+
+            return Ok(rows);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error loading cancelled reservations");
+            return StatusCode(503, new { message = "Unable to load cancelled reservations." });
+        }
+    }
+
     // POST api/admin/refunds/1/calculate
     [HttpPost("{id:int}/calculate")]
     public async Task<IActionResult> CalculateRefund(int id)
@@ -267,7 +346,6 @@ public class RefundsController : ControllerBase
         if (employeeId == null)
             return Forbid();
 
-        // Demo refund reference: no actual card payment occurs.
         string reference =
             "DEMO-REF-" +
             Guid.NewGuid().ToString("N")
@@ -318,4 +396,20 @@ public class RefundApprovalRequest
 public class RefundRejectionRequest
 {
     public string? Reason { get; set; }
+}
+
+public class RefundAuditRow
+{
+    public string ConfirmationNumber { get; set; } = "";
+    public string SupervisorEmail { get; set; } = "";
+    public decimal Amount { get; set; }
+    public DateTime PaymentDateTime { get; set; }
+}
+
+public class CancelledRefundRow
+{
+    public string ConfirmationNumber { get; set; } = "";
+    public string Passenger { get; set; } = "";
+    public string ReservationStatus { get; set; } = "";
+    public decimal RefundedAmount { get; set; }
 }

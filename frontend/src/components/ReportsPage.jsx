@@ -98,8 +98,6 @@ const emptyFiltersFor = (def) => {
   return o;
 };
 
-// Each report keeps its OWN filter values, keyed by report (report1, report2, ...).
-// Sharing one filter object across reports made one report's values leak into another's.
 const EMPTY_REPORT_FILTERS = {};
 REPORT_DEFINITIONS.forEach((def) => { EMPTY_REPORT_FILTERS[def.key] = emptyFiltersFor(def); });
 
@@ -218,7 +216,7 @@ function ReportTable({ def, rows, search, hiddenColumns, toggleColumn, loading }
   const [filterCol, setFilterCol] = useState('');
   const [filterVal, setFilterVal] = useState('');
   const dropdownRef = useRef(null);
-  
+
   useClickOutside(dropdownRef, () => setShowColumns(false));
 
   const filterValues = useMemo(() => {
@@ -271,12 +269,12 @@ function ReportTable({ def, rows, search, hiddenColumns, toggleColumn, loading }
           <h2 className="text-lg font-bold text-gray-900">{def.title}</h2>
           <p className="text-xs text-gray-500 mt-0.5">{filteredRows.length} {filteredRows.length === 1 ? 'record' : 'records'}{(search || (filterCol && filterVal)) ? ' (filtered)' : ''}</p>
         </div>
-        
+
         <div className="flex items-center gap-3">
           <span className="text-xs font-mono uppercase bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-semibold border border-blue-100">
             {def.key}
           </span>
-          
+
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setShowColumns(!showColumns)}
@@ -285,7 +283,7 @@ function ReportTable({ def, rows, search, hiddenColumns, toggleColumn, loading }
               <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
               Columns
             </button>
-            
+
             {showColumns && (
               <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 z-[100] p-2 animate-in fade-in zoom-in-95 duration-100">
                 <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-2 pt-1">
@@ -351,7 +349,7 @@ function ReportTable({ def, rows, search, hiddenColumns, toggleColumn, loading }
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50/30 text-xs font-semibold text-gray-600 uppercase tracking-wider">
               {cols.map((col) => (
-                <th key={col.key} onClick={() => { if (sortKey === col.key) setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(col.key); setSortDir('asc'); } }} className="px-6 py-3.5 whitespace-nowrap cursor-pointer select-none hover:text-gray-900" title="Click to sort">{col.label}{sortKey === col.key ? (sortDir === 'asc' ? ' \u25b2' : ' \u25bc') : ''}</th>
+                <th key={col.key} onClick={() => { if (sortKey === col.key) setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(col.key); setSortDir('asc'); } }} className="px-6 py-3.5 whitespace-nowrap cursor-pointer select-none hover:text-gray-900" title="Click to sort">{col.label}{sortKey === col.key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
               ))}
             </tr>
           </thead>
@@ -380,7 +378,7 @@ function ReportTable({ def, rows, search, hiddenColumns, toggleColumn, loading }
   );
 }
 
-export default function ReportsPage({ token, email, role, onBackToHome, onMyTrips, onQueries, onSignIn, onToggleSidebar }) {
+export default function ReportsPage({ token, email, role, onBackToHome, onMyTrips, onSignIn, onToggleSidebar }) {
   const [reportsData, setReportsData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -398,8 +396,6 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
     setErrorMsg('');
     const params = new URLSearchParams();
     const all = filtersByReport || {};
-    // Each report's filters are sent under its own name (report1_origin, report3_startDate, ...),
-    // so one report's filters can never affect another report.
     REPORT_DEFINITIONS.forEach((def) => {
       const f = all[def.key] || {};
       def.filters.forEach((key) => {
@@ -515,11 +511,6 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
           <button onClick={onMyTrips} className="text-gray-600 hover:text-gray-900 font-semibold text-sm transition-colors">
             My Trips
           </button>
-          {onQueries && (
-            <button onClick={onQueries} className="text-gray-600 hover:text-gray-900 font-semibold text-sm transition-colors">
-              Queries
-            </button>
-          )}
           <span className="text-blue-600 font-semibold flex items-center gap-2 text-sm">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
             Reports
@@ -571,8 +562,6 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
                 className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-5 py-2.5 text-sm outline-none focus:border-blue-500"
               />
             </div>
-
-
 
             {errorMsg && (
               <div className="bg-red-50 border border-red-200 text-red-700 font-semibold rounded-2xl p-4 mb-6 text-sm">{errorMsg}</div>
