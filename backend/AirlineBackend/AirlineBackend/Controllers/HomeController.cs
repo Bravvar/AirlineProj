@@ -308,7 +308,7 @@ public class HomeController : ControllerBase
         return Ok(data);
     }
 
-    [HttpPost("reservations")]
+[HttpPost("reservations")]
     public async Task<IActionResult> CreateReservation([FromBody] BookingPayload book)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -316,7 +316,6 @@ public class HomeController : ControllerBase
 
         var account = _context.UserAccount.FirstOrDefault(i => i.UserAccountId == int.Parse(userId));
         if (account == null) return BadRequest("Account not found");
-
 
         int passengerId;
         if (account.PassengerId != null)
@@ -369,10 +368,7 @@ public class HomeController : ControllerBase
         }
 
         var seatIds = book.seats ?? new List<int>();
-
-
         int? selectedSeatId = seatIds.Count > 0 ? seatIds[0] : (int?)null;
-
         decimal seatFeeTotal = selectedSeatId.HasValue ? 25 : 0;
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
@@ -400,6 +396,7 @@ public class HomeController : ControllerBase
                 MealSelection = null
             };
             _context.ReservationPassenger.Add(passenger);
+            await _context.SaveChangesAsync(); // save now so we have the ReservationPassengerId for seat assignment
 
             var segment = new ReservationSegment
             {
@@ -429,12 +426,10 @@ public class HomeController : ControllerBase
                 await _context.SaveChangesAsync();
             }
 
-
             if (selectedSeatId.HasValue)
             {
                 var seatAircraftIds = _context.Database.SqlQueryRaw<int>("SELECT aircraft_id FROM Seat WHERE seat_id = {0}", selectedSeatId).ToList();
                 if (seatAircraftIds.Count == 0) { await transaction.RollbackAsync(); return BadRequest("Seat does not exist."); }
-
 
                 if (seatAircraftIds[0] != flight.AircraftId)
                 {
@@ -450,6 +445,7 @@ public class HomeController : ControllerBase
                     segment.ReservationSegmentId, passenger.ReservationPassengerId, selectedSeatId, fare.FlightId, DateTime.Now, 25);
             }
 
+            // --- DEMO PAYMENT ---
             var paymentReference = "PAY" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper();
             await _context.Database.ExecuteSqlRawAsync(
                 "INSERT INTO Payment (reservation_id, employee_id, payment_date_time, amount, payment_method, payment_status, transaction_reference, transaction_type) VALUES ({0}, NULL, {1}, {2}, 'Card (demo)', 'Successful', {3}, 'Payment')",
