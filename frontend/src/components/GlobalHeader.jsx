@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import Logo from './Logo';
 
-export default function GlobalHeader({ 
-  activePage, 
-  onNavigate, 
-  auth, 
-  onSignIn, 
+export default function GlobalHeader({
+  activePage,
+  onNavigate,
+  auth,
+  onSignIn,
   onToggleSidebar,
   onSignOut
 }) {
@@ -26,8 +26,6 @@ export default function GlobalHeader({
 
     if (auth.role === 'Supervisor' || auth.role === 'Employee') {
       items.push({ id: 'reports', label: 'Reports' });
-      items.push({ id: 'queries', label: 'Queries' });
-      items.push({ id: 'triggers', label: 'Triggers' });
     }
 
     if (auth.role === 'Supervisor') {
@@ -43,10 +41,10 @@ export default function GlobalHeader({
   const navItems = getNavItems();
 
   return (
-    <header 
+    <header
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 flex justify-between items-center px-8 py-4 ${
-        scrolled 
-          ? 'bg-white/95 backdrop-blur-md shadow-lg border-b border-gray-100 text-gray-900' 
+        scrolled
+          ? 'bg-white/95 backdrop-blur-md shadow-lg border-b border-gray-100 text-gray-900'
           : 'bg-gradient-to-b from-black/60 to-transparent text-white'
       }`}
     >
@@ -79,11 +77,11 @@ export default function GlobalHeader({
             {auth.email?.charAt(0).toUpperCase()}
           </button>
         ) : (
-          <button 
-            onClick={onSignIn} 
+          <button
+            onClick={onSignIn}
             className={`font-semibold px-6 py-2 rounded-full text-sm transition-all ${
-              scrolled 
-                ? 'bg-[#0066ff] text-white hover:bg-blue-700' 
+              scrolled
+                ? 'bg-[#0066ff] text-white hover:bg-blue-700'
                 : 'bg-white text-[#0066ff] hover:bg-gray-100'
             }`}
           >

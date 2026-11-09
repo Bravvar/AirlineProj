@@ -6,10 +6,10 @@ import SignInModal from './components/SignInModal';
 import DealsPage from './components/DealsPage';
 import MyTripsPage from './components/MyTripsPage';
 import ReportsPage from './components/ReportsPage';
-import QueriesPage from './components/QueriesPage';
 import AdminPage from './components/AdminPage';
 import EmployeePage from './components/EmployeePage';
 import SideBar from './components/SideBar';
+import MyLoyaltyPage from './components/MyLoyaltyPage';
 import RefundConfirmationPage from './components/RefundConfirmationPage';
 import PaymentConfirmationPage from './components/PaymentConfirmationPage';
 
@@ -66,8 +66,8 @@ export default function App() {
     if (pageId === 'admin') setCurrentPage('admin');
     if (pageId === 'employee') setCurrentPage('employee');
     if (pageId === 'reports') setCurrentPage('reports');
-    if (pageId === 'queries') setCurrentPage('queries');
     if (pageId === 'trips') setCurrentPage('trips');
+    if (pageId === 'loyalty') setCurrentPage('loyalty');
     if (pageId === 'dashboard' || pageId === 'flights') {
       setCurrentPage('home');
       setActiveTab('flights');
@@ -111,7 +111,6 @@ export default function App() {
     />
   );
 
-  // Shared booking-success handler: routes to the full confirmation page.
   const handleBooked = (details) => {
     setPaymentDetails(details);
     setCurrentPage('payment-success');
@@ -149,21 +148,14 @@ export default function App() {
     );
   }
 
-  if (currentPage === 'trips') {
+  
+  if (currentPage === 'loyalty') {
     return (
       <>
-        <MyTripsPage
+        <MyLoyaltyPage
           token={auth.token}
-          email={auth.email}
           onBackToHome={goHome}
-          onReports={() => setCurrentPage('reports')}
           onSignIn={() => setShowSignIn(true)}
-          onSignOut={handleLogout}
-          onToggleSidebar={() => setShowSidebar(true)}
-          onRefundSuccess={(details) => {
-            setRefundDetails(details);
-            setCurrentPage('refund');
-          }}
         />
         {modal}
         {sidebar}
@@ -171,6 +163,47 @@ export default function App() {
     );
   }
 
+
+  if (currentPage === 'trips') {
+    return (
+      <>
+        <MyTripsPage
+          token={auth.token}
+          email={auth.email}
+          onBackToHome={goHome}
+          onSignIn={() => setShowSignIn(true)}
+          onSignOut={handleLogout}
+          onToggleSidebar={() => setShowSidebar(true)}
+          onRefundSuccess={(details) => {
+            setRefundDetails(details);
+            setCurrentPage('refund');
+          }}
+          onViewTicket={(booking, segments) => {
+            const activeSeg = segments && segments.length > 0 ? segments[0] : {};
+            setPaymentDetails({
+              passengerName: auth.email?.split('@')[0] || 'Passenger',
+              email: auth.email,
+              confirmationNumber: booking.confirmationNumber,
+              ticketNumber: `TKT-${booking.reservationId}`, 
+              totalAmount: booking.totalAmount,
+              flightNumber: activeSeg.flightNumber || 'FLT',
+              origin: activeSeg.origin || 'ORG',
+              destination: activeSeg.destination || 'DST',
+              departureTime: activeSeg.departureTime ? String(activeSeg.departureTime).substring(0, 5) : '00:00',
+              arrivalTime: activeSeg.arrivalTime ? String(activeSeg.arrivalTime).substring(0, 5) : '00:00',
+              seatNumber: '—', 
+              gate: 'TBA',
+              boardingTime: '07:10',
+            });
+            setCurrentPage('payment-success');
+          }}
+        />
+        {modal}
+        {sidebar}
+      </>
+    );
+  }
+  
   if (currentPage === 'refund' && refundDetails) {
     return (
       <RefundConfirmationPage
@@ -205,27 +238,6 @@ export default function App() {
           role={auth.role}
           onBackToHome={goHome}
           onMyTrips={() => setCurrentPage('trips')}
-          onQueries={() => setCurrentPage('queries')}
-          onSignIn={() => setShowSignIn(true)}
-          onSignOut={handleLogout}
-          onToggleSidebar={() => setShowSidebar(true)}
-        />
-        {modal}
-        {sidebar}
-      </>
-    );
-  }
-
-  if (currentPage === 'queries') {
-    return (
-      <>
-        <QueriesPage
-          token={auth.token}
-          email={auth.email}
-          role={auth.role}
-          onBackToHome={goHome}
-          onMyTrips={() => setCurrentPage('trips')}
-          onReports={() => setCurrentPage('reports')}
           onSignIn={() => setShowSignIn(true)}
           onSignOut={handleLogout}
           onToggleSidebar={() => setShowSidebar(true)}
@@ -255,11 +267,9 @@ export default function App() {
     );
   }
 
-  // Home Page Layout
   return (
     <div className="min-h-screen bg-white font-sans p-4">
       <div className="relative min-h-[calc(100vh-2rem)] pb-12 flex flex-col">
-        {/* Background Layer */}
         <div className="absolute inset-0 rounded-[2.5rem] overflow-hidden shadow-2xl pointer-events-none z-0">
           <div
             className="w-full h-full bg-cover bg-center transition-all duration-1000 ease-in-out"
@@ -269,7 +279,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Custom Top Bar */}
         <header className="relative z-30 flex justify-between items-center px-8 py-6 w-full">
           <div className="cursor-pointer flex items-center gap-2" onClick={() => goHome()}>
             <Logo light={true} />
@@ -285,14 +294,7 @@ export default function App() {
               title="Search flights"
               className="text-white hover:text-gray-200 transition-colors flex items-center gap-2 text-sm font-semibold cursor-pointer"
             >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-              >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <circle cx="11" cy="11" r="8" />
                 <path d="m21 21-4.3-4.3" />
               </svg>
@@ -338,8 +340,8 @@ export default function App() {
 
       <DealsSection
         onSeeAll={() => setCurrentPage('deals')}
-        onSignIn={() => setShowSignIn(true)}
         onBooked={handleBooked}
+        onSignIn={() => setShowSignIn(true)}
       />
 
       {modal}

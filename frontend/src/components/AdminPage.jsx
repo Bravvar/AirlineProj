@@ -25,8 +25,9 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
         const headers = { Authorization: `Bearer ${token}` };
         const paths = { overview: 'admin/overview', users: 'admin/users', flights: 'admin/flights' };
         if (!paths[tab]) {
-  setLoading(false);
-  return;}
+          setLoading(false);
+          return;
+        }
         const res = await fetch(`${API_URL}/api/${paths[tab]}`, { headers });
         if (!res.ok) { setError('Could not load data.'); return; }
         setError('');
@@ -60,7 +61,6 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
           <Logo />
         </div>
         <div className="flex items-center gap-4">
-          {/* <--- REMOVED EMAIL TEXT FROM HERE ---> */}
           <button onClick={onToggleSidebar} className="w-10 h-10 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold shadow-md hover:scale-105 transition-transform cursor-pointer">
             {email.charAt(0).toUpperCase()}
           </button>
@@ -69,7 +69,7 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
 
       <main className="flex-1 max-w-7xl mx-auto w-full p-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-8">Admin Overview</h1>
-        
+
         <div className="flex gap-2 mb-8 flex-wrap">
           {[
             { id: 'overview', label: 'Dashboard' },
@@ -128,27 +128,27 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
             />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {filteredFlights.map(f => (
-              <div key={f.flightId} className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900">{f.flightNumber}</h3>
-                    <p className="text-sm text-gray-500">{f.originAirportCode} → {f.destinationAirportCode}</p>
-                  </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                    f.flightStatus === 'Cancelled' ? 'bg-red-50 text-red-700'
-                    : f.flightStatus === 'Delayed' ? 'bg-amber-50 text-amber-700'
-                    : 'bg-green-50 text-green-700'
-                  }`}>{f.flightStatus}</span>
-                </div>
-                <div className="flex flex-col gap-2 mt-4">
-                  {(f.fares || []).map(fare => (
-                    <div key={fare.flightFareId} className="flex justify-between text-sm bg-gray-50 rounded-xl px-4 py-2">
-                      <span className="text-gray-600 font-medium">Fare {fare.fareClassId}</span>
-                      <span className="font-bold text-gray-900">${fare.currentPrice} <span className="text-gray-400 font-normal">| {fare.availableInventory} left</span></span>
+                <div key={f.flightId} className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">{f.flightNumber}</h3>
+                      <p className="text-sm text-gray-500">{f.originAirportCode} → {f.destinationAirportCode}</p>
                     </div>
-                  ))}
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                      f.flightStatus === 'Cancelled' ? 'bg-red-50 text-red-700'
+                      : f.flightStatus === 'Delayed' ? 'bg-amber-50 text-amber-700'
+                      : 'bg-green-50 text-green-700'
+                    }`}>{f.flightStatus}</span>
+                  </div>
+                  <div className="flex flex-col gap-2 mt-4">
+                    {(f.fares || []).map(fare => (
+                      <div key={fare.flightFareId} className="flex justify-between text-sm bg-gray-50 rounded-xl px-4 py-2">
+                        <span className="text-gray-600 font-medium">Fare {fare.fareClassId}</span>
+                        <span className="font-bold text-gray-900">${fare.currentPrice} <span className="text-gray-400 font-normal">| {fare.availableInventory} left</span></span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
               ))}
             </div>
           </>
@@ -158,8 +158,8 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
           <StaffFlightManagement token={token} />
         )}
         {tab === 'refunds' && (
-  <RefundManagement token={token} />
-)}
+          <RefundManagement token={token} />
+        )}
 
         {tab === 'users' && loading && users.length === 0 && (
           <p className="text-gray-400 text-sm px-2 py-8">Loading users...</p>
