@@ -401,6 +401,113 @@ public class HomeController : ControllerBase
     }
 
 
+    // ---------------------------------------------------------------
+    // Profile: name, email, phone and loyalty points for the member.
+    // ---------------------------------------------------------------
+    [HttpGet("profile/mine")]
+    public IActionResult MyProfile()
+    {
+        var userIdText = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!int.TryParse(userIdText, out int userId)) return Unauthorized();
+
+        var account = _context.UserAccount.FirstOrDefault(u => u.UserAccountId == userId);
+        if (account == null) return Unauthorized();
+        if (account.Role != "Member" || account.PassengerId == null) return Forbid();
+
+        var passenger = _context.Passenger.FirstOrDefault(p => p.PassengerId == account.PassengerId.Value);
+        if (passenger == null) return NotFound("Profile not found");
+
+        var loyalty = _context.Database
+            .SqlQueryRaw<LoyaltyBalanceRow>(@"
+                SELECT membership_number AS MembershipNumber,
+                       membership_status AS MembershipStatus,
+                       points_balance    AS PointsBalance
+                FROM MembershipAccount
+                WHERE passenger_id = {0}", passenger.PassengerId)
+            .FirstOrDefault();
+
+        return Ok(new
+        {
+            firstName = passenger.FirstName,
+            lastName = passenger.LastName,
+            email = account.Email,
+            phone = passenger.Phone,
+            membershipNumber = loyalty?.MembershipNumber,
+            membershipStatus = loyalty?.MembershipStatus,
+            pointsBalance = loyalty?.PointsBalance ?? 0
+        });
+    }
+
+    // ---------------------------------------------------------------
+    // Delete account: permanently cancels the member's account.
+    //  * Login (UserAccount) is deleted -> they can no longer sign in.
+    //  * MembershipAccount is deleted -> loyalty points are forfeited
+    //    (loyalty ledgers cascade with it).
+    //  * Cancellation requests they filed are deleted (FK to UserAccount).
+    //  * Passenger row:
+    //      - no booking history  -> deleted outright (travel docs cascade).
+    //      - has booking history -> kept only so past reservations, tickets
+    //        and payments stay intact, but email/phone/address/DOB are
+    //        scrubbed so signing up again with the same email creates a
+    //        brand-new profile instead of re-linking the old one.
+    // ---------------------------------------------------------------
+    [HttpDelete("profile/mine")]
+    public async Task<IActionResult> DeleteMyAccount()
+    {
+        var userIdText = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!int.TryParse(userIdText, out int userId)) return Unauthorized();
+
+        var account = _context.UserAccount.FirstOrDefault(u => u.UserAccountId == userId);
+        if (account == null) return Unauthorized();
+        if (account.Role != "Member" || account.PassengerId == null)
+            return BadRequest("Only member accounts can be deleted here.");
+
+        int passengerId = account.PassengerId.Value;
+
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+        try
+        {
+            await _context.Database.ExecuteSqlRawAsync(
+                "DELETE FROM CancellationRequest WHERE requested_by_user_id = {0}", userId);
+
+            await _context.Database.ExecuteSqlRawAsync(
+                "DELETE FROM UserAccount WHERE user_account_id = {0}", userId);
+
+            await _context.Database.ExecuteSqlRawAsync(
+                "DELETE FROM MembershipAccount WHERE passenger_id = {0}", passengerId);
+
+            var hasHistory = _context.Database.SqlQueryRaw<long>(@"
+                SELECT (SELECT COUNT(*) FROM ReservationPassenger WHERE passenger_id = {0})
+                     + (SELECT COUNT(*) FROM Ticket WHERE passenger_id = {0}) AS Value",
+                passengerId).FirstOrDefault() > 0;
+
+            if (hasHistory)
+            {
+                await _context.Database.ExecuteSqlRawAsync(@"
+                    UPDATE Passenger
+                       SET email = {1}, phone = NULL, address = NULL, date_of_birth = '1900-01-01'
+                     WHERE passenger_id = {0}",
+                    passengerId, $"deleted-{passengerId}@deleted.invalid");
+                await _context.Database.ExecuteSqlRawAsync(
+                    "DELETE FROM TravelDocument WHERE passenger_id = {0}", passengerId);
+            }
+            else
+            {
+                await _context.Database.ExecuteSqlRawAsync(
+                    "DELETE FROM Passenger WHERE passenger_id = {0}", passengerId);
+            }
+
+            await transaction.CommitAsync();
+            return Ok(new { message = "Your account has been deleted." });
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            _logger.LogError(ex, "Failed to delete account {UserId}", userId);
+            return StatusCode(500, new { message = "We couldn't delete your account. Please try again." });
+        }
+    }
+
     [HttpGet("reservations/mine")]
     public IActionResult MyReservations()
     {
