@@ -26,6 +26,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   const [searching, setSearching] = useState(false);
   const [showAllOutbound, setShowAllOutbound] = useState(false);
   const [faresByFlight, setFaresByFlight] = useState({});
+  const [seatCountsByFlight, setSeatCountsByFlight] = useState({});
   const [bookingMessage, setBookingMessage] = useState('');
   const [bookingError, setBookingError] = useState('');
   const [fallbackWarning, setFallbackWarning] = useState('');
@@ -440,11 +441,32 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         .then((r) => r.json())
         .catch(() => [])
     );
-    const faresResults = await Promise.all(faresPromises);
+    // Real seat counts come from the seat map (free seats / seats on the plane).
+    // Summing fare inventory over-counts, because fare buckets share seats.
+    const seatPromises = rows.map((flight) =>
+      fetch(`${API_URL}/api/flights/${flight.flightId}/seatmap`)
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)
+    );
+    const [faresResults, seatResults] = await Promise.all([
+      Promise.all(faresPromises),
+      Promise.all(seatPromises),
+    ]);
     setFaresByFlight((prev) => {
       const next = { ...prev };
       rows.forEach((flight, index) => {
         next[flight.flightId] = Array.isArray(faresResults[index]) ? faresResults[index] : [];
+      });
+      return next;
+    });
+    setSeatCountsByFlight((prev) => {
+      const next = { ...prev };
+      rows.forEach((flight, index) => {
+        const seats = seatResults[index];
+        if (Array.isArray(seats) && seats.length > 0) {
+          const free = seats.filter((s) => !Number(s.occupied ?? s.Occupied ?? 0)).length;
+          next[flight.flightId] = { free, total: seats.length };
+        }
       });
       return next;
     });
@@ -509,6 +531,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     setFallbackWarning('');
     setResults(null);
     setFaresByFlight({});
+    setSeatCountsByFlight({});
     setSelectedOutboundFare(null);
     setReturnResults(null);
     setAvailabilityRows(null);
@@ -688,6 +711,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     setShowCheckoutModal(false);
     setBookingMessage(`Successfully booked! Confirmation #${confirmationNumber}`);
     setFaresByFlight({});
+    setSeatCountsByFlight({});
     setSelectedOutboundFare(null);
     setReturnResults(null);
 
@@ -1179,10 +1203,15 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                     : '';
                   const depDate = String(flight.departureDate).slice(0, 10);
                   const flightFares = faresByFlight[flight.flightId] || [];
-                  const seatsLeft = flightFares.reduce(
-                    (sum, f) => sum + Number(f.availableInventory || 0),
-                    0
-                  );
+                  const seatCounts = seatCountsByFlight[flight.flightId];
+                  const totalSeats = seatCounts?.total ?? AIRCRAFT_SEATS;
+                  // Fallback if the seat map didn't load: largest fare bucket, capped at the plane size.
+                  const seatsLeft = seatCounts
+                    ? seatCounts.free
+                    : Math.min(
+                        AIRCRAFT_SEATS,
+                        Math.max(0, ...flightFares.map((f) => Number(f.availableInventory || 0)))
+                      );
 
                   return (
                     <div
@@ -1215,7 +1244,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                           </div>
                           {flightFares.length > 0 && (
                             <div className="text-xs font-semibold text-gray-600 mt-1">
-                              {seatsLeft} of {AIRCRAFT_SEATS} seats available
+                              {seatsLeft} of {totalSeats} seats available
                             </div>
                           )}
                         </div>
