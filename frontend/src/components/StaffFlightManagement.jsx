@@ -180,8 +180,8 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
       return;
     }
     const capNum = parseInt(allocatedCapacity, 10);
-    if (isNaN(capNum) || capNum <= 0) {
-      setFareError('Capacity must be a positive integer.');
+    if (isNaN(capNum) || capNum <= 0 || capNum > 36) {
+      setFareError('Capacity must be between 1 and 36.');
       return;
     }
 
@@ -466,7 +466,8 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
                 <input
                   type="number"
                   min="1"
-                  placeholder="50"
+                  max="36"
+                  placeholder="36"
                   value={allocatedCapacity}
                   onChange={(e) => setAllocatedCapacity(e.target.value)}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 outline-none focus:border-blue-500 font-mono"

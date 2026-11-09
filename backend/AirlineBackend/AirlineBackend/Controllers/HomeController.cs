@@ -1154,7 +1154,7 @@ public class HomeController : ControllerBase
         if (role != "Employee" && role != "Supervisor") return StatusCode(403, "Staff only");
 
         if (!_context.Flight.Any(f => f.FlightId == id)) return NotFound("No flight like that");
-        if (add.price < 0 || add.allocatedCapacity <= 0) return BadRequest("Price and capacity must be positive");
+        if (add.price < 0 || add.allocatedCapacity <= 0 || add.allocatedCapacity > 36) return BadRequest("Capacity must be between 1 and 36");
         if (_context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM CabinClass WHERE cabin_class_id = {0}", add.cabinClassId).FirstOrDefault() == 0) return BadRequest("Unknown cabin class");
         if (_context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM FareClass WHERE fare_class_id = {0}", add.fareClassId).FirstOrDefault() == 0) return BadRequest("Unknown fare class");
 
