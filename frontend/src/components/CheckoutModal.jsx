@@ -9,6 +9,11 @@ export default function CheckoutModal({
   totalPrice,
   onSuccess,
   seatIds = [],
+  // Optional: run a custom charge (e.g. a seat change) instead of creating a
+  // booking. Should resolve on success, or throw an Error with a message.
+  onPay,
+  title = 'Secure Checkout',
+  summary,
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -70,6 +75,16 @@ export default function CheckoutModal({
       return;
     }
 
+    if (onPay) {
+      try {
+        await onPay();
+      } catch (err) {
+        setError(err?.message || 'Payment failed. Please try again.');
+      }
+      setLoading(false);
+      return;
+    }
+
     const token = sessionStorage.getItem('token');
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
@@ -127,7 +142,7 @@ export default function CheckoutModal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto"
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto"
       onClick={onHide}
     >
       <div
@@ -141,7 +156,9 @@ export default function CheckoutModal({
           &times;
         </button>
 
-        <h3 className="text-2xl font-bold text-gray-900 mb-6 text-center">Secure Checkout</h3>
+        <h3 className="text-2xl font-bold text-gray-900 mb-6 text-center">{title}</h3>
+
+        {summary && <p className="text-sm text-gray-600 text-center -mt-3 mb-4">{summary}</p>}
 
         <div className="bg-blue-50 rounded-2xl p-4 mb-6 border border-blue-100 flex justify-between items-center">
           <span className="text-blue-800 font-semibold">Total to Pay</span>

@@ -410,7 +410,7 @@ export default function SeatSelectionModal({
               disabled={!selectedSeat}
               className="w-full bg-[#0066ff] hover:bg-blue-700 text-white font-bold py-3.5 rounded-full shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
-              {isBooking ? 'Continue Booking' : 'Save Seat'}
+              {isBooking ? 'Continue Booking' : selectedSeat ? `Save & Pay ${money(seatFee)}` : 'Save & Pay'}
             </button>
             {isBooking && (
               <button

@@ -3,6 +3,7 @@ import Logo from './Logo';
 import { API_URL } from '../config';
 import SeatSelectionModal from './SeatSelectionModal';
 import CheckoutModal from './CheckoutModal';
+import CheckoutModal from './CheckoutModal';
 
 const MEAL_OPTIONS = ['Standard', 'Vegetarian', 'Vegan', 'Kosher', 'Halal', 'Gluten Free'];
 
@@ -358,6 +359,7 @@ export default function MyTripsPage({
   const [seatError, setSeatError] = useState('');
   const [seatSuccess, setSeatSuccess] = useState('');
   const [pendingSeat, setPendingSeat] = useState(null); // seat waiting on payment
+  const [pendingSeat, setPendingSeat] = useState(null); // seat waiting on payment
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
@@ -493,7 +495,23 @@ export default function MyTripsPage({
 
   // "Save & Pay" in the seat map: hold the choice and open the payment UI.
   const handleSeatProceed = (seatIds, _total, info = {}) => {
+  // "Save & Pay" in the seat map: hold the choice and open the payment UI.
+  const handleSeatProceed = (seatIds, _total, info = {}) => {
     if (!seatBooking || seatIds.length === 0) return;
+    setPendingSeat({
+      seatId: seatIds[0],
+      seatNumber: info.seatNumber,
+      cabinName: info.cabinName,
+      fee: Number(info.seatFee || 0),
+    });
+  };
+
+  // Called by the payment modal once the card details are valid.
+  const paySeatChange = async () => {
+    if (!seatBooking || !pendingSeat) throw new Error('No seat selected.');
+    let res;
+    try {
+      res = await fetch(`${API_URL}/api/reservations/${seatBooking.reservationId}/seats`, {
     setPendingSeat({
       seatId: seatIds[0],
       seatNumber: info.seatNumber,
@@ -513,6 +531,7 @@ export default function MyTripsPage({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({ seatId: pendingSeat.seatId }),
         body: JSON.stringify({ seatId: pendingSeat.seatId }),
       });
     } catch {
@@ -643,9 +662,26 @@ export default function MyTripsPage({
         <SeatSelectionModal
           show={seatModalOpen}
           onHide={() => { setSeatModalOpen(false); setSeatBooking(null); setPendingSeat(null); }}
+          onHide={() => { setSeatModalOpen(false); setSeatBooking(null); setPendingSeat(null); }}
           flightId={seatFlightId}
           farePrice={0}
           mode="change"
+          onProceed={handleSeatProceed}
+        />
+      )}
+
+      <CheckoutModal
+        show={Boolean(pendingSeat)}
+        onHide={() => setPendingSeat(null)}
+        title="Pay Seat Fee"
+        summary={
+          pendingSeat
+            ? `Seat ${pendingSeat.seatNumber}${pendingSeat.cabinName ? ` · ${pendingSeat.cabinName}` : ''}`
+            : ''
+        }
+        totalPrice={pendingSeat?.fee || 0}
+        onPay={paySeatChange}
+      />
           onProceed={handleSeatProceed}
         />
       )}
