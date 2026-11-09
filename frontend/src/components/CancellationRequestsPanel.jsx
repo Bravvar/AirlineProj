@@ -17,7 +17,8 @@ const STATUS_STYLES = {
 
 // Supervisor queue for member-submitted Cancel / Refund requests.
 // Approve = cancel the booking + record the refund. Reject = keep the booking.
-export default function CancellationRequestsPanel({ token, onChanged }) {
+// Pass `embedded` to render without its own card wrapper (used inside a shared card).
+export default function CancellationRequestsPanel({ token, onChanged, embedded = false }) {
   const [requests, setRequests] = useState([]);
   const [filter, setFilter] = useState('Pending');
   const [search, setSearch] = useState('');
@@ -130,7 +131,7 @@ export default function CancellationRequestsPanel({ token, onChanged }) {
   });
 
   return (
-    <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm space-y-5">
+    <div className={embedded ? 'space-y-5' : 'bg-white rounded-3xl border border-gray-100 p-6 shadow-sm space-y-5'}>
       <div className="flex flex-wrap justify-between gap-4 items-center">
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-3">

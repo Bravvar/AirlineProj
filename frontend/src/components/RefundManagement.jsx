@@ -187,8 +187,11 @@ export default function RefundManagement({ token }) {
 
   return (
     <section className="space-y-6">
+      {/* One card: member cancellation requests + flight cancellation refunds */}
+      <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
       {/* Member-submitted Cancel / Refund requests */}
       <CancellationRequestsPanel
+        embedded
         token={token}
         onChanged={() => {
           loadAudit(auditConfirmation);
@@ -196,7 +199,7 @@ export default function RefundManagement({ token }) {
         }}
       />
 
-      <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
+      <div className="border-t border-gray-100 mt-8 pt-8">
         <div className="flex flex-wrap justify-between gap-4 items-center">
           <div>
             <h2 className="text-2xl font-bold">Flight Cancellation Refunds</h2>
@@ -240,15 +243,14 @@ export default function RefundManagement({ token }) {
         {message && (
           <p role="status" className="text-green-700 mt-4">{message}</p>
         )}
-      </div>
 
       {filtered.length === 0 && (
-        <div className="bg-white rounded-3xl p-8 text-gray-500 text-center">
+        <div className="bg-gray-50 rounded-2xl p-8 mt-5 text-gray-500 text-center text-sm">
           {loading ? 'Loading refunds...' : 'No matching refund reviews.'}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-5">
         {filtered.map((review) => {
           const pending = review.reviewStatus === 'Pending';
           const approved = review.reviewStatus === 'Approved';
@@ -387,6 +389,8 @@ export default function RefundManagement({ token }) {
             </div>
           );
         })}
+      </div>
+      </div>
       </div>
 
       {/* Supervisor refund audit */}
