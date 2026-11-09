@@ -672,21 +672,98 @@ public class HomeController : ControllerBase
         int p6i = 0;
         if (startDate.HasValue) { p6Where.Add($"pay.payment_date_time >= {{{p6i}}}"); p6Args.Add(startDate.Value); p6i++; }
         if (endDate.HasValue) { p6Where.Add($"pay.payment_date_time <= {{{p6i}}}"); p6Args.Add(endDate.Value); p6i++; }
-        string p6WhereSql = p6Where.Count > 0 ? " WHERE pay.transaction_type = 'Refund' AND " + string.Join(" AND ", p6Where) : " WHERE pay.transaction_type = 'Refund'";
+        string p6WhereSql = p6Where.Count > 0
+    ? " WHERE pay.transaction_type = 'Refund' AND pay.payment_status = 'Refunded' AND " + string.Join(" AND ", p6Where)
+    : " WHERE pay.transaction_type = 'Refund' AND pay.payment_status = 'Refunded'";
 
-        var report1 = _context.Database.SqlQueryRaw<Report1Row>(@"SELECT f.flight_number AS FlightNumber, f.origin_airport_code AS Origin, f.destination_airport_code AS Destination, COUNT(DISTINCT t.ticket_id) AS TicketsSold, COALESCE(SUM(DISTINCT t.total_fare_paid), 0.00) AS Revenue FROM Flight f LEFT JOIN ReservationSegment rs ON rs.flight_id = f.flight_id LEFT JOIN Ticket t ON t.reservation_id = rs.reservation_id AND t.ticket_status <> 'Cancelled'" + fWhereSql + @" GROUP BY f.flight_id, f.flight_number, f.origin_airport_code, f.destination_airport_code" + fHavingSql + @" ORDER BY revenue DESC", fArgs.ToArray()).ToList();
+      var report1 = _context.Database.SqlQueryRaw<Report1Row>(@"
+    SELECT
+        f.flight_number AS FlightNumber,
+        f.origin_airport_code AS Origin,
+        f.destination_airport_code AS Destination,
+        COUNT(DISTINCT CASE
+            WHEN t.ticket_id IS NOT NULL
+             AND rs.segment_status <> 'Cancelled'
+            THEN t.ticket_id
+        END) AS TicketsSold,
+        COALESCE(SUM(CASE
+            WHEN t.ticket_id IS NOT NULL
+             AND rs.segment_status <> 'Cancelled'
+            THEN rs.fare_price_at_booking
+            ELSE 0
+        END), 0.00) AS Revenue
+    FROM Flight f
+    LEFT JOIN ReservationSegment rs
+        ON rs.flight_id = f.flight_id
+    LEFT JOIN TicketSegment ts
+        ON ts.reservation_segment_id = rs.reservation_segment_id
+    LEFT JOIN Ticket t
+        ON t.ticket_id = ts.ticket_id
+        AND t.ticket_status <> 'Cancelled'
+    " + fWhereSql + @"
+    GROUP BY
+        f.flight_id,
+        f.flight_number,
+        f.origin_airport_code,
+        f.destination_airport_code
+    " + fHavingSql + @"
+    ORDER BY Revenue DESC",
+    fArgs.ToArray()).ToList();
 
         var report2 = _context.Database.SqlQueryRaw<Report2Row>(@"SELECT p.passenger_id AS PassengerId, CONCAT(p.first_name,' ',p.last_name) AS Passenger, p.email AS Email, m.membership_number AS MembershipNumber, m.points_balance AS PointsBalance, m.membership_status AS MembershipStatus, CASE WHEN m.points_balance >= 25000 THEN 'Gold' WHEN m.points_balance >= 10000 THEN 'Silver' WHEN m.points_balance >= 1000 THEN 'Bronze' WHEN m.points_balance = 0 THEN 'Inactive' ELSE 'Basic' END AS Tier FROM Passenger p LEFT JOIN MembershipAccount m ON m.passenger_id = p.passenger_id ORDER BY m.points_balance DESC").ToList();
 
-        var report3 = _context.Database.SqlQueryRaw<Report3Row>(@"SELECT r.confirmation_number AS ConfirmationNumber, p.transaction_reference AS TransactionReference, p.transaction_type AS TransactionType, p.amount AS Amount, p.payment_status AS PaymentStatus, CONCAT(COALESCE(e.first_name,'—'),' ',COALESCE(e.last_name,'')) AS ProcessedBy, e.employee_role AS EmployeeRole, p.payment_date_time AS PaymentDateTime FROM Payment p JOIN Reservation r ON r.reservation_id = p.reservation_id LEFT JOIN Employee e ON e.employee_id = p.employee_id" + pWhereSql + @" ORDER BY p.payment_date_time", pArgs.ToArray()).ToList();
+        var report3 = _context.Database.SqlQueryRaw<Report3Row>(@"SELECT r.confirmation_number AS ConfirmationNumber, p.transaction_reference AS TransactionReference, p.transaction_type AS TransactionType, p.amount AS Amount, p.payment_status AS PaymentStatus, CONCAT(COALESCE(e.first_name,'ΓÇö'),' ',COALESCE(e.last_name,'')) AS ProcessedBy, e.employee_role AS EmployeeRole, p.payment_date_time AS PaymentDateTime FROM Payment p JOIN Reservation r ON r.reservation_id = p.reservation_id LEFT JOIN Employee e ON e.employee_id = p.employee_id" + pWhereSql + @" ORDER BY p.payment_date_time", pArgs.ToArray()).ToList();
 
         var report4 = _context.Database.SqlQueryRaw<Report4Row>(@"SELECT f.flight_number AS FlightNumber, cc.cabin_name AS CabinName, ff.fare_class_id AS FareClassId, ff.available_inventory AS AvailableInventory, ff.allocated_capacity AS AllocatedCapacity, ROUND(100.0 * (ff.allocated_capacity - ff.available_inventory) / ff.allocated_capacity, 1) AS PctFull FROM FlightFare ff JOIN Flight f ON f.flight_id = ff.flight_id JOIN CabinClass cc ON cc.cabin_class_id = ff.cabin_class_id" + fWhereSql + @" ORDER BY f.flight_number, ff.fare_class_id", fArgs.ToArray()).ToList();
 
         var report5 = _context.Database.SqlQueryRaw<Report5Row>(@"SELECT CONCAT(p.first_name,' ',p.last_name) AS Passenger, r.confirmation_number AS ConfirmationNumber, r.reservation_status AS ReservationStatus, r.trip_type AS TripType, r.total_amount AS TotalAmount, COUNT(DISTINCT t.ticket_id) AS Tickets FROM Passenger p JOIN ReservationPassenger rp ON rp.passenger_id = p.passenger_id JOIN Reservation r ON r.reservation_id = rp.reservation_id LEFT JOIN Ticket t ON t.reservation_id = r.reservation_id AND t.passenger_id = p.passenger_id GROUP BY p.passenger_id, r.reservation_id ORDER BY p.last_name, r.booking_date").ToList();
 
-        var report6 = _context.Database.SqlQueryRaw<Report6Row>(@"SELECT r.confirmation_number AS ConfirmationNumber, pay.transaction_reference AS TransactionReference, pay.amount AS Amount, CONCAT(e.first_name,' ',e.last_name) AS ApprovedBy, e.employee_role AS EmployeeRole, pay.payment_date_time AS PaymentDateTime FROM Payment pay JOIN Reservation r ON r.reservation_id = pay.reservation_id JOIN Employee e ON e.employee_id = pay.employee_id " + p6WhereSql + @" ORDER BY pay.payment_date_time", p6Args.ToArray()).ToList();
+var report6 = _context.Database.SqlQueryRaw<Report6Row>(@"
+    SELECT
+        r.confirmation_number AS ConfirmationNumber,
+        pay.transaction_reference AS TransactionReference,
+        pay.amount AS Amount,
+        COALESCE(
+            CONCAT(e.first_name, ' ', e.last_name),
+            'Not recorded'
+        ) AS ApprovedBy,
+        e.employee_role AS EmployeeRole,
+        pay.payment_date_time AS PaymentDateTime
+    FROM Payment pay
+    JOIN Reservation r
+        ON r.reservation_id = pay.reservation_id
+    LEFT JOIN Employee e
+        ON e.employee_id = pay.employee_id
+    " + p6WhereSql + @"
+    ORDER BY pay.payment_date_time",
+    p6Args.ToArray()
+).ToList();
 
-        var report7 = _context.Database.SqlQueryRaw<Report7Row>(@"SELECT f.origin_airport_code AS Airport, COUNT(DISTINCT t.ticket_id) AS TicketsSold, COALESCE(SUM(DISTINCT t.total_fare_paid), 0.00) AS Revenue FROM Flight f LEFT JOIN ReservationSegment rs ON rs.flight_id = f.flight_id LEFT JOIN Ticket t ON t.reservation_id = rs.reservation_id AND t.ticket_status <> 'Cancelled' GROUP BY f.origin_airport_code ORDER BY Revenue DESC").ToList();
+       var report7 = _context.Database.SqlQueryRaw<Report7Row>(@"
+    SELECT
+        f.origin_airport_code AS Airport,
+        COUNT(DISTINCT CASE
+            WHEN t.ticket_id IS NOT NULL
+             AND rs.segment_status <> 'Cancelled'
+            THEN t.ticket_id
+        END) AS TicketsSold,
+        COALESCE(SUM(CASE
+            WHEN t.ticket_id IS NOT NULL
+             AND rs.segment_status <> 'Cancelled'
+            THEN rs.fare_price_at_booking
+            ELSE 0
+        END), 0.00) AS Revenue
+    FROM Flight f
+    LEFT JOIN ReservationSegment rs
+        ON rs.flight_id = f.flight_id
+    LEFT JOIN TicketSegment ts
+        ON ts.reservation_segment_id = rs.reservation_segment_id
+    LEFT JOIN Ticket t
+        ON t.ticket_id = ts.ticket_id
+        AND t.ticket_status <> 'Cancelled'
+    GROUP BY f.origin_airport_code
+    ORDER BY Revenue DESC
+").ToList();
 
         return Ok(new { report1, report2, report3, report4, report5, report6, report7 });
     }
@@ -885,7 +962,7 @@ public class HomeController : ControllerBase
         var cancelledFlights = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM Flight WHERE flight_status = 'Cancelled'").FirstOrDefault();
         var inventoryIssues = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM FlightFare WHERE available_inventory <= 0").FirstOrDefault();
         var payments = _context.Database.SqlQueryRaw<decimal>("SELECT COALESCE(SUM(amount), 0) AS Value FROM Payment WHERE payment_status = 'Successful' AND transaction_type = 'Payment'").FirstOrDefault();
-        var refunds = _context.Database.SqlQueryRaw<decimal>("SELECT COALESCE(SUM(amount), 0) AS Value FROM Payment WHERE payment_status = 'Successful' AND transaction_type = 'Refund'").FirstOrDefault();
+        var refunds = _context.Database.SqlQueryRaw<decimal>("SELECT COALESCE(SUM(amount), 0) AS Value FROM Payment WHERE payment_status = 'Refunded' AND transaction_type = 'Refund'").FirstOrDefault();
         return Ok(new { totalUsers = totalUsers, totalRevenue = payments - refunds, totalFlights = totalFlights, reservations = reservations, confirmedReservations = confirmedReservations, delayedFlights = delayedFlights, cancelledFlights = cancelledFlights, inventoryIssues = inventoryIssues });
     }
 
