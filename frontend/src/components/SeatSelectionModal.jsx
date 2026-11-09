@@ -22,6 +22,9 @@ const CABINS = {
 // Only used when the seat map API leaves out the cabin.
 const ROW_CABIN = { A: 4, B: 3 };
 
+// Front of the plane to the back
+const CABIN_ORDER = [4, 3, 2, 1];
+
 const EMPTY = [];
 
 const seatIdOf = (s) => s.seatId ?? s.SeatId;
@@ -200,8 +203,10 @@ export default function SeatSelectionModal({
     return map;
   }, [fares, originalFare]);
 
-  // Rows run front (A) to back. Consecutive rows in the same cabin form
-  // one section. A row with more than 6 seats wraps onto a second line.
+  // One section per class, always First -> Business -> Premium -> Economy
+  // from the front of the plane to the back, whatever the row letters are.
+  // Inside a section rows go A, B, C...; a row with more than 6 seats
+  // wraps onto a second line.
   const sections = useMemo(() => {
     const byRow = {};
     seats.forEach((s) => {
@@ -210,22 +215,18 @@ export default function SeatSelectionModal({
     });
     const rowKeys = Object.keys(byRow).sort((a, b) => a.length - b.length || a.localeCompare(b));
 
-    const out = [];
+    const byCabin = {};
     rowKeys.forEach((row) => {
       const rowSeats = byRow[row].sort((a, b) => a.num - b.num).map((x) => x.seat);
       const cabinId = seatCabinId(rowSeats[0]);
-      let section = out[out.length - 1];
-      if (!section || section.cabinId !== cabinId) {
-        section = { cabinId, rows: [], free: 0, total: 0 };
-        out.push(section);
-      }
+      const section = (byCabin[cabinId] ||= { cabinId, rows: [], free: 0, total: 0 });
       for (let i = 0; i < rowSeats.length; i += SEATS_PER_ROW) {
         section.rows.push({ row, key: `${row}-${i}`, seats: rowSeats.slice(i, i + SEATS_PER_ROW) });
       }
       section.total += rowSeats.length;
       section.free += rowSeats.filter((s) => !occupiedOf(s)).length;
     });
-    return out;
+    return CABIN_ORDER.filter((id) => byCabin[id]).map((id) => byCabin[id]);
   }, [seats]);
 
   if (!show) return null;
