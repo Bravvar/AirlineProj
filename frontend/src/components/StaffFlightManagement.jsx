@@ -24,6 +24,28 @@ const FARE_CLASS_OPTIONS = [
 
 export default function StaffFlightManagement({ token, onFlightUpdated }) {
   const [airports, setAirports] = useState([]);
+  const [flights, setFlights] = useState([]);
+
+  // Load the staff flight list (for the Flight dropdowns).
+  // Each flight carries its internal flightId AND its human flight number,
+  // so staff pick by flight number and the correct ID is sent.
+  const loadFlights = async () => {
+    if (!token) return;
+    try {
+      const r = await fetch(`${API_URL}/api/staff/flights`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await r.json();
+      if (Array.isArray(data)) {
+        // Newest first: a flight just created sits at the top.
+        setFlights([...data].sort((a, b) => (b.flightId || 0) - (a.flightId || 0)));
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    loadFlights();
+  }, [token]);
 
   // Add Flight Form state
   const [flightNumber, setFlightNumber] = useState('');
@@ -132,6 +154,7 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
       setFlightSuccess(`Flight ${data.flightNumber} created successfully! (Flight ID: ${data.flightId})`);
       setFlightNumber('');
       setFareFlightId(String(data.flightId));
+      loadFlights();
       if (onFlightUpdated) onFlightUpdated();
     } catch {
       setFlightError('Unable to connect to server.');
@@ -373,14 +396,30 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
 
             <form onSubmit={handleAddFare} className="flex flex-col gap-3">
               <div>
-                <label className="text-xs font-semibold text-gray-600 mb-1 block">Flight ID</label>
-                <input
-                  type="number"
-                  placeholder="e.g. 546"
-                  value={fareFlightId}
-                  onChange={(e) => setFareFlightId(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 outline-none focus:border-blue-500 font-mono"
-                />
+                <label className="text-xs font-semibold text-gray-600 mb-1 block">Flight</label>
+                {flights.length > 0 ? (
+                  <select
+                    value={fareFlightId}
+                    onChange={(e) => setFareFlightId(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-2 py-2 text-xs text-gray-900 outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    <option value="">Select a flight…</option>
+                    {flights.map((f) => (
+                      <option key={f.flightId} value={f.flightId}>
+                        {f.flightNumber} — {f.originAirportCode} → {f.destinationAirportCode} ({String(f.departureDate || '').slice(0, 10)})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="number"
+                    placeholder="e.g. 546"
+                    value={fareFlightId}
+                    onChange={(e) => setFareFlightId(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 outline-none focus:border-blue-500 font-mono"
+                  />
+                )}
+                <p className="text-[11px] text-gray-400 mt-1">Pick the flight by its flight number — the ID is filled in for you.</p>
               </div>
 
               <div>
@@ -469,14 +508,30 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
 
             <form onSubmit={handleCancelFlight} className="flex flex-col gap-3">
               <div>
-                <label className="text-xs font-semibold text-gray-600 mb-1 block">Flight ID to Cancel</label>
-                <input
-                  type="number"
-                  placeholder="e.g. 546"
-                  value={cancelFlightId}
-                  onChange={(e) => setCancelFlightId(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 outline-none focus:border-blue-500 font-mono"
-                />
+                <label className="text-xs font-semibold text-gray-600 mb-1 block">Flight to Cancel</label>
+                {flights.length > 0 ? (
+                  <select
+                    value={cancelFlightId}
+                    onChange={(e) => setCancelFlightId(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-2 py-2 text-xs text-gray-900 outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    <option value="">Select a flight…</option>
+                    {flights.map((f) => (
+                      <option key={f.flightId} value={f.flightId}>
+                        {f.flightNumber} — {f.originAirportCode} → {f.destinationAirportCode} ({String(f.departureDate || '').slice(0, 10)})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="number"
+                    placeholder="e.g. 546"
+                    value={cancelFlightId}
+                    onChange={(e) => setCancelFlightId(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 outline-none focus:border-blue-500 font-mono"
+                  />
+                )}
+                <p className="text-[11px] text-gray-400 mt-1">Pick the flight by its flight number — the ID is filled in for you.</p>
               </div>
 
               <button
