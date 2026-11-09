@@ -6,6 +6,7 @@ const REPORT_DEFINITIONS = [
   {
     key: 'report1',
     title: 'Revenue by Flight',
+    filters: ['origin', 'destination', 'startDate', 'endDate', 'flightStatus', 'minTickets', 'minRevenue', 'maxRevenue'],
     columns: [
       { key: 'flightNumber', label: 'Flight Number' },
       { key: 'origin', label: 'Origin' },
@@ -17,6 +18,7 @@ const REPORT_DEFINITIONS = [
   {
     key: 'report2',
     title: 'Membership tier summary',
+    filters: ['tier', 'membershipStatus', 'minPoints'],
     columns: [
       { key: 'passengerId', label: 'Passenger ID' },
       { key: 'passenger', label: 'Passenger' },
@@ -30,6 +32,7 @@ const REPORT_DEFINITIONS = [
   {
     key: 'report3',
     title: 'Payment / refund audit',
+    filters: ['transactionType', 'paymentStatus', 'minAmount', 'maxAmount', 'startDate', 'endDate', 'employeeRole'],
     columns: [
       { key: 'confirmationNumber', label: 'Confirmation Number' },
       { key: 'transactionReference', label: 'Transaction Reference' },
@@ -44,6 +47,7 @@ const REPORT_DEFINITIONS = [
   {
     key: 'report4',
     title: 'Flight load factor',
+    filters: ['origin', 'destination', 'startDate', 'endDate', 'flightStatus', 'cabinName', 'minPctFull', 'maxPctFull'],
     columns: [
       { key: 'flightNumber', label: 'Flight Number' },
       { key: 'cabinName', label: 'Cabin Name' },
@@ -54,32 +58,9 @@ const REPORT_DEFINITIONS = [
     ],
   },
   {
-    key: 'report5',
-    title: 'Passenger booking history',
-    columns: [
-      { key: 'passenger', label: 'Passenger' },
-      { key: 'confirmationNumber', label: 'Confirmation Number' },
-      { key: 'reservationStatus', label: 'Reservation Status' },
-      { key: 'tripType', label: 'Trip Type' },
-      { key: 'totalAmount', label: 'Total Amount' },
-      { key: 'tickets', label: 'Tickets' },
-    ],
-  },
-  {
-    key: 'report6',
-    title: 'Refund audit',
-    columns: [
-      { key: 'confirmationNumber', label: 'Confirmation Number' },
-      { key: 'transactionReference', label: 'Transaction Reference' },
-      { key: 'amount', label: 'Amount' },
-      { key: 'approvedBy', label: 'Approved By' },
-      { key: 'employeeRole', label: 'Employee Role' },
-      { key: 'paymentDateTime', label: 'Payment Date & Time' },
-    ],
-  },
-  {
     key: 'report7',
     title: 'Revenue by Airport',
+    filters: ['airport', 'startDate', 'endDate', 'minRevenue', 'minTickets'],
     columns: [
       { key: 'airport', label: 'Airport' },
       { key: 'ticketsSold', label: 'Tickets Sold' },
@@ -87,6 +68,85 @@ const REPORT_DEFINITIONS = [
     ],
   },
 ];
+
+const FILTER_FIELDS = {
+  origin: { label: 'Origin', type: 'text', placeholder: 'e.g. JFK', inputClass: 'w-28 uppercase' },
+  destination: { label: 'Destination', type: 'text', placeholder: 'e.g. LAX', inputClass: 'w-28 uppercase' },
+  airport: { label: 'Airport', type: 'text', placeholder: 'e.g. JFK', inputClass: 'w-28 uppercase' },
+  startDate: { label: 'From date', type: 'date' },
+  endDate: { label: 'To date', type: 'date' },
+  flightStatus: { label: 'Flight status', type: 'select', options: ['', 'On Time', 'Delayed', 'Cancelled', 'Boarding'] },
+  minTickets: { label: 'Min. tickets sold', type: 'number', placeholder: 'e.g. 3', inputClass: 'w-28' },
+  minRevenue: { label: 'Min. revenue', type: 'number', placeholder: 'e.g. 500', inputClass: 'w-28' },
+  maxRevenue: { label: 'Max. revenue', type: 'number', placeholder: 'e.g. 5000', inputClass: 'w-28' },
+  tier: { label: 'Tier', type: 'select', options: ['', 'Gold', 'Silver', 'Bronze', 'Basic', 'Inactive'] },
+  membershipStatus: { label: 'Membership status', type: 'select', options: ['', 'Active', 'Inactive'] },
+  minPoints: { label: 'Min. points', type: 'number', placeholder: 'e.g. 1000', inputClass: 'w-28' },
+  transactionType: { label: 'Transaction type', type: 'select', options: ['', 'Payment', 'Refund'] },
+  paymentStatus: { label: 'Payment status', type: 'select', options: ['', 'Successful', 'Failed', 'Refunded'] },
+  minAmount: { label: 'Min. amount', type: 'number', placeholder: 'e.g. 100', inputClass: 'w-28' },
+  maxAmount: { label: 'Max. amount', type: 'number', placeholder: 'e.g. 1000', inputClass: 'w-28' },
+  employeeRole: { label: 'Employee role', type: 'select', options: ['', 'Supervisor', 'Customer Service Agent'] },
+  cabinName: { label: 'Cabin', type: 'select', options: ['', 'Economy', 'Premium Economy', 'Business Class'] },
+  minPctFull: { label: 'Min. % full', type: 'number', placeholder: 'e.g. 10', inputClass: 'w-24' },
+  maxPctFull: { label: 'Max. % full', type: 'number', placeholder: 'e.g. 90', inputClass: 'w-24' },
+};
+
+const EMPTY_FILTERS = { origin: '', destination: '', airport: '', startDate: '', endDate: '', flightStatus: '', minTickets: '', minRevenue: '', maxRevenue: '', tier: '', membershipStatus: '', minPoints: '', transactionType: '', paymentStatus: '', minAmount: '', maxAmount: '', employeeRole: '', cabinName: '', minPctFull: '', maxPctFull: '' };
+
+function ReportFilterBar({ def, filters, onChange, onApply, onClear, loading }) {
+  const anySet = def.filters.some((k) => String(filters[k] ?? '').trim() !== '');
+  return (
+    <div className="bg-white rounded-3xl border border-gray-200 p-4 mb-4">
+      <div className="flex flex-wrap items-end gap-3">
+        {def.filters.map((key) => {
+          const field = FILTER_FIELDS[key];
+          if (!field) return null;
+          return (
+            <label key={key} className="flex flex-col gap-1 text-xs font-semibold text-gray-600">
+              {field.label}
+              {field.type === 'select' ? (
+                <select
+                  value={filters[key] || ''}
+                  onChange={(e) => onChange(key, e.target.value)}
+                  className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 cursor-pointer"
+                >
+                  {field.options.map((opt) => (
+                    <option key={opt} value={opt}>{opt === '' ? 'All' : opt}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type={field.type}
+                  placeholder={field.placeholder || ''}
+                  value={filters[key] || ''}
+                  onChange={(e) => onChange(key, e.target.value)}
+                  className={`bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 ${field.inputClass || ''}`}
+                />
+              )}
+            </label>
+          );
+        })}
+        <button
+          onClick={onApply}
+          disabled={loading}
+          className="bg-[#0066ff] hover:bg-blue-700 text-white font-semibold px-5 py-2 rounded-xl text-sm shadow-sm disabled:opacity-50"
+        >
+          Apply filters
+        </button>
+        {anySet && (
+          <button
+            onClick={onClear}
+            disabled={loading}
+            className="text-xs font-semibold text-blue-600 hover:text-blue-800 disabled:opacity-50"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function formatCell(row, key) {
   if (!row) return '—';
@@ -298,7 +358,7 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
   const [activeTab, setActiveTab] = useState('all');
   const [search, setSearch] = useState('');
   const [hiddenColumns, setHiddenColumns] = useState({});
-  const [reportFilters, setReportFilters] = useState({ origin: '', destination: '', startDate: '', endDate: '', minTickets: '' });
+  const [reportFilters, setReportFilters] = useState({ ...EMPTY_FILTERS });
   const [filtersApplied, setFiltersApplied] = useState(false);
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
@@ -309,11 +369,29 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
     setErrorMsg('');
     const params = new URLSearchParams();
     const f = filters || {};
-    if (f.origin && f.origin.trim()) params.set('origin', f.origin.trim().toUpperCase());
-    if (f.destination && f.destination.trim()) params.set('destination', f.destination.trim().toUpperCase());
-    if (f.startDate) params.set('startDate', f.startDate);
-    if (f.endDate) params.set('endDate', f.endDate);
-    if (f.minTickets !== '' && f.minTickets !== undefined && f.minTickets !== null) params.set('minTickets', String(f.minTickets));
+    const setStr = (k, upper) => { if (f[k] && String(f[k]).trim()) params.set(k, upper ? String(f[k]).trim().toUpperCase() : String(f[k]).trim()); };
+    const setNum = (k) => { if (f[k] !== '' && f[k] !== undefined && f[k] !== null) params.set(k, String(f[k])); };
+    const setDate = (k) => { if (f[k]) params.set(k, f[k]); };
+    setStr('origin', true);
+    setStr('destination', true);
+    setStr('airport', true);
+    setDate('startDate');
+    setDate('endDate');
+    setStr('flightStatus');
+    setNum('minTickets');
+    setNum('minRevenue');
+    setNum('maxRevenue');
+    setStr('tier');
+    setStr('membershipStatus');
+    setNum('minPoints');
+    setStr('transactionType');
+    setStr('paymentStatus');
+    setNum('minAmount');
+    setNum('maxAmount');
+    setStr('employeeRole');
+    setStr('cabinName');
+    setNum('minPctFull');
+    setNum('maxPctFull');
     const qs = params.toString();
     try {
       const res = await fetch(`${API_URL}/api/reports${qs ? `?${qs}` : ''}`, {
@@ -356,16 +434,29 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
   };
 
   const applyFilters = () => {
-    const anySet = reportFilters.origin.trim() || reportFilters.destination.trim() || reportFilters.startDate || reportFilters.endDate || reportFilters.minTickets !== '';
+    const anySet = Object.values(reportFilters).some((v) => String(v ?? '').trim() !== '');
     setFiltersApplied(Boolean(anySet));
     fetchReports(reportFilters);
   };
 
   const clearFilters = () => {
-    const empty = { origin: '', destination: '', startDate: '', endDate: '', minTickets: '' };
+    const empty = { ...EMPTY_FILTERS };
     setReportFilters(empty);
     setFiltersApplied(false);
     fetchReports(empty);
+  };
+
+  const clearReportFilters = (def) => {
+    const next = { ...reportFilters };
+    def.filters.forEach((k) => { next[k] = ''; });
+    setReportFilters(next);
+    const anySet = Object.values(next).some((v) => String(v ?? '').trim() !== '');
+    setFiltersApplied(Boolean(anySet));
+    fetchReports(next);
+  };
+
+  const updateFilter = (key, value) => {
+    setReportFilters((prev) => ({ ...prev, [key]: value }));
   };
 
   const visibleReports = activeTab === 'all'
@@ -456,78 +547,7 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
               />
             </div>
 
-            <div className="bg-white rounded-3xl border border-gray-200 p-4 mb-6">
-              <div className="flex flex-wrap items-end gap-3">
-                <label className="flex flex-col gap-1 text-xs font-semibold text-gray-600">
-                  Origin
-                  <input
-                    type="text"
-                    placeholder="e.g. JFK"
-                    value={reportFilters.origin}
-                    onChange={(e) => setReportFilters({ ...reportFilters, origin: e.target.value })}
-                    className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 w-28 uppercase"
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-xs font-semibold text-gray-600">
-                  Destination
-                  <input
-                    type="text"
-                    placeholder="e.g. LAX"
-                    value={reportFilters.destination}
-                    onChange={(e) => setReportFilters({ ...reportFilters, destination: e.target.value })}
-                    className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 w-28 uppercase"
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-xs font-semibold text-gray-600">
-                  From date
-                  <input
-                    type="date"
-                    value={reportFilters.startDate}
-                    onChange={(e) => setReportFilters({ ...reportFilters, startDate: e.target.value })}
-                    className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500"
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-xs font-semibold text-gray-600">
-                  To date
-                  <input
-                    type="date"
-                    value={reportFilters.endDate}
-                    onChange={(e) => setReportFilters({ ...reportFilters, endDate: e.target.value })}
-                    className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500"
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-xs font-semibold text-gray-600">
-                  Min. tickets sold
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="e.g. 3"
-                    value={reportFilters.minTickets}
-                    onChange={(e) => setReportFilters({ ...reportFilters, minTickets: e.target.value })}
-                    className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 w-28"
-                  />
-                </label>
-                <button
-                  onClick={applyFilters}
-                  disabled={loading}
-                  className="bg-[#0066ff] hover:bg-blue-700 text-white font-semibold px-5 py-2 rounded-xl text-sm shadow-sm disabled:opacity-50"
-                >
-                  Apply filters
-                </button>
-                {filtersApplied && (
-                  <button
-                    onClick={clearFilters}
-                    disabled={loading}
-                    className="text-xs font-semibold text-blue-600 hover:text-blue-800 disabled:opacity-50"
-                  >
-                    Clear filters
-                  </button>
-                )}
-              </div>
-              <p className="text-xs text-gray-500 mt-3">
-                Origin, destination and dates filter the flight reports (Revenue by Flight, Flight load factor); dates also filter the payment reports (Payment / refund audit, Refund audit). Min. tickets applies to Revenue by Flight only. Membership, booking history and Revenue by Airport are not filtered.
-              </p>
-            </div>
+
 
             {errorMsg && (
               <div className="bg-red-50 border border-red-200 text-red-700 font-semibold rounded-2xl p-4 mb-6 text-sm">{errorMsg}</div>
@@ -568,15 +588,24 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
                 const hidden = hiddenColumns[def.key] || new Set();
 
                 return (
-                  <ReportTable 
-                    key={def.key} 
-                    def={def} 
-                    rows={rows} 
-                    search={search} 
-                    hiddenColumns={hidden} 
-                    toggleColumn={toggleColumn} 
-                    loading={loading}
-                  />
+                  <div key={def.key}>
+                    <ReportFilterBar
+                      def={def}
+                      filters={reportFilters}
+                      onChange={updateFilter}
+                      onApply={applyFilters}
+                      onClear={() => clearReportFilters(def)}
+                      loading={loading}
+                    />
+                    <ReportTable
+                      def={def}
+                      rows={rows}
+                      search={search}
+                      hiddenColumns={hidden}
+                      toggleColumn={toggleColumn}
+                      loading={loading}
+                    />
+                  </div>
                 );
               })}
             </div>

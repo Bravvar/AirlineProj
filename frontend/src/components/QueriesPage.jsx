@@ -8,6 +8,8 @@ const QUERY_DEFINITIONS = [
   { key: 'query3', title: 'Q3: Supervisor-only refunds list' },
   { key: 'query4', title: 'Q4: Passengers on cancelled reservations with refund status' },
   { key: 'query5', title: 'Q5: Segment-level ticket drilldown by confirmation number' },
+  { key: 'query6', title: 'Q6: Passenger booking history by confirmation number' },
+  { key: 'query7', title: 'Q7: Refund audit by confirmation number' },
 ];
 
 function formatCell(val) {
