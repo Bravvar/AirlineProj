@@ -17,10 +17,7 @@ export default function PaymentConfirmationPage({
   if (!details) return null;
 
   const AIRLINES = {
-    LA: 'LATAM Airlines', AI: 'Air India', NZ: 'Air New Zealand',
-    QF: 'Qantas', AZ: 'ITA Airways', JL: 'Japan Airlines',
-    AA: 'American Airlines', UA: 'United Airlines', DL: 'Delta Air Lines',
-    JB: 'JetBlue', WN: 'Southwest Airlines', AS: 'Alaska Airlines', B6: 'JetBlue'
+    'C10': 'Coog10 Airlines'
   };
   const airlineCode = (details.flightNumber || '').slice(0, 2).toUpperCase();
   const airlineName = AIRLINES[airlineCode] || 'Airline';
