@@ -123,9 +123,6 @@ export default function PaymentConfirmationPage({
               </div>
               <div>
                 <div className="flex gap-1 mt-1 justify-center">
-                  <span className={`${details.refundable ? 'bg-green-600' : 'bg-red-500'} text-white text-[9px] font-bold px-1.5 py-0.5 rounded`}>
-                    {details.refundable ? 'REFUNDABLE' : 'NON-REFUNDABLE'}
-                  </span>
                   {details.cabinName && (
                     <span className="bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
                       {details.cabinName}{details.seatNumber && details.seatNumber !== '—' ? ` · ${details.seatNumber}` : ''}
