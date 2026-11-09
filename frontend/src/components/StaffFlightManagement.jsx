@@ -292,10 +292,9 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
         {/* SECTION 1: ADD FLIGHT FORM */}
         <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex flex-col justify-between">
           <div>
-            <h3 className="font-bold text-gray-900 text-lg mb-1 flex items-center gap-2">
+            <h3 className="font-bold text-gray-900 text-lg mb-4 flex items-center gap-2">
               <span className="text-blue-600">✈</span> Add New Flight
             </h3>
-            <p className="text-xs text-gray-500 mb-4">POST /api/flights</p>
 
             {flightSuccess && (
               <p className="bg-green-50 border border-green-200 text-green-800 font-semibold rounded-xl p-3 text-xs mb-4">
@@ -400,10 +399,9 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
         {/* SECTION 2: ADD FARE FORM */}
         <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex flex-col justify-between">
           <div>
-            <h3 className="font-bold text-gray-900 text-lg mb-1 flex items-center gap-2">
+            <h3 className="font-bold text-gray-900 text-lg mb-4 flex items-center gap-2">
               <span className="text-green-600">🏷</span> Add Flight Fare
             </h3>
-            <p className="text-xs text-gray-500 mb-4">POST /api/flights/{'{id}'}/fares</p>
 
             {fareSuccess && (
               <p className="bg-green-50 border border-green-200 text-green-800 font-semibold rounded-xl p-3 text-xs mb-4">
@@ -517,10 +515,9 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
         {/* SECTION 3: CANCEL FLIGHT SECTION */}
         <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex flex-col justify-between">
           <div>
-            <h3 className="font-bold text-gray-900 text-lg mb-1 flex items-center gap-2">
+            <h3 className="font-bold text-gray-900 text-lg mb-4 flex items-center gap-2">
               <span className="text-red-600">✕</span> Cancel Flight
             </h3>
-            <p className="text-xs text-gray-500 mb-2">PUT /api/flights/{'{id}'}/cancel</p>
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 font-medium mb-4">
               Note: This cancels the flight only, not its bookings.
             </div>
