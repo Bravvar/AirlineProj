@@ -17,7 +17,7 @@ export default function PaymentConfirmationPage({
   if (!details) return null;
 
   const AIRLINES = {
-    'CG': 'Coog10 Airlines'
+    CG: 'Coog10 Airlines'
   };
   const airlineCode = (details.flightNumber || '').slice(0, 2).toUpperCase();
   const airlineName = AIRLINES[airlineCode] || 'Coog10 Airlines';
@@ -102,8 +102,14 @@ export default function PaymentConfirmationPage({
               </div>
               <div>
                 <div className="flex gap-1 mt-1 justify-center">
-                  <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">NON-REFUNDABLE</span>
-                  <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">Economy (B)</span>
+                  <span className={`${details.refundable ? 'bg-green-600' : 'bg-red-500'} text-white text-[9px] font-bold px-1.5 py-0.5 rounded`}>
+                    {details.refundable ? 'REFUNDABLE' : 'NON-REFUNDABLE'}
+                  </span>
+                  {details.cabinName && (
+                    <span className="bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
+                      {details.cabinName}{details.seatNumber && details.seatNumber !== '—' ? ` · ${details.seatNumber}` : ''}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -151,15 +157,17 @@ export default function PaymentConfirmationPage({
                 </div>
                 <div className="flex items-center gap-2 text-sm text-gray-700 font-medium">
                   <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
-                  Check In Baggage <span className="text-red-500 font-bold ml-1">0 Kgs</span>
+                  Checked Bags <span className="text-red-500 font-bold ml-1">{details.checkedBagsIncluded ?? 0}</span>
                 </div>
               </div>
             </div>
 
+            {!(details.checkedBagsIncluded > 0) && (
             <div className="bg-red-50 text-red-600 text-sm p-4 rounded-xl flex items-center gap-2 border border-red-100">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               Check-in baggage is not included for {details.origin}-{details.destination}. You can buy extra baggage from the airline counter.
             </div>
+            )}
           </div>
 
           {/* Right Side: Pricing & Show Ticket Button */}

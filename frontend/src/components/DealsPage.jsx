@@ -31,6 +31,7 @@ export default function DealsPage({
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [checkoutTotal, setCheckoutTotal] = useState(0);
   const [selectedSeatIds, setSelectedSeatIds] = useState([]);
+  const [selectedSeatNumber, setSelectedSeatNumber] = useState(null);
   const [bookingMessage, setBookingMessage] = useState('');
   const [cityByCode, setCityByCode] = useState({});
 
@@ -100,8 +101,25 @@ export default function DealsPage({
     setShowSeatModal(true);
   };
 
-  const handleSeatProceed = (seatIds, total) => {
+  // A seat in another cabin books that cabin's fare instead of the deal fare.
+  const handleSeatProceed = (seatIds, total, info) => {
     setSelectedSeatIds(seatIds);
+    setSelectedSeatNumber(info?.seatNumber || null);
+    if (info?.fare) {
+      setSelectedDeal((prev) =>
+        prev
+          ? {
+              ...prev,
+              flightFareId: info.fare.flightFareId,
+              currentPrice: info.fare.currentPrice,
+              cabinName: info.fare.cabinName,
+              fareClassName: info.fare.fareClassName,
+              refundable: info.fare.refundable,
+              checkedBagsIncluded: info.fare.checkedBagsIncluded,
+            }
+          : prev
+      );
+    }
     setCheckoutTotal(total);
     setShowSeatModal(false);
     setShowCheckoutModal(true);
@@ -126,6 +144,11 @@ export default function DealsPage({
         departureTime: deal.departureTime ? String(deal.departureTime).substring(0, 5) : '',
         arrivalTime: deal.arrivalTime ? String(deal.arrivalTime).substring(0, 5) : '',
         stops: 'Non-stop',
+        seatNumber: selectedSeatNumber || '—',
+        cabinName: deal.cabinName || '',
+        fareClassName: deal.fareClassName || '',
+        refundable: Boolean(deal.refundable),
+        checkedBagsIncluded: deal.checkedBagsIncluded ?? 0,
       });
     } else {
       setBookingMessage(
@@ -284,7 +307,8 @@ export default function DealsPage({
             setSelectedDeal(null);
           }}
           flightId={selectedDeal.flightId}
-          farePrice={selectedDeal.currentPrice}
+          fareId={selectedDeal.flightFareId}
+          farePrice={Number(selectedDeal.currentPrice || 0)}
           onProceed={handleSeatProceed}
           preselectedSeatIds={selectedSeatIds}
           mode="booking"
