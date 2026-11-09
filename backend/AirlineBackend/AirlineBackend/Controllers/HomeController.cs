@@ -443,9 +443,43 @@ public class HomeController : ControllerBase
             _logger.LogWarning(ex, "Cancellation requests unavailable; is migration 18 deployed?");
         }
 
+        // Airline-cancelled flight refund per booking (migration 19).
+        // One row per reservation that had a flight cancelled by the
+        // airline, with the refund review status and the amount that
+        // was actually refunded (0 if still pending).
+        var flightCancels = new Dictionary<int, FlightCancellationRow>();
+        try
+        {
+            var rows = _context.Database.SqlQueryRaw<FlightCancellationRow>(@"
+                SELECT frr.reservation_id AS ReservationId,
+                       f.flight_number AS FlightNumber,
+                       frr.review_status AS ReviewStatus,
+                       frr.approved_amount AS ApprovedAmount,
+                       COALESCE(SUM(CASE WHEN p.transaction_type = 'Refund'
+                                          AND p.payment_status = 'Refunded'
+                                         THEN p.amount ELSE 0 END), 0) AS RefundedAmount,
+                       MAX(CASE WHEN p.transaction_type = 'Refund'
+                                 AND p.payment_status = 'Refunded'
+                                THEN p.transaction_reference END) AS RefundReference
+                FROM FlightRefundReview frr
+                JOIN Flight f ON f.flight_id = frr.flight_id
+                JOIN ReservationPassenger rp ON rp.reservation_id = frr.reservation_id
+                LEFT JOIN Payment p ON p.reservation_id = frr.reservation_id
+                WHERE rp.passenger_id = {0}
+                GROUP BY frr.reservation_id, f.flight_number, frr.review_status, frr.approved_amount", account.PassengerId.Value).ToList();
+
+            foreach (var row in rows)
+                if (!flightCancels.ContainsKey(row.ReservationId)) flightCancels[row.ReservationId] = row;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Flight cancellation refunds unavailable; is migration 19 deployed?");
+        }
+
         var result = data.Select(r =>
         {
             latest.TryGetValue(r.ReservationId, out var req);
+            flightCancels.TryGetValue(r.ReservationId, out var fc);
             bool refunded = r.ReservationStatus == "Cancelled" && req?.RequestStatus == "Approved";
             bool pending = req?.RequestStatus == "Pending";
 
@@ -462,6 +496,7 @@ public class HomeController : ControllerBase
                 // "Refunded" / "Cancellation Pending" / the raw status
                 DisplayStatus = refunded ? "Refunded"
                               : pending ? "Cancellation Pending"
+                              : (fc != null && fc.RefundedAmount > 0) ? "Refunded"
                               : r.ReservationStatus,
                 CancellationRequest = req == null ? null : new
                 {
@@ -472,6 +507,16 @@ public class HomeController : ControllerBase
                     req.RefundAmount,
                     req.RequestedAt,
                     req.ReviewedAt
+                },
+                // Airline-cancelled flight: the member is told the
+                // flight was cancelled and how much was refunded.
+                FlightCancellation = fc == null ? null : new
+                {
+                    fc.FlightNumber,
+                    fc.ReviewStatus,
+                    fc.ApprovedAmount,
+                    fc.RefundedAmount,
+                    fc.RefundReference
                 }
             };
         }).ToList();
@@ -1350,8 +1395,23 @@ public class HomeController : ControllerBase
 
         try
         {
+            // The employee cancelling the flight. A Supervisor's id lets
+            // the procedure auto-refund affected members in full (the
+            // Refund trigger requires a Supervisor employee_id); an
+            // Employee (or the worker) leaves refunds Pending for a
+            // supervisor to approve. Migration 19.
+            int? employeeId = null;
+            var userIdText = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (int.TryParse(userIdText, out int userId))
+            {
+                var account = await _context.UserAccount
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(u => u.UserAccountId == userId);
+                employeeId = account?.EmployeeId;
+            }
+
             await _context.Database.ExecuteSqlInterpolatedAsync(
-                $"CALL process_flight_cancellation({id})"
+                $"CALL process_flight_cancellation({id}, {employeeId})"
             );
         }
         catch (Exception)
@@ -1453,6 +1513,8 @@ public class ManifestSegmentRow { public int SegmentNumber { get; set; } public 
 public class ManifestTicketRow { public string Passenger { get; set; } public string TicketNumber { get; set; } public string FlightNumber { get; set; } public int SegmentNumber { get; set; } public string SegmentStatus { get; set; } public decimal FarePriceAtBooking { get; set; } }
 public class SeatMapRow { public int SeatId { get; set; } public string SeatNumber { get; set; } public int CabinClassId { get; set; } public string SeatType { get; set; } public int Occupied { get; set; } }
 public class AdminUserRow { public int UserAccountId { get; set; } public string Email { get; set; } public string Role { get; set; } public int? EmployeeId { get; set; } public int? PassengerId { get; set; } }
+// Airline-cancelled flight refund info per booking (migration 19).
+public class FlightCancellationRow { public int ReservationId { get; set; } public string FlightNumber { get; set; } public string ReviewStatus { get; set; } public decimal? ApprovedAmount { get; set; } public decimal RefundedAmount { get; set; } public string? RefundReference { get; set; } }
 public class AdminFlightRow { public int FlightId { get; set; } public string FlightNumber { get; set; } public string OriginAirportCode { get; set; } public string DestinationAirportCode { get; set; } public string FlightStatus { get; set; } }
 public class AdminFareRow { public int FlightId { get; set; } public int FlightFareId { get; set; } public int FareClassId { get; set; } public decimal CurrentPrice { get; set; } public int AvailableInventory { get; set; } }
 

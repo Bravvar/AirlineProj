@@ -35,6 +35,20 @@ export default function PaymentConfirmationPage({
     />
   ));
 
+  // One ticket card per passenger. Falls back to a single card built from
+  // `details` when the backend did not return a tickets list.
+  const ticketList = Array.isArray(details.tickets) && details.tickets.length > 0
+    ? details.tickets.map((t) => ({
+        passengerName: t.passengerName || details.passengerName,
+        ticketNumber: t.ticketNumber,
+        seatNumber: t.seatNumber || details.seatNumber || '—',
+      }))
+    : [{
+        passengerName: details.passengerName,
+        ticketNumber: details.ticketNumber || details.confirmationNumber,
+        seatNumber: details.seatNumber || '—',
+      }];
+
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 pb-20">
       
@@ -235,12 +249,14 @@ export default function PaymentConfirmationPage({
               </div>
             </div>
 
-            {/* Ticket Details */}
-            <div className="p-6">
+            {/* One ticket card per passenger */}
+            <div className="p-6 space-y-6">
+              {ticketList.map((t) => (
+                <div key={t.ticketNumber || t.passengerName} className={ticketList.length > 1 ? "border border-gray-200 rounded-2xl p-5" : ""}>
               <div className="flex justify-between items-center mb-8 pb-6 border-b border-gray-100">
                 <div>
                   <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider mb-1">Passenger</p>
-                  <p className="font-bold text-gray-900 truncate max-w-[150px]">{details.passengerName}</p>
+                  <p className="font-bold text-gray-900 truncate max-w-[150px]">{t.passengerName}</p>
                 </div>
                 <div className="text-right">
                   <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider mb-1">Confirmation</p>
@@ -275,7 +291,7 @@ export default function PaymentConfirmationPage({
               <div className="grid grid-cols-3 gap-4 bg-gray-50 rounded-2xl p-4 border border-gray-100 mb-8">
                 <div>
                   <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Seat</p>
-                  <p className="text-sm font-bold text-gray-900">{details.seatNumber || '—'}</p>
+                  <p className="text-sm font-bold text-gray-900">{t.seatNumber || '—'}</p>
                 </div>
                 <div>
                   <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Gate</p>
@@ -297,19 +313,11 @@ export default function PaymentConfirmationPage({
                    {barcodeLines}
                 </div>
                 <p className="text-[10px] font-mono tracking-widest text-gray-500 mt-1">
-                  {details.ticketNumber || details.confirmationNumber}
+                  {t.ticketNumber || details.confirmationNumber}
                 </p>
-                {details.tickets && details.tickets.length > 1 && (
-                  <div className="w-full mt-3 border-t border-gray-100 pt-3">
-                    {details.tickets.map((t) => (
-                      <p key={t.ticketNumber} className="text-xs text-gray-700 flex justify-between">
-                        <span className="font-semibold">{t.passengerName}</span>
-                        <span className="font-mono">{t.ticketNumber}</span>
-                      </p>
-                    ))}
-                  </div>
-                )}
               </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

@@ -42,6 +42,8 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   const [showSeatModal, setShowSeatModal] = useState(false);
   const [selectedSeatIds, setSelectedSeatIds] = useState([]);
   const [selectedSeatNumber, setSelectedSeatNumber] = useState(null);
+  // Seat numbers in the same order as selectedSeatIds (seat i -> traveler i).
+  const [selectedSeatNumbers, setSelectedSeatNumbers] = useState([]);
 
   const [airports, setAirports] = useState(null);
   const [routes, setRoutes] = useState(null);
@@ -651,6 +653,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   const openSeatSelection = () => {
     setSelectedSeatIds([]);
     setSelectedSeatNumber(null);
+    setSelectedSeatNumbers([]);
     setShowSeatModal(true);
   };
 
@@ -659,6 +662,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   const handleSeatProceed = (seatIds, total, info) => {
     setSelectedSeatIds(Array.isArray(seatIds) ? seatIds : []);
     setSelectedSeatNumber(info?.seatNumber || null);
+    setSelectedSeatNumbers(Array.isArray(info?.seatNumbers) ? info.seatNumbers : []);
     if (info?.fare) {
       setSelectedFlightFare((prev) => (prev ? { ...prev, fare: info.fare, outboundFare: info.fare } : prev));
     }
@@ -728,6 +732,15 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
     const bookedFlight = selectedFlightFare?.flight;
     const bookedFare = selectedFlightFare?.fare;
+    // One seat per traveler, in order (seat i -> traveler i, same as the
+    // backend). Attach each traveler's seat to their ticket so the
+    // confirmation page can render one ticket card per passenger.
+    const ticketsWithSeats = Array.isArray(tickets)
+      ? tickets.map((t, i) => ({
+          ...t,
+          seatNumber: selectedSeatNumbers[i] || selectedSeatNumber || '—',
+        }))
+      : null;
     if (onBooked) {
       onBooked({
         passengerName: sessionStorage.getItem('email')?.split('@')[0] || 'Passenger',
@@ -735,7 +748,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         confirmationNumber: confirmationNumber,
         ticketNumber: ticketNumber,
         ticketNumbers: Array.isArray(ticketNumbers) && ticketNumbers.length > 0 ? ticketNumbers : (ticketNumber ? [ticketNumber] : []),
-        tickets: Array.isArray(tickets) ? tickets : null,
+        tickets: ticketsWithSeats,
         passengerCount: passengerCount || totalTravelers || 1,
         totalAmount: checkoutTotal,
         flightNumber: bookedFlight?.flightNumber || '',

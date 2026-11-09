@@ -21,6 +21,7 @@ function BookingCard({
 
   const isCancelled = booking.reservationStatus?.toLowerCase() === 'cancelled';
   const request = booking.cancellationRequest;
+  const flightCancel = booking.flightCancellation;
   const displayStatus = booking.displayStatus || booking.reservationStatus;
   const isRefunded = displayStatus === 'Refunded';
   const isPendingCancel = !isCancelled && request?.requestStatus === 'Pending';
@@ -206,12 +207,30 @@ function BookingCard({
         {isRefunded && (
           <div className="bg-green-50 border border-green-200 rounded-2xl px-4 py-3 text-sm">
             <p className="font-semibold text-green-800">
-              Refunded ${Number(request?.refundAmount || 0).toFixed(2)}
+              Refunded ${Number(request?.refundAmount ?? flightCancel?.refundedAmount ?? 0).toFixed(2)}
               {request?.reviewedAt ? ` on ${shortDate(request.reviewedAt)}` : ''}
             </p>
+            {flightCancel && (
+              <p className="text-green-700 text-xs mt-1">
+                Flight {flightCancel.flightNumber} was cancelled by the airline. Your refund has been issued.
+                {flightCancel.refundReference ? ` Ref: ${flightCancel.refundReference}` : ''}
+              </p>
+            )}
             {request?.adminNotes && (
               <p className="text-green-700 text-xs mt-1">{request.adminNotes}</p>
             )}
+          </div>
+        )}
+        {flightCancel && !isRefunded && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-sm">
+            <p className="font-semibold text-amber-800">
+              Flight {flightCancel.flightNumber} was cancelled by the airline
+            </p>
+            <p className="text-amber-700 text-xs mt-1">
+              {flightCancel.reviewStatus === 'Pending'
+                ? 'Your refund is being processed. You will be refunded in full.'
+                : 'Your refund is being processed.'}
+            </p>
           </div>
         )}
         {isDeclined && (
