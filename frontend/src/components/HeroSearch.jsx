@@ -517,7 +517,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     setShowCheckoutModal(true);
   };
 
-  const handlePaymentSuccess = (confirmationNumber) => {
+  const handlePaymentSuccess = (confirmationNumber, ticketNumber) => {
     setShowCheckoutModal(false);
     setBookingMessage(`Successfully booked! Confirmation #${confirmationNumber}`);
     setFaresByFlight({});
@@ -529,6 +529,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         passengerName: sessionStorage.getItem('email')?.split('@')[0] || 'Passenger',
         email: sessionStorage.getItem('email'),
         confirmationNumber: confirmationNumber,
+        ticketNumber: ticketNumber,
         totalAmount: checkoutTotal,
         flightNumber: bookedFlight?.flightNumber || '',
         origin: bookedFlight?.originAirportCode || from,

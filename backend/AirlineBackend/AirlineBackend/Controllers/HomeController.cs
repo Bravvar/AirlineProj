@@ -455,9 +455,39 @@ public class HomeController : ControllerBase
                 "INSERT INTO Payment (reservation_id, employee_id, payment_date_time, amount, payment_method, payment_status, transaction_reference, transaction_type) VALUES ({0}, NULL, {1}, {2}, 'Card (demo)', 'Successful', {3}, 'Payment')",
                 reservation.ReservationId, DateTime.Now, reservation.TotalAmount, paymentReference);
 
+            string? ticketNumber = null;
+            try
+            {
+                decimal taxAmount = 0;
+                decimal fareAmount = reservation.TotalAmount;
+                ticketNumber = "TKT-" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper();
+                await _context.Database.ExecuteSqlRawAsync(
+                    "INSERT INTO Ticket (ticket_number, reservation_id, passenger_id, employee_id, issue_date_time, ticket_status, fare_amount, tax_amount, total_fare_paid, exchange_rate) VALUES ({0}, {1}, {2}, NULL, {3}, 'Issued', {4}, {5}, {6}, 1.0000)",
+                    ticketNumber, reservation.ReservationId, passenger.PassengerId, DateTime.Now, fareAmount, taxAmount, reservation.TotalAmount);
+                var ticketIds = await _context.Database.SqlQueryRaw<int>(
+                    "SELECT ticket_id AS Value FROM Ticket WHERE ticket_number = {0}",
+                    ticketNumber).ToListAsync();
+                if (ticketIds.Count > 0)
+                {
+                    int ticketId = ticketIds[0];
+                    var allSegments = new List<ReservationSegment> { segment };
+                    if (returnSegment != null) allSegments.Add(returnSegment);
+                    foreach (var seg in allSegments)
+                    {
+                        await _context.Database.ExecuteSqlRawAsync(
+                            "INSERT INTO TicketSegment (ticket_id, reservation_segment_id) VALUES ({0}, {1})",
+                            ticketId, seg.ReservationSegmentId);
+                    }
+                }
+            }
+            catch
+            {
+                ticketNumber = null;
+            }
+
             await transaction.CommitAsync();
 
-            return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount });
+            return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount, ticketNumber = ticketNumber });
         }
         catch (Exception ex)
         {
@@ -504,6 +534,10 @@ public class HomeController : ControllerBase
 
             reservation.ReservationStatus = "Cancelled";
             await _context.SaveChangesAsync();
+
+            await _context.Database.ExecuteSqlRawAsync(
+                "UPDATE Ticket SET ticket_status = 'Cancelled' WHERE reservation_id = {0} AND ticket_status = 'Issued'",
+                id);
 
             await transaction.CommitAsync();
 
@@ -592,6 +626,25 @@ public class HomeController : ControllerBase
             await transaction.RollbackAsync();
             return StatusCode(500, "Internal Server Error: " + ex.Message);
         }
+    }
+
+    [HttpGet("reservations/{id}/ticket")]
+    public IActionResult ReservationTicket(int id)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (userId == null) return Unauthorized();
+        var account = _context.UserAccount.FirstOrDefault(i => i.UserAccountId == int.Parse(userId));
+        if (account == null || account.PassengerId == null) return Unauthorized();
+        var link = _context.ReservationPassenger.FirstOrDefault(i => i.ReservationId == id && i.PassengerId == account.PassengerId);
+        if (link == null) return NotFound("No reservation like that");
+        var ticket = _context.Database.SqlQueryRaw<TicketRow>(@"
+            SELECT t.ticket_id AS TicketId, t.ticket_number AS TicketNumber, t.ticket_status AS TicketStatus,
+                   t.fare_amount AS FareAmount, t.tax_amount AS TaxAmount, t.total_fare_paid AS TotalFarePaid,
+                   t.issue_date_time AS IssueDateTime
+            FROM Ticket t WHERE t.reservation_id = {0} AND t.passenger_id = {1} AND t.ticket_status <> 'Cancelled'
+            ORDER BY t.ticket_id DESC LIMIT 1", id, account.PassengerId).FirstOrDefault();
+        if (ticket == null) return Ok(new { ticketNumber = (string?)null });
+        return Ok(ticket);
     }
 
     [HttpGet("reports")]
@@ -744,50 +797,50 @@ public class HomeController : ControllerBase
     }
 
 
-[HttpPut("flights/{id}/cancel")]
-public async Task<IActionResult> CancelFlight(int id)
-{
-    var role = User.FindFirst(ClaimTypes.Role)?.Value;
-
-    if (role != "Employee" && role != "Supervisor")
-        return StatusCode(403, "Staff only");
-
-    var flight = await _context.Flight
-        .FirstOrDefaultAsync(f => f.FlightId == id);
-
-    if (flight == null)
-        return NotFound("Flight not found");
-
-    if (flight.FlightStatus != "Cancelled")
+    [HttpPut("flights/{id}/cancel")]
+    public async Task<IActionResult> CancelFlight(int id)
     {
-        flight.FlightStatus = "Cancelled";
-        await _context.SaveChangesAsync();
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+
+        if (role != "Employee" && role != "Supervisor")
+            return StatusCode(403, "Staff only");
+
+        var flight = await _context.Flight
+            .FirstOrDefaultAsync(f => f.FlightId == id);
+
+        if (flight == null)
+            return NotFound("Flight not found");
+
+        if (flight.FlightStatus != "Cancelled")
+        {
+            flight.FlightStatus = "Cancelled";
+            await _context.SaveChangesAsync();
+        }
+
+        try
+        {
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"CALL process_flight_cancellation({id})"
+            );
+        }
+        catch (Exception)
+        {
+            return StatusCode(
+                500,
+                "Flight cancellation processing failed. " +
+                "The cancellation may be pending. " +
+                "Please contact an administrator."
+            );
+        }
+
+        return Ok(new
+        {
+            flightId = flight.FlightId,
+            flightNumber = flight.FlightNumber,
+            flightStatus = "Cancelled",
+            cancellationProcessed = true
+        });
     }
-
-    try
-    {
-        await _context.Database.ExecuteSqlInterpolatedAsync(
-            $"CALL process_flight_cancellation({id})"
-        );
-    }
-    catch (Exception)
-    {
-        return StatusCode(
-            500,
-            "Flight cancellation processing failed. " +
-            "The cancellation may be pending. " +
-            "Please contact an administrator."
-        );
-    }
-
-    return Ok(new
-    {
-        flightId = flight.FlightId,
-        flightNumber = flight.FlightNumber,
-        flightStatus = "Cancelled",
-        cancellationProcessed = true
-    });
-}
 
 
     [HttpGet("staff/flights")]
@@ -884,6 +937,7 @@ public class SegmentRow { public int ReservationSegmentId { get; set; } public i
 public class Query1Row { public string FlightNumber { get; set; } public string OriginAirportCode { get; set; } public string DestinationAirportCode { get; set; } public DateTime DepartureDate { get; set; } public TimeSpan DepartureTime { get; set; } public string CabinName { get; set; } public string FareClassName { get; set; } public decimal CurrentPrice { get; set; } public int AvailableInventory { get; set; } }
 public class Query2Row { public string ConfirmationNumber { get; set; } public string Passenger { get; set; } public string? MealSelection { get; set; } public int AdditionalCheckedBags { get; set; } public int? SegmentNumber { get; set; } public string? FlightNumber { get; set; } public decimal? FarePriceAtBooking { get; set; } public string? TicketNumber { get; set; } public string? TicketStatus { get; set; } }
 public class Query3Row { public string ConfirmationNumber { get; set; } public string SupervisorEmail { get; set; } public decimal Amount { get; set; } public DateTime PaymentDateTime { get; set; } }
+public class TicketRow { public int TicketId { get; set; } public string TicketNumber { get; set; } public string TicketStatus { get; set; } public decimal FareAmount { get; set; } public decimal TaxAmount { get; set; } public decimal TotalFarePaid { get; set; } public DateTime IssueDateTime { get; set; } }
 public class Query4Row { public string ConfirmationNumber { get; set; } public string Passenger { get; set; } public string ReservationStatus { get; set; } public decimal RefundedAmount { get; set; } }
 public class Query5Row { public string ConfirmationNumber { get; set; } public string Passenger { get; set; } public string TicketNumber { get; set; } public string FlightNumber { get; set; } public int SegmentNumber { get; set; } public string SegmentStatus { get; set; } public decimal FarePriceAtBooking { get; set; } }
 

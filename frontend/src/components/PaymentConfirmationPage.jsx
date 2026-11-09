@@ -63,6 +63,12 @@ export default function PaymentConfirmationPage({
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">{details.passengerName}</h2>
                 <p className="text-gray-500 text-sm mt-1">{details.email}</p>
+                {details.confirmationNumber && (
+                  <p className="text-sm text-gray-700 mt-2">Confirmation <span className="font-bold text-gray-900">{details.confirmationNumber}</span></p>
+                )}
+                {details.ticketNumber && (
+                  <p className="text-sm text-gray-700 mt-1">Ticket <span className="font-bold text-gray-900">{details.ticketNumber}</span></p>
+                )}
               </div>
               <div className="text-right">
                 <p className="text-3xl font-extrabold text-gray-900">${details.totalAmount.toFixed(2)}</p>

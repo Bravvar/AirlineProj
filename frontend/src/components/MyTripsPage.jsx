@@ -4,7 +4,7 @@ import { API_URL } from '../config';
 
 const MEAL_OPTIONS = ['Standard', 'Vegetarian', 'Vegan', 'Kosher', 'Halal', 'Gluten Free'];
 
-function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, onRefundSuccess, isEditing, onEditStart, onEditEnd }) {
+function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, ticket, onLoadTicket, onRefundSuccess, isEditing, onEditStart, onEditEnd }) {
   const [phone, setPhone] = useState('');
   const [mealSelection, setMealSelection] = useState('');
   const [additionalCheckedBags, setAdditionalCheckedBags] = useState('');
@@ -146,12 +146,34 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, onRe
 
       <div className="p-6 flex flex-col gap-4 flex-grow">
         <div>
-          <button
-            onClick={() => onLoadSegments(booking.reservationId)}
-            className="text-blue-600 font-semibold text-sm hover:underline"
-          >
-            View legs
-          </button>
+          <div className="flex gap-5">
+            <button
+              onClick={() => onLoadSegments(booking.reservationId)}
+              className="text-blue-600 font-semibold text-sm hover:underline"
+            >
+              View legs
+            </button>
+            <button
+              onClick={() => onLoadTicket(booking.reservationId)}
+              className="text-blue-600 font-semibold text-sm hover:underline"
+            >
+              View ticket
+            </button>
+          </div>
+          {ticket && (
+            <div className="mt-2 text-sm text-gray-700 bg-blue-50 rounded-2xl p-4">
+              {ticket.ticketNumber ? (
+                <>
+                  <div className="font-bold text-gray-900">Ticket {ticket.ticketNumber}</div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Status {ticket.ticketStatus} · Fare ${ticket.fareAmount} · Tax ${ticket.taxAmount} · Total ${ticket.totalFarePaid}
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-gray-400">No ticket issued for this booking yet.</p>
+              )}
+            </div>
+          )}
           {segments && (
             <div className="mt-3 flex flex-col gap-2">
               {segments.length === 0 ? (
@@ -292,6 +314,7 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, onRe
 export default function MyTripsPage({ token, email, onBackToHome, onSignIn, onToggleSidebar, onRefundSuccess, auth }) {
   const [bookings, setBookings] = useState(null);
   const [segmentsById, setSegmentsById] = useState({});
+  const [ticketById, setTicketById] = useState({});
   const [loadError, setLoadError] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [showCancelled, setShowCancelled] = useState(false);
@@ -376,6 +399,24 @@ export default function MyTripsPage({ token, email, onBackToHome, onSignIn, onTo
     }
   };
 
+  const loadTicket = async (id) => {
+    if (ticketById[id]) return;
+    try {
+      const res = await fetch(`${API_URL}/api/reservations/${id}/ticket`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        setTicketById((prev) => ({ ...prev, [id]: { ticketNumber: null } }));
+        return;
+      }
+      const data = JSON.parse(text);
+      setTicketById((prev) => ({ ...prev, [id]: data }));
+    } catch {
+      setTicketById((prev) => ({ ...prev, [id]: { ticketNumber: null } }));
+    }
+  };
+
   const activeBookings = (bookings || []).filter((b) => showCancelled || b.reservationStatus?.toLowerCase() !== 'cancelled');
   const cancelledCount = (bookings || []).filter((b) => b.reservationStatus?.toLowerCase() === 'cancelled').length;
 
@@ -457,6 +498,8 @@ export default function MyTripsPage({ token, email, onBackToHome, onSignIn, onTo
                     onRefresh={fetchBookings}
                     segments={segmentsById[b.reservationId]}
                     onLoadSegments={loadSegments}
+                    ticket={ticketById[b.reservationId]}
+                    onLoadTicket={loadTicket}
                     onRefundSuccess={onRefundSuccess}
                     isEditing={editingId === b.reservationId}
                     onEditStart={() => setEditingId(b.reservationId)}

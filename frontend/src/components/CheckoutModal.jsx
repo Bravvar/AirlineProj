@@ -101,7 +101,7 @@ export default function CheckoutModal({ show, onHide, fareId, returnFareId, tota
       }
       
       const data = JSON.parse(text);
-      onSuccess(data.confirmationNumber);
+      onSuccess(data.confirmationNumber, data.ticketNumber);
     } catch (error) {
       clearTimeout(timeoutId);
       if (error && error.name === 'AbortError') {

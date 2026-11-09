@@ -84,10 +84,10 @@ export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onT
     setShowCheckoutModal(true);
   };
 
-  const handlePaymentSuccess = (confirmationNumber) => {
+  const handlePaymentSuccess = (confirmationNumber, ticketNumber) => {
     setShowCheckoutModal(false);
     setSelectedDeal(null);
-    setBookingMessage(`Successfully booked! Confirmation #${confirmationNumber} — see it in My Trips.`);
+    setBookingMessage(`Successfully booked! Confirmation #${confirmationNumber}${ticketNumber ? ` — Ticket #${ticketNumber}` : ''} — see it in My Trips.`);
   };
 
   return (
@@ -215,3 +215,4 @@ export default function DealsPage({ onBackToHome, onSignIn, onMyTrips, user, onT
     </div>
   );
 }
+
