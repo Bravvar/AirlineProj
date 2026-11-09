@@ -570,12 +570,17 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
       let rows = Array.isArray(data) ? data : [];
 
+      // Never show a cancelled flight in search. Nobody can book it.
+      // (The backend also filters these out; this is a safety net so a
+      // stale or cached response can never surface one.)
+      rows = rows.filter((f) => (f.flightStatus || f.FlightStatus) !== 'Cancelled');
+
       if (rows.length === 0 && params.has('date')) {
         params.delete('date');
         const retry = await fetch(`${API_URL}/api/flights?${params.toString()}`);
         const retryData = await retry.json();
         if (Array.isArray(retryData) && retryData.length > 0) {
-          rows = retryData;
+          rows = retryData.filter((f) => (f.flightStatus || f.FlightStatus) !== 'Cancelled');
           setFallbackWarning(
             'No flights on the selected date. Showing the next available flights for this route.'
           );
@@ -619,12 +624,15 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
       const data = await res.json();
       let rows = Array.isArray(data) ? data : [];
 
+      // Never show a cancelled flight in search (see outbound search).
+      rows = rows.filter((f) => (f.flightStatus || f.FlightStatus) !== 'Cancelled');
+
       if (rows.length === 0 && params.has('date')) {
         params.delete('date');
         const retry = await fetch(`${API_URL}/api/flights?${params.toString()}`);
         const retryData = await retry.json();
         if (Array.isArray(retryData) && retryData.length > 0) {
-          rows = retryData;
+          rows = retryData.filter((f) => (f.flightStatus || f.FlightStatus) !== 'Cancelled');
         }
       }
 

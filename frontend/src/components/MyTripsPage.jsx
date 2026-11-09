@@ -173,7 +173,7 @@ function BookingCard({
                       Leg {s.segmentNumber} — {s.origin} → {s.destination}
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
-                      Flight {s.flightNumber} · {s.flightStatus} · Departs {String(s.departureDate).slice(0,10)} {s.departureTime}
+                      Flight {s.flightNumber} · {s.segmentStatus === 'Cancelled' ? 'Cancelled' : s.flightStatus} · Departs {String(s.departureDate).slice(0,10)} {s.departureTime}
                     </div>
                     <div className="text-xs text-gray-500 mt-0.5">
                       Arrives {String(s.arrivalDate).slice(0,10)} {s.arrivalTime} · ${s.farePriceAtBooking} · {s.segmentStatus}
@@ -630,6 +630,36 @@ export default function MyTripsPage({
               <p className="text-sm font-semibold text-green-700 bg-green-50 border border-green-200 rounded-2xl px-4 py-3 mb-4">
                 {seatSuccess}
               </p>
+            )}
+
+            {/* Alert: a flight was cancelled. The member must see this
+                without having to tick "Show cancelled & refunded" first. */}
+            {cancelledCount > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-2xl px-5 py-4 mb-6">
+                <p className="font-bold text-red-800 text-sm">
+                  {cancelledCount === 1
+                    ? '1 of your flights was cancelled'
+                    : `${cancelledCount} of your flights were cancelled`}
+                </p>
+                {(bookings || [])
+                  .filter((b) => b.flightCancellation)
+                  .map((b) => (
+                    <p key={b.reservationId} className="text-red-700 text-sm mt-1">
+                      Flight {b.flightCancellation.flightNumber} was cancelled by the airline
+                      {b.flightCancellation.refundedAmount > 0
+                        ? ` — you have been refunded $${Number(b.flightCancellation.refundedAmount).toFixed(2)}.`
+                        : ' — your refund is being processed.'}
+                    </p>
+                  ))}
+                {!showCancelled && (
+                  <button
+                    onClick={() => setShowCancelled(true)}
+                    className="mt-3 text-xs font-bold px-4 py-2 rounded-xl bg-red-600 text-white hover:bg-red-700 transition-colors"
+                  >
+                    View cancelled trips
+                  </button>
+                )}
+              </div>
             )}
 
             {bookings === null ? (

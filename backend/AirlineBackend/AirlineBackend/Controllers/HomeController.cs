@@ -167,6 +167,12 @@ public class HomeController : ControllerBase
     {
         var data = _context.Flight.AsQueryable();
 
+        // Members search to book a flight. A cancelled flight can never
+        // be booked, so it must not appear in search results. Staff
+        // manage flights (including cancelled ones) through the separate
+        // /api/staff/flights and /api/admin/flights endpoints.
+        data = data.Where(i => i.FlightStatus != "Cancelled");
+
         if (!string.IsNullOrEmpty(origin))
         {
             var codes = AirportCodesFor(origin);
