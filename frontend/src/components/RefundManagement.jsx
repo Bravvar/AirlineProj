@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { API_URL } from '../config';
+import CancellationRequestsPanel from './CancellationRequestsPanel.jsx';
 
 const statuses = ['All', 'Pending', 'Approved', 'Rejected', 'Completed'];
 
@@ -186,10 +187,19 @@ export default function RefundManagement({ token }) {
 
   return (
     <section className="space-y-6">
+      {/* Member-submitted Cancel / Refund requests */}
+      <CancellationRequestsPanel
+        token={token}
+        onChanged={() => {
+          loadAudit(auditConfirmation);
+          loadCancelled(cancelledConfirmation);
+        }}
+      />
+
       <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
         <div className="flex flex-wrap justify-between gap-4 items-center">
           <div>
-            <h2 className="text-2xl font-bold">Refund Management</h2>
+            <h2 className="text-2xl font-bold">Flight Cancellation Refunds</h2>
             <p className="text-sm text-gray-500 mt-1">
               Review and process airline cancellation refunds.
               All completed refunds are simulated.

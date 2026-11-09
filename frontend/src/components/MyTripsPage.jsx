@@ -3,66 +3,40 @@ import Logo from './Logo';
 import { API_URL } from '../config';
 import SeatSelectionModal from './SeatSelectionModal';
 import CheckoutModal from './CheckoutModal';
-import CheckoutModal from './CheckoutModal';
+import CancelRefundModal from './CancelRefundModal';
 
 const MEAL_OPTIONS = ['Standard', 'Vegetarian', 'Vegan', 'Kosher', 'Halal', 'Gluten Free'];
 
 function BookingCard({ 
-  booking, token, onRefresh, segments, onLoadSegments, ticket, onLoadTicket, 
-  onRefundSuccess, isEditing, onEditStart, onEditEnd, onChangeSeat, onViewTicket 
+  booking, token, onRefresh, segments, onLoadSegments, ticket, onLoadTicket,
+  onRequestCancel, isEditing, onEditStart, onEditEnd, onChangeSeat, onViewTicket
 }) {
   const [phone, setPhone] = useState('');
   const [mealSelection, setMealSelection] = useState('');
   const [additionalCheckedBags, setAdditionalCheckedBags] = useState('');
 
-  const [loadingCancel, setLoadingCancel] = useState(false);
-  const [confirmCancel, setConfirmCancel] = useState(false);
   const [loadingModify, setLoadingModify] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
   const isCancelled = booking.reservationStatus?.toLowerCase() === 'cancelled';
-  const showModify = isEditing;
+  const request = booking.cancellationRequest;
+  const displayStatus = booking.displayStatus || booking.reservationStatus;
+  const isRefunded = displayStatus === 'Refunded';
+  const isPendingCancel = !isCancelled && request?.requestStatus === 'Pending';
+  const isDeclined = !isCancelled && request?.requestStatus === 'Rejected';
+  const canAct = !isCancelled && !isPendingCancel;
+  const showModify = isEditing && canAct;
 
-  const handleCancel = async () => {
-    if (isCancelled) return;
-    setConfirmCancel(false);
-    setErrorMsg('');
-    setSuccessMsg('');
-    setLoadingCancel(true);
+  const badgeClass = isRefunded
+    ? 'text-green-700 border-green-200 bg-green-50'
+    : isPendingCancel
+      ? 'text-amber-700 border-amber-200 bg-amber-50'
+      : isCancelled
+        ? 'text-red-700 border-red-200 bg-red-50'
+        : 'text-blue-600 border-blue-600 bg-blue-50';
 
-    try {
-      const res = await fetch(`${API_URL}/api/reservations/${booking.reservationId}/cancel`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      const text = await res.text();
-
-      if (!res.ok) {
-        let errMessage = text;
-        try {
-          const parsed = JSON.parse(text);
-          errMessage = parsed.message || parsed.title || text;
-        } catch { /* use raw text */ }
-
-        setErrorMsg(errMessage || 'Could not cancel reservation.');
-        setLoadingCancel(false);
-        return;
-      }
-
-      onRefundSuccess({
-        confirmationNumber: booking.confirmationNumber,
-        totalAmount: booking.totalAmount,
-      });
-
-    } catch (err) {
-      console.error("Cancel error:", err);
-      setErrorMsg('Unable to connect to server. Please check your connection.');
-    } finally {
-      setLoadingCancel(false);
-    }
-  };
+  const shortDate = (value) => (value ? String(value).slice(0, 10) : '');
 
   const handleModifySubmit = async (e) => {
     e.preventDefault();
@@ -132,20 +106,14 @@ function BookingCard({
   };
 
   return (
-    <div className={`bg-white rounded-3xl shadow-[0_4px_20px_rgb(0,0,0,0.05)] border border-gray-200 overflow-hidden flex flex-col hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] transition-shadow duration-300 ${isCancelled ? 'opacity-60' : ''}`}>
+    <div className={`bg-white rounded-3xl shadow-[0_4px_20px_rgb(0,0,0,0.05)] border border-gray-200 overflow-hidden flex flex-col hover:shadow-[0_8px_30px_rgb(0,0,0,0.12)] transition-shadow duration-300 ${isCancelled && !isRefunded ? 'opacity-60' : ''}`}>
       <div className="p-6 border-b border-gray-100 flex justify-between items-center">
         <div>
           <p className="text-sm text-gray-500">Confirmation</p>
           <h3 className="text-xl font-bold text-gray-900">{booking.confirmationNumber}</h3>
         </div>
-        <span
-          className={`text-sm font-semibold px-4 py-1.5 rounded-full border ${
-            isCancelled
-              ? 'text-red-700 border-red-200 bg-red-50'
-              : 'text-blue-600 border-blue-600 bg-blue-50'
-          }`}
-        >
-          {booking.reservationStatus}
+        <span className={`text-sm font-semibold px-4 py-1.5 rounded-full border ${badgeClass}`}>
+          {displayStatus}
         </span>
       </div>
 
@@ -213,8 +181,36 @@ function BookingCard({
           </p>
         )}
 
+        {isPendingCancel && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-sm">
+            <p className="font-semibold text-amber-800">Cancellation request under review</p>
+            <p className="text-amber-700 text-xs mt-1">
+              Submitted {shortDate(request.requestedAt)} · Reason: {request.reason}
+            </p>
+          </div>
+        )}
+        {isRefunded && (
+          <div className="bg-green-50 border border-green-200 rounded-2xl px-4 py-3 text-sm">
+            <p className="font-semibold text-green-800">
+              Refunded ${Number(request?.refundAmount || 0).toFixed(2)}
+              {request?.reviewedAt ? ` on ${shortDate(request.reviewedAt)}` : ''}
+            </p>
+            {request?.adminNotes && (
+              <p className="text-green-700 text-xs mt-1">{request.adminNotes}</p>
+            )}
+          </div>
+        )}
+        {isDeclined && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-sm">
+            <p className="font-semibold text-red-700">Your cancellation request was declined</p>
+            {request.adminNotes && (
+              <p className="text-red-600 text-xs mt-1">Reason: {request.adminNotes}</p>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center gap-3 pt-2 flex-wrap">
-          {!isCancelled && (
+          {canAct && (
             <>
               <button
                 onClick={() => {
@@ -223,7 +219,6 @@ function BookingCard({
                   } else {
                     onEditStart();
                   }
-                  setConfirmCancel(false);
                   setErrorMsg('');
                   setSuccessMsg('');
                 }}
@@ -259,20 +254,19 @@ function BookingCard({
                 Change Seat
               </button>
               <button
-                onClick={() => { if (confirmCancel) { handleCancel(); } else { setConfirmCancel(true); } }}
-                disabled={loadingCancel}
-                className="text-xs font-semibold px-4 py-2 rounded-xl border border-red-300 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                onClick={() => { onEditEnd(); onRequestCancel(booking); }}
+                className="text-xs font-semibold px-4 py-2 rounded-xl border border-red-300 text-red-600 hover:bg-red-50 transition-colors"
               >
-                {loadingCancel ? 'Cancelling...' : confirmCancel ? 'Click again to confirm cancel' : 'Cancel Booking'}
+                Cancel Booking
               </button>
             </>
           )}
-          {isCancelled && (
+          {isCancelled && !isRefunded && (
             <span className="text-xs text-gray-400 font-medium">This reservation is cancelled.</span>
           )}
         </div>
 
-        {showModify && !isCancelled && (
+        {showModify && (
           <form onSubmit={handleModifySubmit} className="mt-3 bg-gray-50 border border-gray-200 rounded-2xl p-4 flex flex-col gap-3">
             <h4 className="text-sm font-bold text-gray-900">Modify Reservation {booking.confirmationNumber}</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -359,7 +353,7 @@ export default function MyTripsPage({
   const [seatError, setSeatError] = useState('');
   const [seatSuccess, setSeatSuccess] = useState('');
   const [pendingSeat, setPendingSeat] = useState(null); // seat waiting on payment
-  const [pendingSeat, setPendingSeat] = useState(null); // seat waiting on payment
+  const [cancelBooking, setCancelBooking] = useState(null); // Cancel / Refund popup
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
@@ -495,23 +489,7 @@ export default function MyTripsPage({
 
   // "Save & Pay" in the seat map: hold the choice and open the payment UI.
   const handleSeatProceed = (seatIds, _total, info = {}) => {
-  // "Save & Pay" in the seat map: hold the choice and open the payment UI.
-  const handleSeatProceed = (seatIds, _total, info = {}) => {
     if (!seatBooking || seatIds.length === 0) return;
-    setPendingSeat({
-      seatId: seatIds[0],
-      seatNumber: info.seatNumber,
-      cabinName: info.cabinName,
-      fee: Number(info.seatFee || 0),
-    });
-  };
-
-  // Called by the payment modal once the card details are valid.
-  const paySeatChange = async () => {
-    if (!seatBooking || !pendingSeat) throw new Error('No seat selected.');
-    let res;
-    try {
-      res = await fetch(`${API_URL}/api/reservations/${seatBooking.reservationId}/seats`, {
     setPendingSeat({
       seatId: seatIds[0],
       seatNumber: info.seatNumber,
@@ -531,7 +509,6 @@ export default function MyTripsPage({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ seatId: pendingSeat.seatId }),
         body: JSON.stringify({ seatId: pendingSeat.seatId }),
       });
     } catch {
@@ -609,7 +586,7 @@ export default function MyTripsPage({
                     onChange={(e) => setShowCancelled(e.target.checked)}
                     className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
                   />
-                  Show cancelled ({cancelledCount})
+                  Show cancelled &amp; refunded ({cancelledCount})
                 </label>
               )}
             </div>
@@ -644,7 +621,7 @@ export default function MyTripsPage({
                     onLoadSegments={loadSegments}
                     ticket={ticketById[b.reservationId]}
                     onLoadTicket={loadTicket}
-                    onRefundSuccess={onRefundSuccess}
+                    onRequestCancel={setCancelBooking}
                     isEditing={editingId === b.reservationId}
                     onEditStart={() => setEditingId(b.reservationId)}
                     onEditEnd={() => setEditingId(null)}
@@ -661,7 +638,6 @@ export default function MyTripsPage({
       {seatBooking && seatFlightId && (
         <SeatSelectionModal
           show={seatModalOpen}
-          onHide={() => { setSeatModalOpen(false); setSeatBooking(null); setPendingSeat(null); }}
           onHide={() => { setSeatModalOpen(false); setSeatBooking(null); setPendingSeat(null); }}
           flightId={seatFlightId}
           farePrice={0}
@@ -682,22 +658,21 @@ export default function MyTripsPage({
         totalPrice={pendingSeat?.fee || 0}
         onPay={paySeatChange}
       />
-          onProceed={handleSeatProceed}
+
+      {cancelBooking && (
+        <CancelRefundModal
+          key={cancelBooking.reservationId}
+          show
+          booking={cancelBooking}
+          token={token}
+          onHide={() => setCancelBooking(null)}
+          onSubmitted={(details) => {
+            setCancelBooking(null);
+            fetchBookings();
+            onRefundSuccess(details);
+          }}
         />
       )}
-
-      <CheckoutModal
-        show={Boolean(pendingSeat)}
-        onHide={() => setPendingSeat(null)}
-        title="Pay Seat Fee"
-        summary={
-          pendingSeat
-            ? `Seat ${pendingSeat.seatNumber}${pendingSeat.cabinName ? ` · ${pendingSeat.cabinName}` : ''}`
-            : ''
-        }
-        totalPrice={pendingSeat?.fee || 0}
-        onPay={paySeatChange}
-      />
     </div>
   );
 }

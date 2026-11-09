@@ -416,7 +416,67 @@ public class HomeController : ControllerBase
             .ToList();
 
         var data = _context.Reservation.Where(i => ids.Contains(i.ReservationId)).ToList();
-        return Ok(data);
+
+        // Latest cancellation request per booking (migration 18).
+        var latest = new Dictionary<int, MemberCancellationRow>();
+        try
+        {
+            var rows = _context.Database.SqlQueryRaw<MemberCancellationRow>(@"
+                SELECT cr.reservation_id AS ReservationId,
+                       cr.request_id     AS RequestId,
+                       cr.request_status AS RequestStatus,
+                       cr.reason         AS Reason,
+                       cr.admin_notes    AS AdminNotes,
+                       cr.refund_amount  AS RefundAmount,
+                       cr.requested_at   AS RequestedAt,
+                       cr.reviewed_at    AS ReviewedAt
+                FROM CancellationRequest cr
+                JOIN ReservationPassenger rp ON rp.reservation_id = cr.reservation_id
+                WHERE rp.passenger_id = {0}
+                ORDER BY cr.request_id DESC", account.PassengerId.Value).ToList();
+
+            foreach (var row in rows)
+                if (!latest.ContainsKey(row.ReservationId)) latest[row.ReservationId] = row;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Cancellation requests unavailable; is migration 18 deployed?");
+        }
+
+        var result = data.Select(r =>
+        {
+            latest.TryGetValue(r.ReservationId, out var req);
+            bool refunded = r.ReservationStatus == "Cancelled" && req?.RequestStatus == "Approved";
+            bool pending = req?.RequestStatus == "Pending";
+
+            return new
+            {
+                r.ReservationId,
+                r.ConfirmationNumber,
+                r.BookingDate,
+                r.BookingTime,
+                r.ReservationStatus,
+                r.HoldExpiration,
+                r.TripType,
+                r.TotalAmount,
+                // "Refunded" / "Cancellation Pending" / the raw status
+                DisplayStatus = refunded ? "Refunded"
+                              : pending ? "Cancellation Pending"
+                              : r.ReservationStatus,
+                CancellationRequest = req == null ? null : new
+                {
+                    req.RequestId,
+                    req.RequestStatus,
+                    req.Reason,
+                    req.AdminNotes,
+                    req.RefundAmount,
+                    req.RequestedAt,
+                    req.ReviewedAt
+                }
+            };
+        }).ToList();
+
+        return Ok(result);
     }
 
     [HttpGet("reservations/{id}/segments")]
@@ -726,6 +786,11 @@ public class HomeController : ControllerBase
         if (link == null) return NotFound("No reservation like that");
 
         if (reservation.ReservationStatus == "Cancelled") return BadRequest("Already cancelled");
+
+        // Members no longer cancel instantly: the cancellation goes to a
+        // Supervisor for review (POST api/reservations/{id}/cancel-request).
+        if (account.Role == "Member")
+            return BadRequest(new { message = "Please submit a cancellation request. A supervisor will review it." });
 
         var segments = _context.ReservationSegment.Where(i => i.ReservationId == id).ToList();
         if (segments.Any(i => i.SegmentStatus == "Flown")) return BadRequest("Cannot cancel a flown booking");
