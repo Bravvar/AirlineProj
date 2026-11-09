@@ -161,20 +161,19 @@ export default function App() {
             setCurrentPage('refund');
           }}
           onViewTicket={(booking, segments) => {
-            // Compile data for the Ticket View
             const activeSeg = segments && segments.length > 0 ? segments[0] : {};
             setPaymentDetails({
               passengerName: auth.email?.split('@')[0] || 'Passenger',
               email: auth.email,
               confirmationNumber: booking.confirmationNumber,
-              ticketNumber: `TKT-${booking.reservationId}`, // fallback mock ticket ID
+              ticketNumber: `TKT-${booking.reservationId}`, 
               totalAmount: booking.totalAmount,
               flightNumber: activeSeg.flightNumber || 'FLT',
               origin: activeSeg.origin || 'ORG',
               destination: activeSeg.destination || 'DST',
               departureTime: activeSeg.departureTime ? String(activeSeg.departureTime).substring(0, 5) : '00:00',
               arrivalTime: activeSeg.arrivalTime ? String(activeSeg.arrivalTime).substring(0, 5) : '00:00',
-              seatNumber: '—', // If you fetch the seat map you can pull this, otherwise fallback
+              seatNumber: '—', 
               gate: 'TBA',
               boardingTime: '07:10',
             });
@@ -186,7 +185,7 @@ export default function App() {
       </>
     );
   }
-
+  
   if (currentPage === 'refund' && refundDetails) {
     return (
       <RefundConfirmationPage
