@@ -19,6 +19,7 @@ export default function SideBar({ show, onHide, auth, onLogout, onNavigate }) {
   const adminIcon = 'M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z';
   const employeeIcon = 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z';
   const passengerIcon = 'M12 19l9 2-9-18-9 18 9-2zm0 0v-8';
+  const profileIcon = 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z';
 
   if (auth.role === 'Supervisor') {
     roleTitle = 'Admin Console';
@@ -40,6 +41,7 @@ export default function SideBar({ show, onHide, auth, onLogout, onNavigate }) {
   } else {
     roleTitle = 'My Account';
     menuItems = [
+      { id: 'profile', label: 'Profile', icon: profileIcon },
       { id: 'dashboard', label: 'Flight Search', icon: homeIcon },
       { id: 'deals', label: 'Deals', icon: dealsIcon },
       { id: 'trips', label: 'My Trips', icon: tripsIcon },
@@ -52,9 +54,13 @@ export default function SideBar({ show, onHide, auth, onLogout, onNavigate }) {
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={onHide}></div>
 
       <div className="relative w-80 bg-[#0f172a] text-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 rounded-l-3xl overflow-hidden">
-        <div className="p-6 flex justify-between items-center border-b border-white/10">
-          <h2 className="text-xl font-bold text-white">{roleTitle}</h2>
-          <button onClick={onHide} className="text-gray-400 hover:text-white text-3xl leading-none cursor-pointer">&times;</button>
+        <div className="relative px-6 pt-8 pb-6 flex flex-col items-center text-center border-b border-white/10 bg-[#0b1120]">
+          <button onClick={onHide} aria-label="Close menu" className="absolute top-4 right-5 text-gray-400 hover:text-white text-3xl leading-none cursor-pointer">&times;</button>
+          <div className="w-20 h-20 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold text-3xl shadow-lg ring-4 ring-white/10">
+            {auth.email?.charAt(0).toUpperCase()}
+          </div>
+          <p className="mt-4 text-base font-semibold text-white truncate max-w-full">{auth.email}</p>
+          <p className="mt-1 text-xs font-medium uppercase tracking-wider text-gray-400">{roleTitle}</p>
         </div>
 
         <div className="flex-1 overflow-y-auto py-4 px-4 flex flex-col gap-2">
@@ -72,16 +78,7 @@ export default function SideBar({ show, onHide, auth, onLogout, onNavigate }) {
           ))}
         </div>
 
-        <div className="p-6 border-t border-white/10 bg-[#0b1120]">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold text-xl shadow-md">
-              {auth.email?.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-white truncate">{auth.email?.split('@')[0]}</p>
-              <p className="text-xs text-gray-400 truncate">{auth.email}</p>
-            </div>
-          </div>
+        <div className="p-4 border-t border-white/10 bg-[#0b1120]">
           <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 text-red-400 font-bold py-2.5 rounded-xl hover:bg-red-500/10 hover:text-red-300 transition-colors cursor-pointer text-sm">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
             Sign Out

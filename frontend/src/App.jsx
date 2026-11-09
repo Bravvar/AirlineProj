@@ -13,6 +13,7 @@ import SideBar from './components/SideBar';
 import MyLoyaltyPage from './components/MyLoyaltyPage';
 import RefundConfirmationPage from './components/RefundConfirmationPage';
 import PaymentConfirmationPage from './components/PaymentConfirmationPage';
+import ProfileModal from './components/ProfileModal';
 
 const BACKGROUNDS = [
   { src: '/landscapes/europe.jpg', name: 'The Alps, Europe' },
@@ -25,6 +26,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('flights');
   const [showSignIn, setShowSignIn] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const [currentPage, setCurrentPage] = useState('home');
   const [bgIndex, setBgIndex] = useState(0);
 
@@ -62,7 +64,10 @@ export default function App() {
   };
 
   const handleNavigate = (pageId) => {
-    if (pageId === 'profile') return;
+    if (pageId === 'profile') {
+      setShowProfile(true);
+      return;
+    }
     if (pageId === 'deals') setCurrentPage('deals');
     if (pageId === 'admin') setCurrentPage('admin');
     if (pageId === 'employee') setCurrentPage('employee');
@@ -103,13 +108,23 @@ export default function App() {
   const modal = showSignIn ? <SignInModal show={showSignIn} onHide={closeSignIn} /> : null;
 
   const sidebar = (
-    <SideBar
-      show={showSidebar}
-      onHide={() => setShowSidebar(false)}
-      auth={auth}
-      onLogout={handleLogout}
-      onNavigate={handleNavigate}
-    />
+    <>
+      <SideBar
+        show={showSidebar}
+        onHide={() => setShowSidebar(false)}
+        auth={auth}
+        onLogout={handleLogout}
+        onNavigate={handleNavigate}
+      />
+      {showProfile && auth.token && (
+        <ProfileModal
+          show
+          onHide={() => setShowProfile(false)}
+          token={auth.token}
+          onAccountDeleted={handleLogout}
+        />
+      )}
+    </>
   );
 
   const handleBooked = (details) => {
