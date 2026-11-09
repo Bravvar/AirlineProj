@@ -14,6 +14,8 @@ export default function CheckoutModal({
   onPay,
   title = 'Secure Checkout',
   summary,
+  // Multi-passenger: how many travelers are flying. One name row per traveler.
+  passengerCount = 1,
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -22,6 +24,27 @@ export default function CheckoutModal({
   const [expiry, setExpiry] = useState('');
   const [cvc, setCvc] = useState('');
   const [name, setName] = useState('');
+
+  // Passenger names, one per traveler. Traveler 1 is the account holder.
+  const isBooking = !onPay && fareId != null;
+  const travelerCount = isBooking ? Math.max(1, Math.min(9, passengerCount || 1)) : 1;
+  const defaultFirst = (sessionStorage.getItem('email') || '').split('@')[0].split('.')[0] || '';
+  const defaultLast = (sessionStorage.getItem('email') || '').split('@')[0].split('.')[1] || '';
+  const [passengers, setPassengers] = useState(() =>
+    Array.from({ length: travelerCount }, (_, i) => ({
+      firstName: i === 0 ? defaultFirst : '',
+      lastName: i === 0 ? defaultLast : '',
+    }))
+  );
+  useEffect(() => {
+    setPassengers((prev) => {
+      if (prev.length === travelerCount) return prev;
+      return Array.from({ length: travelerCount }, (_, i) => prev[i] || { firstName: i === 0 ? defaultFirst : '', lastName: i === 0 ? defaultLast : '' });
+    });
+  }, [travelerCount]);
+  const setPassenger = (i, field, value) => {
+    setPassengers((prev) => prev.map((p, idx) => (idx === i ? { ...p, [field]: value } : p)));
+  };
 
   useEffect(() => {
     if (!show) return;
@@ -85,6 +108,15 @@ export default function CheckoutModal({
       return;
     }
 
+    if (isBooking) {
+      const missing = passengers.some((p) => !p.firstName.trim() || !p.lastName.trim());
+      if (missing) {
+        setError('Please enter a first and last name for every traveler.');
+        setLoading(false);
+        return;
+      }
+    }
+
     const token = sessionStorage.getItem('token');
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
@@ -94,6 +126,9 @@ export default function CheckoutModal({
       const body = {
         flightFareId: fareId,
         seats: Array.isArray(seatIds) ? seatIds.filter((n) => Number.isInteger(n) && n > 0) : [],
+        passengers: isBooking
+          ? passengers.map((p) => ({ firstName: p.firstName.trim(), lastName: p.lastName.trim() }))
+          : undefined,
       };
       if (returnFareId) {
         body.returnFareId = returnFareId;
@@ -128,7 +163,7 @@ export default function CheckoutModal({
       }
 
       const data = JSON.parse(text);
-      onSuccess(data.confirmationNumber, data.ticketNumber);
+      onSuccess(data.confirmationNumber, data.ticketNumber, data.ticketNumbers || (data.ticketNumber ? [data.ticketNumber] : []), data.passengerCount || 1, data.tickets || null);
     } catch (error) {
       clearTimeout(timeoutId);
       if (error && error.name === 'AbortError') {
@@ -172,6 +207,36 @@ export default function CheckoutModal({
         )}
 
         <form onSubmit={handlePayment} className="flex flex-col gap-4">
+          {isBooking && (
+            <div>
+              <label className="text-xs font-semibold text-gray-600 mb-1 block">
+                Passengers ({travelerCount} {travelerCount === 1 ? 'traveler' : 'travelers'})
+              </label>
+              <div className="flex flex-col gap-2">
+                {passengers.map((p, i) => (
+                  <div key={i} className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      required
+                      placeholder={i === 0 ? 'First name (you)' : `Traveler ${i + 1} first name`}
+                      value={p.firstName}
+                      onChange={(e) => setPassenger(i, 'firstName', e.target.value.replace(/[^a-zA-Z\s'-]/g, ''))}
+                      className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl px-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    />
+                    <input
+                      type="text"
+                      required
+                      placeholder={i === 0 ? 'Last name (you)' : `Traveler ${i + 1} last name`}
+                      value={p.lastName}
+                      onChange={(e) => setPassenger(i, 'lastName', e.target.value.replace(/[^a-zA-Z\s'-]/g, ''))}
+                      className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl px-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                    />
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1">Each traveler gets their own ticket.</p>
+            </div>
+          )}
           <div>
             <label className="text-xs font-semibold text-gray-600 mb-1 block">Cardholder Name</label>
             <input

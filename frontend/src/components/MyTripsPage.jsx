@@ -3,7 +3,10 @@ import Logo from './Logo';
 import { API_URL } from '../config';
 import SeatSelectionModal from './SeatSelectionModal';
 import CheckoutModal from './CheckoutModal';
+<<<<<<< HEAD
 import CancelRefundModal from './CancelRefundModal';
+=======
+>>>>>>> 89436a995fdf0d3c5e95aab1f31887cd2c5e30f4
 
 const MEAL_OPTIONS = ['Standard', 'Vegetarian', 'Vegan', 'Kosher', 'Halal', 'Gluten Free'];
 
@@ -135,7 +138,21 @@ function BookingCard({
           </div>
           {ticket && (
             <div className="mt-2 text-sm text-gray-700 bg-blue-50 rounded-2xl p-4">
-              {ticket.ticketNumber ? (
+              {Array.isArray(ticket.tickets) && ticket.tickets.length > 0 ? (
+                <>
+                  <div className="font-bold text-gray-900 mb-1">Tickets ({ticket.tickets.length})</div>
+                  {ticket.tickets.map((t) => (
+                    <div key={t.ticketNumber} className="py-1 border-t border-blue-100 first:border-t-0">
+                      <div className="font-semibold text-gray-900">
+                        {[t.passengerFirstName, t.passengerLastName].filter(Boolean).join(' ') || 'Passenger'} — Ticket {t.ticketNumber}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        Status {t.ticketStatus} · Fare ${t.fareAmount} · Tax ${t.taxAmount} · Total ${t.totalFarePaid}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              ) : ticket.ticketNumber ? (
                 <>
                   <div className="font-bold text-gray-900">Ticket {ticket.ticketNumber}</div>
                   <div className="text-xs text-gray-500 mt-1">
@@ -353,7 +370,10 @@ export default function MyTripsPage({
   const [seatError, setSeatError] = useState('');
   const [seatSuccess, setSeatSuccess] = useState('');
   const [pendingSeat, setPendingSeat] = useState(null); // seat waiting on payment
+<<<<<<< HEAD
   const [cancelBooking, setCancelBooking] = useState(null); // Cancel / Refund popup
+=======
+>>>>>>> 89436a995fdf0d3c5e95aab1f31887cd2c5e30f4
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
@@ -658,6 +678,7 @@ export default function MyTripsPage({
         totalPrice={pendingSeat?.fee || 0}
         onPay={paySeatChange}
       />
+<<<<<<< HEAD
 
       {cancelBooking && (
         <CancelRefundModal
@@ -673,6 +694,8 @@ export default function MyTripsPage({
           }}
         />
       )}
+=======
+>>>>>>> 89436a995fdf0d3c5e95aab1f31887cd2c5e30f4
     </div>
   );
 }
