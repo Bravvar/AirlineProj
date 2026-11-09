@@ -15,10 +15,13 @@ public class HomeController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly IConfiguration _config;
 
-    public HomeController(ApplicationDbContext context, IConfiguration config)
+    private readonly ILogger<HomeController> _logger;
+
+    public HomeController(ApplicationDbContext context, IConfiguration config, ILogger<HomeController> logger)
     {
         _context = context;
         _config = config;
+        _logger = logger;
     }
 
     private string GenerateJSONWebToken(UserAccount userInfo)
@@ -46,18 +49,35 @@ public class HomeController : ControllerBase
     [HttpPost("auth/login")]
     public IActionResult Login([FromBody] Payload log)
     {
-        if (log == null || string.IsNullOrEmpty(log.email)) return BadRequest("Invalid request");
-
-        var data = _context.UserAccount.FirstOrDefault(i => i.Email == log.email);
-        if (data == null) return Unauthorized("Credentials are incorrect");
-
-        if (!BCrypt.Net.BCrypt.Verify(log.password, data.PasswordHash))
+        if (log == null || string.IsNullOrWhiteSpace(log.email) || string.IsNullOrWhiteSpace(log.password))
         {
-            return Unauthorized("Credentials are incorrect");
+            return BadRequest("Invalid request");
         }
 
-        var tokenString = GenerateJSONWebToken(data);
-        return Ok(new { token = tokenString, role = data.Role, email = data.Email });
+        try
+        {
+
+            var email = log.email.Trim().ToLowerInvariant();
+            var data = _context.UserAccount.FirstOrDefault(i => i.Email == log.email);
+            if (data == null) return Unauthorized("Credentials are incorrect");
+
+            if (data == null || !BCrypt.Net.BCrypt.Verify(log.password, data.PasswordHash))
+            {
+                return Unauthorized("Credentials are incorrect");
+            }
+
+            var tokenString = GenerateJSONWebToken(data);
+            return Ok(new { token = tokenString, role = data.Role, email = data.Email });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred during login.");
+
+            return StatusCode(500, new
+            {
+                message = "An unexpected error occurred. Please try again later."
+            });
+        }
     }
 
     [AllowAnonymous]
@@ -1157,6 +1177,12 @@ public class HomeController : ControllerBase
         if (add.price < 0 || add.allocatedCapacity <= 0 || add.allocatedCapacity > 36) return BadRequest("Capacity must be between 1 and 36");
         if (_context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM CabinClass WHERE cabin_class_id = {0}", add.cabinClassId).FirstOrDefault() == 0) return BadRequest("Unknown cabin class");
         if (_context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM FareClass WHERE fare_class_id = {0}", add.fareClassId).FirstOrDefault() == 0) return BadRequest("Unknown fare class");
+        // Fare class must belong to the cabin: Economy -> 1,2,3; Premium Economy -> 7,8,9; Business -> 4,5,6.
+        var allowedFareClasses = add.cabinClassId switch { 1 => new[] { 1, 2, 3 }, 2 => new[] { 7, 8, 9 }, 3 => new[] { 4, 5, 6 }, _ => Array.Empty<int>() };
+        if (!allowedFareClasses.Contains(add.fareClassId)) return BadRequest("That fare class does not belong to this cabin");
+        // Price cap per cabin: Economy $300, Premium Economy $500, Business $1000.
+        var maxPrice = add.cabinClassId switch { 1 => 300m, 2 => 500m, 3 => 1000m, _ => 300m };
+        if (add.price > maxPrice) return BadRequest($"Price cannot exceed ${maxPrice} for this cabin");
 
         var fare = new FlightFare
         {

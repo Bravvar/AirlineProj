@@ -20,7 +20,24 @@ const FARE_CLASS_OPTIONS = [
   { id: 4, label: '4 — Business Basic' },
   { id: 5, label: '5 — Business Standard' },
   { id: 6, label: '6 — Business Flexible' },
+  { id: 7, label: '7 — Premium Economy Basic' },
+  { id: 8, label: '8 — Premium Economy Standard' },
+  { id: 9, label: '9 — Premium Economy Flexible' },
 ];
+
+// Which fare classes belong to each cabin, and the max price for that cabin.
+// Economy only gets the Economy fare classes, Premium only the Premium ones,
+// Business only the Business ones — the other fare classes are hidden.
+const CABIN_FARE_CLASSES = {
+  1: [1, 2, 3],
+  2: [7, 8, 9],
+  3: [4, 5, 6],
+};
+const CABIN_MAX_PRICE = {
+  1: 300,
+  2: 500,
+  3: 1000,
+};
 
 export default function StaffFlightManagement({ token, onFlightUpdated }) {
   const [airports, setAirports] = useState([]);
@@ -177,6 +194,11 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
     const priceNum = parseFloat(farePrice);
     if (isNaN(priceNum) || priceNum <= 0) {
       setFareError('Price must be a positive number.');
+      return;
+    }
+    const maxPrice = CABIN_MAX_PRICE[parseInt(cabinClassId, 10)] || 300;
+    if (priceNum > maxPrice) {
+      setFareError(`Price cannot exceed $${maxPrice} for this cabin.`);
       return;
     }
     const capNum = parseInt(allocatedCapacity, 10);
@@ -426,7 +448,12 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
                 <label className="text-xs font-semibold text-gray-600 mb-1 block">Cabin Class</label>
                 <select
                   value={cabinClassId}
-                  onChange={(e) => setCabinClassId(e.target.value)}
+                  onChange={(e) => {
+                    const cid = e.target.value;
+                    setCabinClassId(cid);
+                    const allowed = CABIN_FARE_CLASSES[parseInt(cid, 10)] || [];
+                    if (allowed.length > 0) setFareClassId(String(allowed[0]));
+                  }}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 outline-none focus:border-blue-500 cursor-pointer"
                 >
                   {CABIN_OPTIONS.map((c) => (
@@ -442,7 +469,7 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
                   onChange={(e) => setFareClassId(e.target.value)}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 outline-none focus:border-blue-500 cursor-pointer"
                 >
-                  {FARE_CLASS_OPTIONS.map((fc) => (
+                  {FARE_CLASS_OPTIONS.filter((fc) => (CABIN_FARE_CLASSES[parseInt(cabinClassId, 10)] || []).includes(fc.id)).map((fc) => (
                     <option key={fc.id} value={fc.id}>{fc.label}</option>
                   ))}
                 </select>
@@ -454,11 +481,13 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
                   type="number"
                   step="0.01"
                   min="0.01"
+                  max={CABIN_MAX_PRICE[parseInt(cabinClassId, 10)] || 300}
                   placeholder="150.00"
                   value={farePrice}
                   onChange={(e) => setFarePrice(e.target.value)}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 outline-none focus:border-blue-500 font-mono"
                 />
+                <p className="text-[11px] text-gray-400 mt-1">Max price for this cabin: ${CABIN_MAX_PRICE[parseInt(cabinClassId, 10)] || 300}.</p>
               </div>
 
               <div>

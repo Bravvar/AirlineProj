@@ -191,7 +191,7 @@ export default function App() {
               destination: activeSeg.destination || 'DST',
               departureTime: activeSeg.departureTime ? String(activeSeg.departureTime).substring(0, 5) : '00:00',
               arrivalTime: activeSeg.arrivalTime ? String(activeSeg.arrivalTime).substring(0, 5) : '00:00',
-              seatNumber: '—', 
+              seatNumber: activeSeg.seatNumber || '—', 
               gate: 'TBA',
               boardingTime: '07:10',
             });

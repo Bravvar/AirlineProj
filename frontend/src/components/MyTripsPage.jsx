@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Logo from './Logo';
 import { API_URL } from '../config';
 import SeatSelectionModal from './SeatSelectionModal';
+import CheckoutModal from './CheckoutModal';
 
 const MEAL_OPTIONS = ['Standard', 'Vegetarian', 'Vegan', 'Kosher', 'Halal', 'Gluten Free'];
 
@@ -231,7 +232,20 @@ function BookingCard({
               </button>
 
               <button
-                onClick={() => onViewTicket(booking, segments)}
+                onClick={async () => {
+                  let segs = segments;
+                  if (!segs) {
+                    try {
+                      const res = await fetch(`${API_URL}/api/reservations/${booking.reservationId}/segments`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                      });
+                      const data = await res.json();
+                      segs = Array.isArray(data) ? data : [];
+                      onLoadSegments(booking.reservationId);
+                    } catch { segs = []; }
+                  }
+                  onViewTicket(booking, segs);
+                }}
                 className="text-xs font-semibold px-4 py-2 rounded-xl border border-green-300 text-green-700 hover:bg-green-50 transition-colors"
               >
                 View Confirmation
@@ -343,6 +357,7 @@ export default function MyTripsPage({
   const [seatModalOpen, setSeatModalOpen] = useState(false);
   const [seatError, setSeatError] = useState('');
   const [seatSuccess, setSeatSuccess] = useState('');
+  const [pendingSeat, setPendingSeat] = useState(null); // seat waiting on payment
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
@@ -406,6 +421,18 @@ export default function MyTripsPage({
     return () => { ignore = true; };
   }, [token]);
 
+  const refreshSegments = async (id) => {
+    try {
+      const res = await fetch(`${API_URL}/api/reservations/${id}/segments`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const text = await res.text();
+      if (!res.ok) return;
+      const data = JSON.parse(text);
+      setSegmentsById((prev) => ({ ...prev, [id]: Array.isArray(data) ? data : [] }));
+    } catch { /* keep the old segments on failure */ }
+  };
+
   const loadSegments = async (id) => {
     if (segmentsById[id]) return;
     try {
@@ -464,33 +491,49 @@ export default function MyTripsPage({
     }
   };
 
-  const handleSeatProceed = async (seatIds) => {
+  // "Save & Pay" in the seat map: hold the choice and open the payment UI.
+  const handleSeatProceed = (seatIds, _total, info = {}) => {
     if (!seatBooking || seatIds.length === 0) return;
-    const seatId = seatIds[0];
+    setPendingSeat({
+      seatId: seatIds[0],
+      seatNumber: info.seatNumber,
+      cabinName: info.cabinName,
+      fee: Number(info.seatFee || 0),
+    });
+  };
+
+  // Called by the payment modal once the card details are valid.
+  const paySeatChange = async () => {
+    if (!seatBooking || !pendingSeat) throw new Error('No seat selected.');
+    let res;
     try {
-      const res = await fetch(`${API_URL}/api/reservations/${seatBooking.reservationId}/seats`, {
+      res = await fetch(`${API_URL}/api/reservations/${seatBooking.reservationId}/seats`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ seatId }),
+        body: JSON.stringify({ seatId: pendingSeat.seatId }),
       });
-      const text = await res.text();
-      if (!res.ok) {
-        let msg = text || 'Could not save seat.';
-        try { const p = JSON.parse(text); msg = p.message || msg; } catch { /* raw */ }
-        setSeatError(msg);
-        return;
-      }
-      const data = JSON.parse(text);
-      setSeatModalOpen(false);
-      setSeatBooking(null);
-      setSeatSuccess(`Seat ${data.seatNumber} saved. Booking total now $${data.totalAmount}.`);
-      fetchBookings();
     } catch {
-      setSeatError('Unable to connect to server.');
+      throw new Error('Unable to connect to server.');
     }
+    const text = await res.text();
+    if (!res.ok) {
+      let msg = text || 'Could not save seat.';
+      try { const p = JSON.parse(text); msg = p.message || msg; } catch { /* raw */ }
+      throw new Error(msg);
+    }
+    const data = JSON.parse(text);
+    setPendingSeat(null);
+    setSeatModalOpen(false);
+    setSeatBooking(null);
+    setSeatError('');
+    setSeatSuccess(
+      `Seat ${data.seatNumber} saved. Paid $${Number(data.seatFee).toFixed(2)} — booking total now $${Number(data.totalAmount).toFixed(2)}.`
+    );
+    fetchBookings();
+    refreshSegments(seatBooking.reservationId);
   };
 
   const activeBookings = (bookings || []).filter((b) => showCancelled || b.reservationStatus?.toLowerCase() !== 'cancelled');
@@ -599,13 +642,26 @@ export default function MyTripsPage({
       {seatBooking && seatFlightId && (
         <SeatSelectionModal
           show={seatModalOpen}
-          onHide={() => { setSeatModalOpen(false); setSeatBooking(null); }}
+          onHide={() => { setSeatModalOpen(false); setSeatBooking(null); setPendingSeat(null); }}
           flightId={seatFlightId}
           farePrice={0}
           mode="change"
-          onProceed={(seatIds) => handleSeatProceed(seatIds)}
+          onProceed={handleSeatProceed}
         />
       )}
+
+      <CheckoutModal
+        show={Boolean(pendingSeat)}
+        onHide={() => setPendingSeat(null)}
+        title="Pay Seat Fee"
+        summary={
+          pendingSeat
+            ? `Seat ${pendingSeat.seatNumber}${pendingSeat.cabinName ? ` · ${pendingSeat.cabinName}` : ''}`
+            : ''
+        }
+        totalPrice={pendingSeat?.fee || 0}
+        onPay={paySeatChange}
+      />
     </div>
   );
 }
