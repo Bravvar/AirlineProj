@@ -32,6 +32,18 @@ public class ApplicationDbContext : DbContext
 
         // Explicitly map table names to match your SQL schema
         modelBuilder.Entity<Passenger>().ToTable("Passenger");
+        modelBuilder.Entity<Passenger>(entity =>
+{
+    entity.HasKey(p => p.PassengerId);
+
+    entity.Property(p => p.PassengerId).HasColumnName("passenger_id");
+    entity.Property(p => p.FirstName).HasColumnName("first_name");
+    entity.Property(p => p.LastName).HasColumnName("last_name");
+    entity.Property(p => p.DateOfBirth).HasColumnName("date_of_birth");
+    entity.Property(p => p.Email).HasColumnName("email");
+    entity.Property(p => p.Phone).HasColumnName("phone");
+    entity.Property(p => p.Address).HasColumnName("address");
+});
         modelBuilder.Entity<Employee>().ToTable("Employee");
         modelBuilder.Entity<Airport>().ToTable("Airport");
         modelBuilder.Entity<Aircraft>().ToTable("Aircraft");
