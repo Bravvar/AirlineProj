@@ -27,7 +27,7 @@ export default function App() {
   const [showSidebar, setShowSidebar] = useState(false);
   const [currentPage, setCurrentPage] = useState('home');
   const [bgIndex, setBgIndex] = useState(0);
-  
+
   const [refundDetails, setRefundDetails] = useState(null);
   const [paymentDetails, setPaymentDetails] = useState(null);
 
@@ -104,19 +104,31 @@ export default function App() {
   const modal = showSignIn ? <SignInModal show={showSignIn} onHide={closeSignIn} /> : null;
 
   const sidebar = (
-    <SideBar 
-      show={showSidebar} 
-      onHide={() => setShowSidebar(false)} 
-      auth={auth} 
-      onLogout={handleLogout} 
-      onNavigate={handleNavigate} 
+    <SideBar
+      show={showSidebar}
+      onHide={() => setShowSidebar(false)}
+      auth={auth}
+      onLogout={handleLogout}
+      onNavigate={handleNavigate}
     />
   );
+
+  // Shared booking-success handler: routes to the full confirmation page.
+  const handleBooked = (details) => {
+    setPaymentDetails(details);
+    setCurrentPage('payment-success');
+  };
 
   if (currentPage === 'admin' && auth.role === 'Supervisor') {
     return (
       <>
-        <AdminPage token={auth.token} email={auth.email} onBackToHome={goHome} onSignOut={handleLogout} onToggleSidebar={() => setShowSidebar(true)} />
+        <AdminPage
+          token={auth.token}
+          email={auth.email}
+          onBackToHome={goHome}
+          onSignOut={handleLogout}
+          onToggleSidebar={() => setShowSidebar(true)}
+        />
         {modal}
         {sidebar}
       </>
@@ -126,7 +138,13 @@ export default function App() {
   if (currentPage === 'employee' && (auth.role === 'Employee' || auth.role === 'Supervisor')) {
     return (
       <>
-        <EmployeePage token={auth.token} email={auth.email} onBackToHome={goHome} onSignOut={handleLogout} onToggleSidebar={() => setShowSidebar(true)} />
+        <EmployeePage
+          token={auth.token}
+          email={auth.email}
+          onBackToHome={goHome}
+          onSignOut={handleLogout}
+          onToggleSidebar={() => setShowSidebar(true)}
+        />
         {modal}
         {sidebar}
       </>
@@ -250,6 +268,7 @@ export default function App() {
           onSignOut={handleLogout}
           onToggleSidebar={() => setShowSidebar(true)}
           auth={auth}
+          onBooked={handleBooked}
         />
         {modal}
         {sidebar}
@@ -261,7 +280,6 @@ export default function App() {
   return (
     <div className="min-h-screen bg-white font-sans p-4">
       <div className="relative min-h-[calc(100vh-2rem)] pb-12 flex flex-col">
-        
         {/* Background Layer */}
         <div className="absolute inset-0 rounded-[2.5rem] overflow-hidden shadow-2xl pointer-events-none z-0">
           <div
@@ -279,11 +297,32 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-6">
-            <button onClick={() => document.getElementById('flight-search')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} title="Search flights" className="text-white hover:text-gray-200 transition-colors flex items-center gap-2 text-sm font-semibold cursor-pointer">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <button
+              onClick={() =>
+                document
+                  .getElementById('flight-search')
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }
+              title="Search flights"
+              className="text-white hover:text-gray-200 transition-colors flex items-center gap-2 text-sm font-semibold cursor-pointer"
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
             </button>
-            
-            <button onClick={() => setCurrentPage('trips')} className="text-white hover:text-gray-200 transition-colors flex items-center gap-2 text-sm font-semibold">
+
+            <button
+              onClick={() => setCurrentPage('trips')}
+              className="text-white hover:text-gray-200 transition-colors flex items-center gap-2 text-sm font-semibold"
+            >
               My Trips
             </button>
 
@@ -295,8 +334,8 @@ export default function App() {
                 {auth.email?.charAt(0).toUpperCase()}
               </button>
             ) : (
-              <button 
-                onClick={() => setShowSignIn(true)} 
+              <button
+                onClick={() => setShowSignIn(true)}
                 className="bg-white text-[#0066ff] font-semibold px-6 py-2 rounded-full text-sm hover:bg-gray-100 transition-all ml-2"
               >
                 Sign In
@@ -305,20 +344,24 @@ export default function App() {
           </div>
         </header>
 
-        <div id="flight-search" className="relative z-30 flex-grow flex flex-col justify-start items-center px-4 w-full mt-4">
+        <div
+          id="flight-search"
+          className="relative z-30 flex-grow flex flex-col justify-start items-center px-4 w-full mt-4"
+        >
           <HeroSearch
             activeTab={activeTab}
             setActiveTab={handleTabChange}
             onSignIn={() => setShowSignIn(true)}
-            onBooked={(details) => {
-              setPaymentDetails(details);
-              setCurrentPage('payment-success');
-            }}
+            onBooked={handleBooked}
           />
         </div>
       </div>
 
-      <DealsSection onSeeAll={() => setCurrentPage('deals')} onSignIn={() => setShowSignIn(true)} />
+      <DealsSection
+        onSeeAll={() => setCurrentPage('deals')}
+        onSignIn={() => setShowSignIn(true)}
+        onBooked={handleBooked}
+      />
 
       {modal}
       {sidebar}
