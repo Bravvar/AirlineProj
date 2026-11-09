@@ -465,7 +465,18 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         const seats = seatResults[index];
         if (Array.isArray(seats) && seats.length > 0) {
           const free = seats.filter((s) => !Number(s.occupied ?? s.Occupied ?? 0)).length;
-          next[flight.flightId] = { free, total: seats.length };
+          // Free seats per cabin: fare buckets in the same cabin share the same physical
+          // seats, so each fare card shows its cabin's real free count, not its own
+          // inventory counter (which would let two fares in one cabin each claim 36).
+          const freeByCabin = {};
+          seats.forEach((s) => {
+            const cabinId = s.cabinClassId ?? s.CabinClassId;
+            if (cabinId == null) return;
+            if (!Number(s.occupied ?? s.Occupied ?? 0)) {
+              freeByCabin[cabinId] = (freeByCabin[cabinId] || 0) + 1;
+            }
+          });
+          next[flight.flightId] = { free, total: seats.length, freeByCabin };
         }
       });
       return next;
@@ -1277,7 +1288,12 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                                   {fareDescriptor(fare)}
                                 </span>
                                 <span className="text-[10px] text-gray-400 mt-0.5">
-                                  {fare.availableInventory} seat{fare.availableInventory === 1 ? '' : 's'} left
+                                  {(() => {
+                                    // Show the cabin's real free seats, not the fare's own counter.
+                                    const cabinFree = seatCounts?.freeByCabin?.[fare.cabinClassId];
+                                    const n = cabinFree ?? fare.availableInventory;
+                                    return `${n} seat${n === 1 ? '' : 's'} left`;
+                                  })()}
                                 </span>
                                 {isStaff && (
                                   <span className="text-[10px] text-gray-400 mt-0.5">
