@@ -43,6 +43,7 @@ export default function SideBar({ show, onHide, auth, onLogout, onNavigate }) {
       { id: 'dashboard', label: 'Flight Search', icon: homeIcon },
       { id: 'deals', label: 'Deals', icon: dealsIcon },
       { id: 'trips', label: 'My Trips', icon: tripsIcon },
+      { id: 'loyalty', label: 'My Loyalty', icon: reportsIcon },
     ];
   }
 

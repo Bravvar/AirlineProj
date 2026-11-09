@@ -333,6 +333,54 @@ public class HomeController : ControllerBase
         return Ok(deals);
     }
 
+    
+    [HttpGet("loyalty/mine")]
+    public IActionResult MyLoyalty()
+    {
+        var userIdText = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (!int.TryParse(userIdText, out int userId))
+            return Unauthorized();
+
+        var account = _context.UserAccount
+            .FirstOrDefault(u => u.UserAccountId == userId);
+
+        if (account == null)
+            return Unauthorized();
+
+        if (account.Role != "Member" || account.PassengerId == null)
+            return Forbid();
+
+        var loyalty = _context.Database
+            .SqlQueryRaw<LoyaltyBalanceRow>(@"
+                SELECT
+                    membership_number AS MembershipNumber,
+                    membership_status AS MembershipStatus,
+                    points_balance AS PointsBalance
+                FROM MembershipAccount
+                WHERE passenger_id = {0}",
+                account.PassengerId.Value)
+            .FirstOrDefault();
+
+        if (loyalty == null)
+        {
+            return Ok(new
+            {
+                enrolled = false,
+                pointsBalance = 0
+            });
+        }
+
+        return Ok(new
+        {
+            enrolled = true,
+            membershipNumber = loyalty.MembershipNumber,
+            membershipStatus = loyalty.MembershipStatus,
+            pointsBalance = loyalty.PointsBalance
+        });
+    }
+
+
     [HttpGet("reservations/mine")]
     public IActionResult MyReservations()
     {
@@ -1261,3 +1309,10 @@ public class SeatMapRow { public int SeatId { get; set; } public string SeatNumb
 public class AdminUserRow { public int UserAccountId { get; set; } public string Email { get; set; } public string Role { get; set; } public int? EmployeeId { get; set; } public int? PassengerId { get; set; } }
 public class AdminFlightRow { public int FlightId { get; set; } public string FlightNumber { get; set; } public string OriginAirportCode { get; set; } public string DestinationAirportCode { get; set; } public string FlightStatus { get; set; } }
 public class AdminFareRow { public int FlightId { get; set; } public int FlightFareId { get; set; } public int FareClassId { get; set; } public decimal CurrentPrice { get; set; } public int AvailableInventory { get; set; } }
+
+public class LoyaltyBalanceRow
+{
+    public string MembershipNumber { get; set; } = "";
+    public string MembershipStatus { get; set; } = "";
+    public int PointsBalance { get; set; }
+}

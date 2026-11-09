@@ -9,6 +9,7 @@ import ReportsPage from './components/ReportsPage';
 import AdminPage from './components/AdminPage';
 import EmployeePage from './components/EmployeePage';
 import SideBar from './components/SideBar';
+import MyLoyaltyPage from './components/MyLoyaltyPage';
 import RefundConfirmationPage from './components/RefundConfirmationPage';
 import PaymentConfirmationPage from './components/PaymentConfirmationPage';
 
@@ -66,6 +67,7 @@ export default function App() {
     if (pageId === 'employee') setCurrentPage('employee');
     if (pageId === 'reports') setCurrentPage('reports');
     if (pageId === 'trips') setCurrentPage('trips');
+    if (pageId === 'loyalty') setCurrentPage('loyalty');
     if (pageId === 'dashboard' || pageId === 'flights') {
       setCurrentPage('home');
       setActiveTab('flights');
@@ -145,6 +147,22 @@ export default function App() {
       </>
     );
   }
+
+  
+  if (currentPage === 'loyalty') {
+    return (
+      <>
+        <MyLoyaltyPage
+          token={auth.token}
+          onBackToHome={goHome}
+          onSignIn={() => setShowSignIn(true)}
+        />
+        {modal}
+        {sidebar}
+      </>
+    );
+  }
+
 
   if (currentPage === 'trips') {
     return (
