@@ -673,33 +673,60 @@ public class HomeController : ControllerBase
 
     [HttpGet("reports")]
     public IActionResult Reports(
-        string? origin, string? destination, DateTime? startDate, DateTime? endDate, int? minTickets,
-        string? flightStatus, decimal? minRevenue, decimal? maxRevenue,
-        string? tier, string? membershipStatus, int? minPoints,
-        string? transactionType, string? paymentStatus, decimal? minAmount, decimal? maxAmount, string? employeeRole,
-        string? cabinName, decimal? minPctFull, decimal? maxPctFull,
-        string? airport)
+        string? report1_origin, string? report1_destination, DateTime? report1_startDate, DateTime? report1_endDate,
+        string? report1_flightStatus, int? report1_minTickets, decimal? report1_minRevenue, decimal? report1_maxRevenue,
+        string? report2_tier, string? report2_membershipStatus, int? report2_minPoints,
+        string? report3_transactionType, string? report3_paymentStatus, decimal? report3_minAmount, decimal? report3_maxAmount,
+        DateTime? report3_startDate, DateTime? report3_endDate, string? report3_employeeRole,
+        string? report4_origin, string? report4_destination, DateTime? report4_startDate, DateTime? report4_endDate,
+        string? report4_flightStatus, string? report4_cabinName, decimal? report4_minPctFull, decimal? report4_maxPctFull,
+        string? report7_airport, DateTime? report7_startDate, DateTime? report7_endDate, decimal? report7_minRevenue, int? report7_minTickets)
     {
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (role != "Employee" && role != "Supervisor") return StatusCode(403, "Reports are for staff only");
         var inv = System.Globalization.CultureInfo.InvariantCulture;
 
-        // ---- shared flight filters (report1, report4) ----
-        var fWhere = new List<string>();
-        var fArgs = new List<object>();
-        int fi = 0;
-        if (!string.IsNullOrEmpty(origin)) { fWhere.Add($"f.origin_airport_code = {{{fi}}}"); fArgs.Add(origin); fi++; }
-        if (!string.IsNullOrEmpty(destination)) { fWhere.Add($"f.destination_airport_code = {{{fi}}}"); fArgs.Add(destination); fi++; }
-        if (startDate.HasValue) { fWhere.Add($"f.departure_date >= {{{fi}}}"); fArgs.Add(startDate.Value); fi++; }
-        if (endDate.HasValue) { fWhere.Add($"f.departure_date <= {{{fi}}}"); fArgs.Add(endDate.Value); fi++; }
-        if (!string.IsNullOrEmpty(flightStatus)) { fWhere.Add($"f.flight_status = {{{fi}}}"); fArgs.Add(flightStatus); fi++; }
-        string fWhereSql = fWhere.Count > 0 ? " WHERE " + string.Join(" AND ", fWhere) : "";
+        // ---- basic filter validation: bad input gets a 400, nothing runs ----
+        if (report1_startDate.HasValue && report1_endDate.HasValue && report1_startDate.Value.Date > report1_endDate.Value.Date)
+            return BadRequest("Revenue by Flight: From date must be on or before To date.");
+        if (report3_startDate.HasValue && report3_endDate.HasValue && report3_startDate.Value.Date > report3_endDate.Value.Date)
+            return BadRequest("Payment / refund audit: From date must be on or before To date.");
+        if (report4_startDate.HasValue && report4_endDate.HasValue && report4_startDate.Value.Date > report4_endDate.Value.Date)
+            return BadRequest("Flight load factor: From date must be on or before To date.");
+        if (report7_startDate.HasValue && report7_endDate.HasValue && report7_startDate.Value.Date > report7_endDate.Value.Date)
+            return BadRequest("Revenue by Airport: From date must be on or before To date.");
+        if (report1_minRevenue.HasValue && report1_maxRevenue.HasValue && report1_minRevenue.Value > report1_maxRevenue.Value)
+            return BadRequest("Revenue by Flight: Min. revenue must not be greater than Max. revenue.");
+        if (report3_minAmount.HasValue && report3_maxAmount.HasValue && report3_minAmount.Value > report3_maxAmount.Value)
+            return BadRequest("Payment / refund audit: Min. amount must not be greater than Max. amount.");
+        if (report4_minPctFull.HasValue && report4_maxPctFull.HasValue && report4_minPctFull.Value > report4_maxPctFull.Value)
+            return BadRequest("Flight load factor: Min. % full must not be greater than Max. % full.");
+        if ((report1_minTickets.HasValue && report1_minTickets.Value < 0) || (report7_minTickets.HasValue && report7_minTickets.Value < 0) || (report2_minPoints.HasValue && report2_minPoints.Value < 0))
+            return BadRequest("Ticket and point counts must not be negative.");
+        if ((report1_minRevenue.HasValue && report1_minRevenue.Value < 0) || (report1_maxRevenue.HasValue && report1_maxRevenue.Value < 0) || (report7_minRevenue.HasValue && report7_minRevenue.Value < 0) || (report3_minAmount.HasValue && report3_minAmount.Value < 0) || (report3_maxAmount.HasValue && report3_maxAmount.Value < 0))
+            return BadRequest("Money amounts must not be negative.");
+        if ((report4_minPctFull.HasValue && (report4_minPctFull.Value < 0 || report4_minPctFull.Value > 100)) || (report4_maxPctFull.HasValue && (report4_maxPctFull.Value < 0 || report4_maxPctFull.Value > 100)))
+            return BadRequest("Flight load factor: % full must be between 0 and 100.");
 
-        // ---- report1 Revenue by Flight: origin, destination, dates, flight status, min tickets, revenue range ----
+        // Eligible tickets = ticket issued AND its segment not cancelled.
+        // This is the same rule the TicketsSold column uses, so a min-tickets
+        // filter can never count a ticket the report itself does not show.
+        const string eligibleTickets = "COUNT(DISTINCT CASE WHEN t.ticket_id IS NOT NULL AND rs.segment_status <> 'Cancelled' THEN t.ticket_id END)";
+
+        // ---- report1 Revenue by Flight: only its own report1_* filters apply ----
+        var r1Where = new List<string>();
+        var r1Args = new List<object>();
+        int r1i = 0;
+        if (!string.IsNullOrEmpty(report1_origin)) { r1Where.Add($"f.origin_airport_code = {{{r1i}}}"); r1Args.Add(report1_origin); r1i++; }
+        if (!string.IsNullOrEmpty(report1_destination)) { r1Where.Add($"f.destination_airport_code = {{{r1i}}}"); r1Args.Add(report1_destination); r1i++; }
+        if (report1_startDate.HasValue) { r1Where.Add($"f.departure_date >= {{{r1i}}}"); r1Args.Add(report1_startDate.Value); r1i++; }
+        if (report1_endDate.HasValue) { r1Where.Add($"f.departure_date <= {{{r1i}}}"); r1Args.Add(report1_endDate.Value); r1i++; }
+        if (!string.IsNullOrEmpty(report1_flightStatus)) { r1Where.Add($"f.flight_status = {{{r1i}}}"); r1Args.Add(report1_flightStatus); r1i++; }
+        string r1WhereSql = r1Where.Count > 0 ? " WHERE " + string.Join(" AND ", r1Where) : "";
         var r1Having = new List<string>();
-        if (minTickets.HasValue) r1Having.Add($"COUNT(DISTINCT t.ticket_id) >= {minTickets.Value}");
-        if (minRevenue.HasValue) r1Having.Add($"Revenue >= {minRevenue.Value.ToString(inv)}");
-        if (maxRevenue.HasValue) r1Having.Add($"Revenue <= {maxRevenue.Value.ToString(inv)}");
+        if (report1_minTickets.HasValue) r1Having.Add($"{eligibleTickets} >= {report1_minTickets.Value}");
+        if (report1_minRevenue.HasValue) r1Having.Add($"Revenue >= {report1_minRevenue.Value.ToString(inv)}");
+        if (report1_maxRevenue.HasValue) r1Having.Add($"Revenue <= {report1_maxRevenue.Value.ToString(inv)}");
         string r1HavingSql = r1Having.Count > 0 ? " HAVING " + string.Join(" AND ", r1Having) : "";
 
         var report1 = _context.Database.SqlQueryRaw<Report1Row>(@"
@@ -726,7 +753,7 @@ public class HomeController : ControllerBase
     LEFT JOIN Ticket t
         ON t.ticket_id = ts.ticket_id
         AND t.ticket_status <> 'Cancelled'
-    " + fWhereSql + @"
+    " + r1WhereSql + @"
     GROUP BY
         f.flight_id,
         f.flight_number,
@@ -734,55 +761,64 @@ public class HomeController : ControllerBase
         f.destination_airport_code
     " + r1HavingSql + @"
     ORDER BY Revenue DESC",
-      fArgs.ToArray()).ToList();
+      r1Args.ToArray()).ToList();
 
-        // ---- report2 Membership tier summary: tier, membership status, min points ----
+        // ---- report2 Membership tier summary: only its own report2_* filters apply ----
+        // Tier rule is the team's own rule from hosted-db-scripts/08_data_report.sql:
+        // Gold >= 25000, Silver >= 10000, Bronze >= 1000, Inactive = 0, else Basic.
         var mWhere = new List<string>();
         var mArgs = new List<object>();
         int mi = 0;
-        if (!string.IsNullOrEmpty(membershipStatus)) { mWhere.Add($"m.membership_status = {{{mi}}}"); mArgs.Add(membershipStatus); mi++; }
-        if (minPoints.HasValue) { mWhere.Add($"COALESCE(m.points_balance, 0) >= {{{mi}}}"); mArgs.Add(minPoints.Value); mi++; }
-        if (!string.IsNullOrEmpty(tier)) { mWhere.Add($"(CASE WHEN m.points_balance >= 25000 THEN 'Gold' WHEN m.points_balance >= 10000 THEN 'Silver' WHEN m.points_balance >= 1000 THEN 'Bronze' WHEN m.points_balance = 0 THEN 'Inactive' ELSE 'Basic' END) = {{{mi}}}"); mArgs.Add(tier); mi++; }
+        if (!string.IsNullOrEmpty(report2_membershipStatus)) { mWhere.Add($"m.membership_status = {{{mi}}}"); mArgs.Add(report2_membershipStatus); mi++; }
+        if (report2_minPoints.HasValue) { mWhere.Add($"COALESCE(m.points_balance, 0) >= {{{mi}}}"); mArgs.Add(report2_minPoints.Value); mi++; }
+        if (!string.IsNullOrEmpty(report2_tier)) { mWhere.Add($"(CASE WHEN m.points_balance >= 25000 THEN 'Gold' WHEN m.points_balance >= 10000 THEN 'Silver' WHEN m.points_balance >= 1000 THEN 'Bronze' WHEN m.points_balance = 0 THEN 'Inactive' ELSE 'Basic' END) = {{{mi}}}"); mArgs.Add(report2_tier); mi++; }
         string mWhereSql = mWhere.Count > 0 ? " WHERE " + string.Join(" AND ", mWhere) : "";
         var report2 = _context.Database.SqlQueryRaw<Report2Row>(@"SELECT p.passenger_id AS PassengerId, CONCAT(p.first_name,' ',p.last_name) AS Passenger, p.email AS Email, m.membership_number AS MembershipNumber, m.points_balance AS PointsBalance, m.membership_status AS MembershipStatus, CASE WHEN m.points_balance >= 25000 THEN 'Gold' WHEN m.points_balance >= 10000 THEN 'Silver' WHEN m.points_balance >= 1000 THEN 'Bronze' WHEN m.points_balance = 0 THEN 'Inactive' ELSE 'Basic' END AS Tier FROM Passenger p LEFT JOIN MembershipAccount m ON m.passenger_id = p.passenger_id" + mWhereSql + @" ORDER BY m.points_balance DESC", mArgs.ToArray()).ToList();
 
-        // ---- report3 Payment / refund audit: transaction type, status, amount range, dates, employee role ----
+        // ---- report3 Payment / refund audit: only its own report3_* filters apply ----
+        // End date includes the WHOLE day: payment_date_time is a datetime, so
+        // "To 2026-11-05" means everything before 2026-11-06 00:00, not just midnight.
         var pWhere = new List<string>();
         var pArgs = new List<object>();
         int pi = 0;
-        if (startDate.HasValue) { pWhere.Add($"p.payment_date_time >= {{{pi}}}"); pArgs.Add(startDate.Value); pi++; }
-        if (endDate.HasValue) { pWhere.Add($"p.payment_date_time <= {{{pi}}}"); pArgs.Add(endDate.Value); pi++; }
-        if (!string.IsNullOrEmpty(transactionType)) { pWhere.Add($"p.transaction_type = {{{pi}}}"); pArgs.Add(transactionType); pi++; }
-        if (!string.IsNullOrEmpty(paymentStatus)) { pWhere.Add($"p.payment_status = {{{pi}}}"); pArgs.Add(paymentStatus); pi++; }
-        if (minAmount.HasValue) { pWhere.Add($"p.amount >= {{{pi}}}"); pArgs.Add(minAmount.Value); pi++; }
-        if (maxAmount.HasValue) { pWhere.Add($"p.amount <= {{{pi}}}"); pArgs.Add(maxAmount.Value); pi++; }
-        if (!string.IsNullOrEmpty(employeeRole)) { pWhere.Add($"e.employee_role = {{{pi}}}"); pArgs.Add(employeeRole); pi++; }
+        if (report3_startDate.HasValue) { pWhere.Add($"p.payment_date_time >= {{{pi}}}"); pArgs.Add(report3_startDate.Value); pi++; }
+        if (report3_endDate.HasValue) { pWhere.Add($"p.payment_date_time < {{{pi}}}"); pArgs.Add(report3_endDate.Value.Date.AddDays(1)); pi++; }
+        if (!string.IsNullOrEmpty(report3_transactionType)) { pWhere.Add($"p.transaction_type = {{{pi}}}"); pArgs.Add(report3_transactionType); pi++; }
+        if (!string.IsNullOrEmpty(report3_paymentStatus)) { pWhere.Add($"p.payment_status = {{{pi}}}"); pArgs.Add(report3_paymentStatus); pi++; }
+        if (report3_minAmount.HasValue) { pWhere.Add($"p.amount >= {{{pi}}}"); pArgs.Add(report3_minAmount.Value); pi++; }
+        if (report3_maxAmount.HasValue) { pWhere.Add($"p.amount <= {{{pi}}}"); pArgs.Add(report3_maxAmount.Value); pi++; }
+        if (!string.IsNullOrEmpty(report3_employeeRole)) { pWhere.Add($"e.employee_role = {{{pi}}}"); pArgs.Add(report3_employeeRole); pi++; }
         string pWhereSql = pWhere.Count > 0 ? " WHERE " + string.Join(" AND ", pWhere) : "";
         var report3 = _context.Database.SqlQueryRaw<Report3Row>(@"SELECT r.confirmation_number AS ConfirmationNumber, p.transaction_reference AS TransactionReference, p.transaction_type AS TransactionType, p.amount AS Amount, p.payment_status AS PaymentStatus, CONCAT(COALESCE(e.first_name,'-'),' ',COALESCE(e.last_name,'')) AS ProcessedBy, e.employee_role AS EmployeeRole, p.payment_date_time AS PaymentDateTime FROM Payment p JOIN Reservation r ON r.reservation_id = p.reservation_id LEFT JOIN Employee e ON e.employee_id = p.employee_id" + pWhereSql + @" ORDER BY p.payment_date_time", pArgs.ToArray()).ToList();
 
-        // ---- report4 Flight load factor: origin, destination, dates, flight status, cabin, occupancy range ----
-        var lfWhere = new List<string>(fWhere);
-        var lfArgs = new List<object>(fArgs);
-        int li = fi;
-        if (!string.IsNullOrEmpty(cabinName)) { lfWhere.Add($"cc.cabin_name = {{{li}}}"); lfArgs.Add(cabinName); li++; }
+        // ---- report4 Flight load factor: only its own report4_* filters apply ----
+        var lfWhere = new List<string>();
+        var lfArgs = new List<object>();
+        int li = 0;
+        if (!string.IsNullOrEmpty(report4_origin)) { lfWhere.Add($"f.origin_airport_code = {{{li}}}"); lfArgs.Add(report4_origin); li++; }
+        if (!string.IsNullOrEmpty(report4_destination)) { lfWhere.Add($"f.destination_airport_code = {{{li}}}"); lfArgs.Add(report4_destination); li++; }
+        if (report4_startDate.HasValue) { lfWhere.Add($"f.departure_date >= {{{li}}}"); lfArgs.Add(report4_startDate.Value); li++; }
+        if (report4_endDate.HasValue) { lfWhere.Add($"f.departure_date <= {{{li}}}"); lfArgs.Add(report4_endDate.Value); li++; }
+        if (!string.IsNullOrEmpty(report4_flightStatus)) { lfWhere.Add($"f.flight_status = {{{li}}}"); lfArgs.Add(report4_flightStatus); li++; }
+        if (!string.IsNullOrEmpty(report4_cabinName)) { lfWhere.Add($"cc.cabin_name = {{{li}}}"); lfArgs.Add(report4_cabinName); li++; }
         string lfWhereSql = lfWhere.Count > 0 ? " WHERE " + string.Join(" AND ", lfWhere) : "";
         var lfHaving = new List<string>();
-        if (minPctFull.HasValue) lfHaving.Add($"PctFull >= {minPctFull.Value.ToString(inv)}");
-        if (maxPctFull.HasValue) lfHaving.Add($"PctFull <= {maxPctFull.Value.ToString(inv)}");
+        if (report4_minPctFull.HasValue) lfHaving.Add($"PctFull >= {report4_minPctFull.Value.ToString(inv)}");
+        if (report4_maxPctFull.HasValue) lfHaving.Add($"PctFull <= {report4_maxPctFull.Value.ToString(inv)}");
         string lfHavingSql = lfHaving.Count > 0 ? " HAVING " + string.Join(" AND ", lfHaving) : "";
         var report4 = _context.Database.SqlQueryRaw<Report4Row>(@"SELECT f.flight_number AS FlightNumber, cc.cabin_name AS CabinName, ff.fare_class_id AS FareClassId, ff.available_inventory AS AvailableInventory, ff.allocated_capacity AS AllocatedCapacity, ROUND(100.0 * (ff.allocated_capacity - ff.available_inventory) / ff.allocated_capacity, 1) AS PctFull FROM FlightFare ff JOIN Flight f ON f.flight_id = ff.flight_id JOIN CabinClass cc ON cc.cabin_class_id = ff.cabin_class_id" + lfWhereSql + lfHavingSql + @" ORDER BY f.flight_number, ff.fare_class_id", lfArgs.ToArray()).ToList();
 
-        // ---- report7 Revenue by Airport: airport, dates, min revenue, min tickets ----
+        // ---- report7 Revenue by Airport: only its own report7_* filters apply ----
         var aWhere = new List<string>();
         var aArgs = new List<object>();
         int ai = 0;
-        if (!string.IsNullOrEmpty(airport)) { aWhere.Add($"f.origin_airport_code = {{{ai}}}"); aArgs.Add(airport); ai++; }
-        if (startDate.HasValue) { aWhere.Add($"f.departure_date >= {{{ai}}}"); aArgs.Add(startDate.Value); ai++; }
-        if (endDate.HasValue) { aWhere.Add($"f.departure_date <= {{{ai}}}"); aArgs.Add(endDate.Value); ai++; }
+        if (!string.IsNullOrEmpty(report7_airport)) { aWhere.Add($"f.origin_airport_code = {{{ai}}}"); aArgs.Add(report7_airport); ai++; }
+        if (report7_startDate.HasValue) { aWhere.Add($"f.departure_date >= {{{ai}}}"); aArgs.Add(report7_startDate.Value); ai++; }
+        if (report7_endDate.HasValue) { aWhere.Add($"f.departure_date <= {{{ai}}}"); aArgs.Add(report7_endDate.Value); ai++; }
         string aWhereSql = aWhere.Count > 0 ? " WHERE " + string.Join(" AND ", aWhere) : "";
         var aHaving = new List<string>();
-        if (minTickets.HasValue) aHaving.Add($"COUNT(DISTINCT t.ticket_id) >= {minTickets.Value}");
-        if (minRevenue.HasValue) aHaving.Add($"Revenue >= {minRevenue.Value.ToString(inv)}");
+        if (report7_minTickets.HasValue) aHaving.Add($"{eligibleTickets} >= {report7_minTickets.Value}");
+        if (report7_minRevenue.HasValue) aHaving.Add($"Revenue >= {report7_minRevenue.Value.ToString(inv)}");
         string aHavingSql = aHaving.Count > 0 ? " HAVING " + string.Join(" AND ", aHaving) : "";
         var report7 = _context.Database.SqlQueryRaw<Report7Row>(@"
     SELECT
@@ -925,50 +961,50 @@ public class HomeController : ControllerBase
     }
 
 
-[HttpPut("flights/{id}/cancel")]
-public async Task<IActionResult> CancelFlight(int id)
-{
-    var role = User.FindFirst(ClaimTypes.Role)?.Value;
-
-    if (role != "Employee" && role != "Supervisor")
-        return StatusCode(403, "Staff only");
-
-    var flight = await _context.Flight
-        .FirstOrDefaultAsync(f => f.FlightId == id);
-
-    if (flight == null)
-        return NotFound("Flight not found");
-
-    if (flight.FlightStatus != "Cancelled")
+    [HttpPut("flights/{id}/cancel")]
+    public async Task<IActionResult> CancelFlight(int id)
     {
-        flight.FlightStatus = "Cancelled";
-        await _context.SaveChangesAsync();
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+
+        if (role != "Employee" && role != "Supervisor")
+            return StatusCode(403, "Staff only");
+
+        var flight = await _context.Flight
+            .FirstOrDefaultAsync(f => f.FlightId == id);
+
+        if (flight == null)
+            return NotFound("Flight not found");
+
+        if (flight.FlightStatus != "Cancelled")
+        {
+            flight.FlightStatus = "Cancelled";
+            await _context.SaveChangesAsync();
+        }
+
+        try
+        {
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"CALL process_flight_cancellation({id})"
+            );
+        }
+        catch (Exception)
+        {
+            return StatusCode(
+                500,
+                "Flight cancellation processing failed. " +
+                "The cancellation may be pending. " +
+                "Please contact an administrator."
+            );
+        }
+
+        return Ok(new
+        {
+            flightId = flight.FlightId,
+            flightNumber = flight.FlightNumber,
+            flightStatus = "Cancelled",
+            cancellationProcessed = true
+        });
     }
-
-    try
-    {
-        await _context.Database.ExecuteSqlInterpolatedAsync(
-            $"CALL process_flight_cancellation({id})"
-        );
-    }
-    catch (Exception)
-    {
-        return StatusCode(
-            500,
-            "Flight cancellation processing failed. " +
-            "The cancellation may be pending. " +
-            "Please contact an administrator."
-        );
-    }
-
-    return Ok(new
-    {
-        flightId = flight.FlightId,
-        flightNumber = flight.FlightNumber,
-        flightStatus = "Cancelled",
-        cancellationProcessed = true
-    });
-}
 
 
     [HttpGet("staff/flights")]

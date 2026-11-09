@@ -75,7 +75,7 @@ const FILTER_FIELDS = {
   airport: { label: 'Airport', type: 'text', placeholder: 'e.g. JFK', inputClass: 'w-28 uppercase' },
   startDate: { label: 'From date', type: 'date' },
   endDate: { label: 'To date', type: 'date' },
-  flightStatus: { label: 'Flight status', type: 'select', options: ['', 'On Time', 'Delayed', 'Cancelled', 'Boarding'] },
+  flightStatus: { label: 'Flight status', type: 'select', options: ['', 'On Time', 'Delayed', 'Boarding', 'Departed', 'Cancelled'] },
   minTickets: { label: 'Min. tickets sold', type: 'number', placeholder: 'e.g. 3', inputClass: 'w-28' },
   minRevenue: { label: 'Min. revenue', type: 'number', placeholder: 'e.g. 500', inputClass: 'w-28' },
   maxRevenue: { label: 'Max. revenue', type: 'number', placeholder: 'e.g. 5000', inputClass: 'w-28' },
@@ -92,7 +92,36 @@ const FILTER_FIELDS = {
   maxPctFull: { label: 'Max. % full', type: 'number', placeholder: 'e.g. 90', inputClass: 'w-24' },
 };
 
-const EMPTY_FILTERS = { origin: '', destination: '', airport: '', startDate: '', endDate: '', flightStatus: '', minTickets: '', minRevenue: '', maxRevenue: '', tier: '', membershipStatus: '', minPoints: '', transactionType: '', paymentStatus: '', minAmount: '', maxAmount: '', employeeRole: '', cabinName: '', minPctFull: '', maxPctFull: '' };
+const emptyFiltersFor = (def) => {
+  const o = {};
+  def.filters.forEach((k) => { o[k] = ''; });
+  return o;
+};
+
+// Each report keeps its OWN filter values, keyed by report (report1, report2, ...).
+// Sharing one filter object across reports made one report's values leak into another's.
+const EMPTY_REPORT_FILTERS = {};
+REPORT_DEFINITIONS.forEach((def) => { EMPTY_REPORT_FILTERS[def.key] = emptyFiltersFor(def); });
+
+function validateReportFilters(all) {
+  const errs = [];
+  const num = (v) => (v === '' || v === undefined || v === null ? null : Number(v));
+  REPORT_DEFINITIONS.forEach((def) => {
+    const f = (all && all[def.key]) || {};
+    if (f.startDate && f.endDate && f.startDate > f.endDate) errs.push(`${def.title}: From date must be on or before To date.`);
+    const minR = num(f.minRevenue), maxR = num(f.maxRevenue);
+    if (minR !== null && maxR !== null && minR > maxR) errs.push(`${def.title}: Min. revenue must not be greater than Max. revenue.`);
+    const minA = num(f.minAmount), maxA = num(f.maxAmount);
+    if (minA !== null && maxA !== null && minA > maxA) errs.push(`${def.title}: Min. amount must not be greater than Max. amount.`);
+    const minP = num(f.minPctFull), maxP = num(f.maxPctFull);
+    if (minP !== null && maxP !== null && minP > maxP) errs.push(`${def.title}: Min. % full must not be greater than Max. % full.`);
+    if (minP !== null && (minP < 0 || minP > 100)) errs.push(`${def.title}: Min. % full must be between 0 and 100.`);
+    if (maxP !== null && (maxP < 0 || maxP > 100)) errs.push(`${def.title}: Max. % full must be between 0 and 100.`);
+    ['minTickets', 'minPoints'].forEach((k) => { const v = num(f[k]); if (v !== null && v < 0) errs.push(`${def.title}: ${FILTER_FIELDS[k].label} must not be negative.`); });
+    ['minRevenue', 'maxRevenue', 'minAmount', 'maxAmount'].forEach((k) => { const v = num(f[k]); if (v !== null && v < 0) errs.push(`${def.title}: ${FILTER_FIELDS[k].label} must not be negative.`); });
+  });
+  return errs;
+}
 
 function ReportFilterBar({ def, filters, onChange, onApply, onClear, loading }) {
   const anySet = def.filters.some((k) => String(filters[k] ?? '').trim() !== '');
@@ -108,7 +137,7 @@ function ReportFilterBar({ def, filters, onChange, onApply, onClear, loading }) 
               {field.type === 'select' ? (
                 <select
                   value={filters[key] || ''}
-                  onChange={(e) => onChange(key, e.target.value)}
+                  onChange={(e) => onChange(def.key, key, e.target.value)}
                   className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 cursor-pointer"
                 >
                   {field.options.map((opt) => (
@@ -120,7 +149,7 @@ function ReportFilterBar({ def, filters, onChange, onApply, onClear, loading }) 
                   type={field.type}
                   placeholder={field.placeholder || ''}
                   value={filters[key] || ''}
-                  onChange={(e) => onChange(key, e.target.value)}
+                  onChange={(e) => onChange(def.key, key, e.target.value)}
                   className={`bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-500 ${field.inputClass || ''}`}
                 />
               )}
@@ -358,40 +387,30 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
   const [activeTab, setActiveTab] = useState('all');
   const [search, setSearch] = useState('');
   const [hiddenColumns, setHiddenColumns] = useState({});
-  const [reportFilters, setReportFilters] = useState({ ...EMPTY_FILTERS });
+  const [reportFilters, setReportFilters] = useState(() => JSON.parse(JSON.stringify(EMPTY_REPORT_FILTERS)));
   const [filtersApplied, setFiltersApplied] = useState(false);
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
-  const fetchReports = useCallback(async (filters) => {
+  const fetchReports = useCallback(async (filtersByReport) => {
     if (!token) return;
     setLoading(true);
     setErrorMsg('');
     const params = new URLSearchParams();
-    const f = filters || {};
-    const setStr = (k, upper) => { if (f[k] && String(f[k]).trim()) params.set(k, upper ? String(f[k]).trim().toUpperCase() : String(f[k]).trim()); };
-    const setNum = (k) => { if (f[k] !== '' && f[k] !== undefined && f[k] !== null) params.set(k, String(f[k])); };
-    const setDate = (k) => { if (f[k]) params.set(k, f[k]); };
-    setStr('origin', true);
-    setStr('destination', true);
-    setStr('airport', true);
-    setDate('startDate');
-    setDate('endDate');
-    setStr('flightStatus');
-    setNum('minTickets');
-    setNum('minRevenue');
-    setNum('maxRevenue');
-    setStr('tier');
-    setStr('membershipStatus');
-    setNum('minPoints');
-    setStr('transactionType');
-    setStr('paymentStatus');
-    setNum('minAmount');
-    setNum('maxAmount');
-    setStr('employeeRole');
-    setStr('cabinName');
-    setNum('minPctFull');
-    setNum('maxPctFull');
+    const all = filtersByReport || {};
+    // Each report's filters are sent under its own name (report1_origin, report3_startDate, ...),
+    // so one report's filters can never affect another report.
+    REPORT_DEFINITIONS.forEach((def) => {
+      const f = all[def.key] || {};
+      def.filters.forEach((key) => {
+        const raw = f[key];
+        if (raw === '' || raw === undefined || raw === null) return;
+        let val = String(raw).trim();
+        if (!val) return;
+        if (key === 'origin' || key === 'destination' || key === 'airport') val = val.toUpperCase();
+        params.set(`${def.key}_${key}`, val);
+      });
+    });
     const qs = params.toString();
     try {
       const res = await fetch(`${API_URL}/api/reports${qs ? `?${qs}` : ''}`, {
@@ -434,29 +453,35 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
   };
 
   const applyFilters = () => {
-    const anySet = Object.values(reportFilters).some((v) => String(v ?? '').trim() !== '');
+    const errs = validateReportFilters(reportFilters);
+    if (errs.length) {
+      setErrorMsg(errs.join(' '));
+      return;
+    }
+    const anySet = Object.values(reportFilters).some((rf) => Object.values(rf).some((v) => String(v ?? '').trim() !== ''));
     setFiltersApplied(Boolean(anySet));
+    setErrorMsg('');
     fetchReports(reportFilters);
   };
 
   const clearFilters = () => {
-    const empty = { ...EMPTY_FILTERS };
+    const empty = JSON.parse(JSON.stringify(EMPTY_REPORT_FILTERS));
     setReportFilters(empty);
     setFiltersApplied(false);
+    setErrorMsg('');
     fetchReports(empty);
   };
 
   const clearReportFilters = (def) => {
-    const next = { ...reportFilters };
-    def.filters.forEach((k) => { next[k] = ''; });
+    const next = { ...reportFilters, [def.key]: emptyFiltersFor(def) };
     setReportFilters(next);
-    const anySet = Object.values(next).some((v) => String(v ?? '').trim() !== '');
+    const anySet = Object.values(next).some((rf) => Object.values(rf).some((v) => String(v ?? '').trim() !== ''));
     setFiltersApplied(Boolean(anySet));
     fetchReports(next);
   };
 
-  const updateFilter = (key, value) => {
-    setReportFilters((prev) => ({ ...prev, [key]: value }));
+  const updateFilter = (reportKey, key, value) => {
+    setReportFilters((prev) => ({ ...prev, [reportKey]: { ...(prev[reportKey] || {}), [key]: value } }));
   };
 
   const visibleReports = activeTab === 'all'
@@ -591,7 +616,7 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
                   <div key={def.key}>
                     <ReportFilterBar
                       def={def}
-                      filters={reportFilters}
+                      filters={reportFilters[def.key] || {}}
                       onChange={updateFilter}
                       onApply={applyFilters}
                       onClear={() => clearReportFilters(def)}
