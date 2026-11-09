@@ -80,9 +80,16 @@ export default function PaymentConfirmationPage({
                 {details.confirmationNumber && (
                   <p className="text-sm text-gray-700 mt-2">Confirmation <span className="font-bold text-gray-900">{details.confirmationNumber}</span></p>
                 )}
-                {details.ticketNumber && (
+                {details.ticketNumbers && details.ticketNumbers.length > 0 ? (
+                  <div className="text-sm text-gray-700 mt-1">
+                    <p>Tickets ({details.ticketNumbers.length})</p>
+                    {details.ticketNumbers.map((t) => (
+                      <p key={t} className="font-bold text-gray-900">{t}</p>
+                    ))}
+                  </div>
+                ) : details.ticketNumber ? (
                   <p className="text-sm text-gray-700 mt-1">Ticket <span className="font-bold text-gray-900">{details.ticketNumber}</span></p>
-                )}
+                ) : null}
               </div>
               <div className="text-right">
                 <p className="text-3xl font-extrabold text-gray-900">${Number(details.totalAmount).toFixed(2)}</p>
@@ -292,6 +299,16 @@ export default function PaymentConfirmationPage({
                 <p className="text-[10px] font-mono tracking-widest text-gray-500 mt-1">
                   {details.ticketNumber || details.confirmationNumber}
                 </p>
+                {details.tickets && details.tickets.length > 1 && (
+                  <div className="w-full mt-3 border-t border-gray-100 pt-3">
+                    {details.tickets.map((t) => (
+                      <p key={t.ticketNumber} className="text-xs text-gray-700 flex justify-between">
+                        <span className="font-semibold">{t.passengerName}</span>
+                        <span className="font-mono">{t.ticketNumber}</span>
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>

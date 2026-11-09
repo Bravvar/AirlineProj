@@ -123,6 +123,10 @@ export default function SeatSelectionModal({
   onProceed,
   preselectedSeatIds = EMPTY,
   mode = 'booking',
+  // Multi-passenger: how many seats may be picked (one per traveler) and
+  // how many fares the total covers. Defaults keep single-passenger behavior.
+  maxSeats = 1,
+  passengerCount = 1,
 }) {
   const [seats, setSeats] = useState([]);
   const [fares, setFares] = useState([]);
@@ -233,20 +237,39 @@ export default function SeatSelectionModal({
 
   const selectedSeat = seats.find((s) => selectedSeatIds.includes(seatIdOf(s))) || null;
   const selectedCabinId = selectedSeat ? seatCabinId(selectedSeat) : null;
-  const seatFee = selectedSeat ? seatFeeFor(selectedCabinId) : 0;
+  // One fee per picked seat (per-cabin fee, summed). One traveler = one seat.
+  const seatFee = selectedSeatIds.reduce(
+    (sum, id) => {
+      const s = seats.find((x) => seatIdOf(x) === id);
+      return sum + (s ? seatFeeFor(seatCabinId(s)) : 0);
+    },
+    0
+  );
 
+  // Multi-passenger: the fare stays as picked in search (no cabin switching,
+  // since seats can sit in different cabins). Single passenger keeps the
+  // existing switch-the-fare behavior.
   const activeFare = isBooking
-    ? (selectedCabinId != null ? fareForCabin[selectedCabinId] : null) || originalFare
+    ? passengerCount > 1
+      ? originalFare
+      : (selectedCabinId != null ? fareForCabin[selectedCabinId] : null) || originalFare
     : null;
   const basePrice = activeFare ? priceOf(activeFare) : Number(farePrice || 0);
-  const total = isBooking ? Number(extraPrice || 0) + basePrice + seatFee : seatFee;
+  const total = isBooking
+    ? (Number(extraPrice || 0) + basePrice) * Math.max(1, passengerCount) + seatFee
+    : seatFee;
 
   const fareChanged =
-    isBooking && selectedSeat && activeFare && originalFare && fareIdOf(activeFare) !== fareIdOf(originalFare);
+    isBooking && passengerCount <= 1 && selectedSeat && activeFare && originalFare && fareIdOf(activeFare) !== fareIdOf(originalFare);
 
   const toggleSeat = (seat) => {
     const id = seatIdOf(seat);
-    setSelectedSeatIds((prev) => (prev.includes(id) ? [] : [id]));
+    setSelectedSeatIds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (maxSeats <= 1) return [id];
+      if (prev.length >= maxSeats) return prev;
+      return [...prev, id];
+    });
   };
 
   const seatState = (seat) => {
@@ -262,6 +285,10 @@ export default function SeatSelectionModal({
     onProceed(selectedSeatIds, total, {
       fare: activeFare,
       seatNumber: selectedSeat ? seatNumOf(selectedSeat) : null,
+      seatNumbers: selectedSeatIds.map((id) => {
+        const s = seats.find((x) => seatIdOf(x) === id);
+        return s ? seatNumOf(s) : null;
+      }).filter(Boolean),
       cabinName: selectedSeat ? CABINS[selectedCabinId]?.short : activeFare?.cabinName,
       seatFee,
     });
@@ -398,6 +425,12 @@ export default function SeatSelectionModal({
               </div>
             </div>
 
+            {maxSeats > 1 && isBooking && (
+              <p className="text-[11px] text-gray-500 mb-3 px-1">
+                Pick one seat per traveler — up to {maxSeats} seats for {passengerCount} travelers.
+              </p>
+            )}
+
             {fareChanged && (
               <p className="text-[11px] text-gray-500 mb-3 px-1">
                 Seat {seatNumOf(selectedSeat)} is in {CABINS[selectedCabinId]?.short}: fare changes from{' '}
@@ -407,10 +440,14 @@ export default function SeatSelectionModal({
 
             <button
               onClick={proceed}
-              disabled={!selectedSeat}
+              disabled={!selectedSeat && maxSeats <= 1}
               className="w-full bg-[#0066ff] hover:bg-blue-700 text-white font-bold py-3.5 rounded-full shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
-              {isBooking ? 'Continue Booking' : selectedSeat ? `Save & Pay ${money(seatFee)}` : 'Save & Pay'}
+              {isBooking
+                ? maxSeats > 1
+                  ? `Continue Booking (${selectedSeatIds.length}/${maxSeats} seats)`
+                  : 'Continue Booking'
+                : selectedSeat ? `Save & Pay ${money(seatFee)}` : 'Save & Pay'}
             </button>
             {isBooking && (
               <button

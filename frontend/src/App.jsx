@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_URL } from './config';
 import Logo from './components/Logo';
 import HeroSearch from './components/HeroSearch';
 import DealsSection from './components/DealsSection';
@@ -178,20 +179,42 @@ export default function App() {
             setRefundDetails(details);
             setCurrentPage('refund');
           }}
-          onViewTicket={(booking, segments) => {
+          onViewTicket={async (booking, segments) => {
             const activeSeg = segments && segments.length > 0 ? segments[0] : {};
+            let ticketNumbers = [];
+            let tickets = null;
+            try {
+              const res = await fetch(`${API_URL}/api/reservations/${booking.reservationId}/ticket`, {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data.tickets) && data.tickets.length > 0) {
+                  tickets = data.tickets.map((t) => ({
+                    ticketNumber: t.ticketNumber,
+                    passengerName: [t.passengerFirstName, t.passengerLastName].filter(Boolean).join(' ') || 'Passenger',
+                  }));
+                  ticketNumbers = tickets.map((t) => t.ticketNumber);
+                } else if (data.ticketNumber) {
+                  ticketNumbers = [data.ticketNumber];
+                }
+              }
+            } catch { /* fall back to the confirmation number below */ }
             setPaymentDetails({
               passengerName: auth.email?.split('@')[0] || 'Passenger',
               email: auth.email,
               confirmationNumber: booking.confirmationNumber,
-              ticketNumber: `TKT-${booking.reservationId}`, 
+              ticketNumber: ticketNumbers[0] || booking.confirmationNumber,
+              ticketNumbers,
+              tickets,
+              passengerCount: ticketNumbers.length || 1,
               totalAmount: booking.totalAmount,
               flightNumber: activeSeg.flightNumber || 'FLT',
               origin: activeSeg.origin || 'ORG',
               destination: activeSeg.destination || 'DST',
               departureTime: activeSeg.departureTime ? String(activeSeg.departureTime).substring(0, 5) : '00:00',
               arrivalTime: activeSeg.arrivalTime ? String(activeSeg.arrivalTime).substring(0, 5) : '00:00',
-              seatNumber: activeSeg.seatNumber || '—', 
+              seatNumber: activeSeg.seatNumber || '—',
               gate: 'TBA',
               boardingTime: '07:10',
             });

@@ -432,7 +432,10 @@ public class HomeController : ControllerBase
                    rs.cancellation_reason AS CancellationReason, f.flight_number AS FlightNumber,
                    f.origin_airport_code AS Origin, f.destination_airport_code AS Destination,
                    f.departure_date AS DepartureDate, f.departure_time AS DepartureTime,
-                   f.arrival_date AS ArrivalDate, f.arrival_time AS ArrivalTime, f.flight_status AS FlightStatus
+                   f.arrival_date AS ArrivalDate, f.arrival_time AS ArrivalTime, f.flight_status AS FlightStatus,
+                   (SELECT s2.seat_number FROM SeatAssignment sa2 JOIN Seat s2 ON s2.seat_id = sa2.seat_id
+                    WHERE sa2.reservation_segment_id = rs.reservation_segment_id AND sa2.active_seat = 1
+                    ORDER BY sa2.seat_assignment_id LIMIT 1) AS SeatNumber
             FROM ReservationSegment rs
             JOIN Flight f ON f.flight_id = rs.flight_id
             WHERE rs.reservation_id = {0} ORDER BY rs.segment_number", id).ToList();
@@ -498,10 +501,20 @@ public class HomeController : ControllerBase
             if (returnFlight.FlightStatus == "Cancelled") return BadRequest("Return flight is cancelled");
         }
 
-        var seatIds = (book.seats ?? new List<int>()).Distinct().ToList();
-        if (seatIds.Count > 1) return BadRequest("Only one seat may be selected per booking.");
+        // Multi-passenger: the passenger list sets the head count (default 1).
+        // The first entry is the account holder; the rest are additional travelers.
+        var passengerNames = (book.passengers ?? new List<PassengerName>())
+            .Where(p => !string.IsNullOrWhiteSpace(p.firstName) && !string.IsNullOrWhiteSpace(p.lastName))
+            .Take(9).ToList();
+        int passengerCount = passengerNames.Count > 0 ? passengerNames.Count : 1;
+        if (fare.AvailableInventory < passengerCount) return BadRequest("Not enough seats left for all passengers.");
+        if (returnFare != null && returnFare.AvailableInventory < passengerCount) return BadRequest("Not enough seats left on the return flight for all passengers.");
 
-        decimal seatFeeTotal = seatIds.Count > 0 ? 25m : 0m;
+        var seatIds = (book.seats ?? new List<int>()).Distinct().ToList();
+        if (seatIds.Count > passengerCount) return BadRequest("You can only pick one seat per passenger.");
+
+        decimal seatFeeTotal = 25m * seatIds.Count;
+        decimal farePerPerson = fare.CurrentPrice + (returnFare == null ? 0 : returnFare.CurrentPrice);
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
         try
@@ -514,20 +527,47 @@ public class HomeController : ControllerBase
                 ReservationStatus = "Confirmed",
                 HoldExpiration = null,
                 TripType = returnFare == null ? "One Way" : "Round Trip",
-                TotalAmount = fare.CurrentPrice + (returnFare == null ? 0 : returnFare.CurrentPrice) + seatFeeTotal
+                TotalAmount = farePerPerson * passengerCount + seatFeeTotal
             };
 
             _context.Reservation.Add(reservation);
             await _context.SaveChangesAsync();
 
-            var passenger = new ReservationPassenger
+            // One ReservationPassenger per traveler. The first is the account holder;
+            // each extra traveler gets a new Passenger row (name from the payment page).
+            var reservationPassengers = new List<ReservationPassenger>();
+            var firstPassenger = new ReservationPassenger
             {
                 ReservationId = reservation.ReservationId,
                 PassengerId = passengerId,
                 AdditionalCheckedBags = 0,
                 MealSelection = null
             };
-            _context.ReservationPassenger.Add(passenger);
+            _context.ReservationPassenger.Add(firstPassenger);
+            reservationPassengers.Add(firstPassenger);
+            for (int i = 1; i < passengerCount; i++)
+            {
+                var extra = new Passenger
+                {
+                    FirstName = passengerNames[i].firstName.Trim(),
+                    LastName = passengerNames[i].lastName.Trim(),
+                    DateOfBirth = new DateTime(1990, 1, 1),
+                    Email = $"{passengerNames[i].firstName.Trim().ToLowerInvariant().Replace(" ", "").Replace("'", "")}.{passengerNames[i].lastName.Trim().ToLowerInvariant().Replace(" ", "").Replace("'", "")}@guest.local",
+                    Phone = null,
+                    Address = null
+                };
+                _context.Passenger.Add(extra);
+                await _context.SaveChangesAsync();
+                var rp = new ReservationPassenger
+                {
+                    ReservationId = reservation.ReservationId,
+                    PassengerId = extra.PassengerId,
+                    AdditionalCheckedBags = 0,
+                    MealSelection = null
+                };
+                _context.ReservationPassenger.Add(rp);
+                reservationPassengers.Add(rp);
+            }
 
             var segment = new ReservationSegment
             {
@@ -557,10 +597,10 @@ public class HomeController : ControllerBase
                 await _context.SaveChangesAsync();
             }
 
-            // Seat assignment — real integer Seat.seat_id values.
-            if (seatIds.Count > 0)
+            // Seat assignment — one seat per passenger, in order (seat i -> traveler i).
+            for (int i = 0; i < seatIds.Count; i++)
             {
-                int seatId = seatIds[0];
+                int seatId = seatIds[i];
 
                 var seat = _context.Seat.FirstOrDefault(s => s.SeatId == seatId);
                 if (seat == null) { await transaction.RollbackAsync(); return BadRequest("Seat does not exist."); }
@@ -573,7 +613,7 @@ public class HomeController : ControllerBase
 
                 await _context.Database.ExecuteSqlRawAsync(
                     "INSERT INTO SeatAssignment (reservation_segment_id, reservation_passenger_id, seat_id, flight_id, assignment_date_time, seat_fee, active_seat) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, 1)",
-                    segment.ReservationSegmentId, passenger.ReservationPassengerId, seatId, fare.FlightId, DateTime.Now, 25m);
+                    segment.ReservationSegmentId, reservationPassengers[i].ReservationPassengerId, seatId, fare.FlightId, DateTime.Now, 25m);
             }
 
             var paymentReference = "PAY" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper();
@@ -581,39 +621,52 @@ public class HomeController : ControllerBase
                 "INSERT INTO Payment (reservation_id, employee_id, payment_date_time, amount, payment_method, payment_status, transaction_reference, transaction_type) VALUES ({0}, NULL, {1}, {2}, 'Card (demo)', 'Successful', {3}, 'Payment')",
                 reservation.ReservationId, DateTime.Now, reservation.TotalAmount, paymentReference);
 
-            string? ticketNumber = null;
+            var ticketNumbers = new List<string>();
             try
             {
                 decimal taxAmount = 0;
-                decimal fareAmount = reservation.TotalAmount;
-                ticketNumber = "TKT-" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper();
-                await _context.Database.ExecuteSqlRawAsync(
-                    "INSERT INTO Ticket (ticket_number, reservation_id, passenger_id, employee_id, issue_date_time, ticket_status, fare_amount, tax_amount, total_fare_paid, exchange_rate) VALUES ({0}, {1}, {2}, NULL, {3}, 'Issued', {4}, {5}, {6}, 1.0000)",
-                    ticketNumber, reservation.ReservationId, passenger.PassengerId, DateTime.Now, fareAmount, taxAmount, reservation.TotalAmount);
-                var ticketIds = await _context.Database.SqlQueryRaw<int>(
-                    "SELECT ticket_id AS Value FROM Ticket WHERE ticket_number = {0}",
-                    ticketNumber).ToListAsync();
-                if (ticketIds.Count > 0)
+                var allSegments = new List<ReservationSegment> { segment };
+                if (returnSegment != null) allSegments.Add(returnSegment);
+                for (int i = 0; i < reservationPassengers.Count; i++)
                 {
-                    int ticketId = ticketIds[0];
-                    var allSegments = new List<ReservationSegment> { segment };
-                    if (returnSegment != null) allSegments.Add(returnSegment);
-                    foreach (var seg in allSegments)
+                    var rp = reservationPassengers[i];
+                    bool hasSeat = i < seatIds.Count;
+                    decimal perPersonTotal = farePerPerson + (hasSeat ? 25m : 0m);
+                    string tkt = "TKT-" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper();
+                    await _context.Database.ExecuteSqlRawAsync(
+                        "INSERT INTO Ticket (ticket_number, reservation_id, passenger_id, employee_id, issue_date_time, ticket_status, fare_amount, tax_amount, total_fare_paid, exchange_rate) VALUES ({0}, {1}, {2}, NULL, {3}, 'Issued', {4}, {5}, {6}, 1.0000)",
+                        tkt, reservation.ReservationId, rp.PassengerId, DateTime.Now, perPersonTotal, taxAmount, perPersonTotal);
+                    ticketNumbers.Add(tkt);
+                    var ticketIds = await _context.Database.SqlQueryRaw<int>(
+                        "SELECT ticket_id AS Value FROM Ticket WHERE ticket_number = {0}",
+                        tkt).ToListAsync();
+                    if (ticketIds.Count > 0)
                     {
-                        await _context.Database.ExecuteSqlRawAsync(
-                            "INSERT INTO TicketSegment (ticket_id, reservation_segment_id) VALUES ({0}, {1})",
-                            ticketId, seg.ReservationSegmentId);
+                        int ticketId = ticketIds[0];
+                        foreach (var seg in allSegments)
+                        {
+                            await _context.Database.ExecuteSqlRawAsync(
+                                "INSERT INTO TicketSegment (ticket_id, reservation_segment_id) VALUES ({0}, {1})",
+                                ticketId, seg.ReservationSegmentId);
+                        }
                     }
                 }
             }
             catch
             {
-                ticketNumber = null;
+                ticketNumbers.Clear();
             }
 
             await transaction.CommitAsync();
 
-            return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount, ticketNumber = ticketNumber });
+            var ticketDetails = reservationPassengers.Select((rp, i) => new
+            {
+                ticketNumber = i < ticketNumbers.Count ? ticketNumbers[i] : (string?)null,
+                passengerName = i < passengerNames.Count
+                    ? $"{passengerNames[i].firstName.Trim()} {passengerNames[i].lastName.Trim()}"
+                    : "Passenger"
+            }).ToList();
+            return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount, ticketNumber = ticketNumbers.FirstOrDefault(), ticketNumbers = ticketNumbers, tickets = ticketDetails, passengerCount = passengerCount });
         }
         catch (Exception ex)
         {
@@ -869,14 +922,15 @@ public class HomeController : ControllerBase
         if (account == null || account.PassengerId == null) return Unauthorized();
         var link = _context.ReservationPassenger.FirstOrDefault(i => i.ReservationId == id && i.PassengerId == account.PassengerId);
         if (link == null) return NotFound("No reservation like that");
-        var ticket = _context.Database.SqlQueryRaw<TicketRow>(@"
+        var tickets = _context.Database.SqlQueryRaw<TicketRow>(@"
             SELECT t.ticket_id AS TicketId, t.ticket_number AS TicketNumber, t.ticket_status AS TicketStatus,
                    t.fare_amount AS FareAmount, t.tax_amount AS TaxAmount, t.total_fare_paid AS TotalFarePaid,
-                   t.issue_date_time AS IssueDateTime
-            FROM Ticket t WHERE t.reservation_id = {0} AND t.passenger_id = {1} AND t.ticket_status <> 'Cancelled'
-            ORDER BY t.ticket_id DESC LIMIT 1", id, account.PassengerId).FirstOrDefault();
-        if (ticket == null) return Ok(new { ticketNumber = (string?)null });
-        return Ok(ticket);
+                   t.issue_date_time AS IssueDateTime, p.first_name AS PassengerFirstName, p.last_name AS PassengerLastName
+            FROM Ticket t JOIN Passenger p ON p.passenger_id = t.passenger_id
+            WHERE t.reservation_id = {0} AND t.ticket_status <> 'Cancelled'
+            ORDER BY t.ticket_id", id).ToList();
+        if (tickets.Count == 0) return Ok(new { ticketNumber = (string?)null, tickets = new List<TicketRow>() });
+        return Ok(new { ticketNumber = tickets[0].TicketNumber, tickets = tickets });
     }
 
     [HttpGet("reports")]
@@ -1303,7 +1357,8 @@ public class HomeController : ControllerBase
 
 public record Payload(string email, string password);
 public record RegisterPayload(string email, string password, int? passengerId, string? firstName, string? lastName, string? Phone, DateTime? dateOfBirth);
-public record BookingPayload(int flightFareId, int? returnFareId, List<int>? seats);
+public record BookingPayload(int flightFareId, int? returnFareId, List<int>? seats, List<PassengerName>? passengers);
+public record PassengerName(string firstName, string lastName);
 public record ChangeSeatPayload(int seatId);
 public record ModifyPayload(string? phone, string? address, string? mealSelection, int? additionalCheckedBags);
 public record AddFlightPayload(string flightNumber, string origin, string destination, int aircraftId, DateTime departure, DateTime arrival);
@@ -1321,9 +1376,9 @@ public class RouteRow { public string Origin { get; set; } public string Destina
 public class AirportRow { public string AirportCode { get; set; } public string AirportName { get; set; } public string City { get; set; } public string? StateProvince { get; set; } public string Country { get; set; } }
 public class DealRow { public int FlightId { get; set; } public string FlightNumber { get; set; } public string Origin { get; set; } public string Destination { get; set; } public DateTime DepartureDate { get; set; } public TimeSpan DepartureTime { get; set; } public DateTime ArrivalDate { get; set; } public TimeSpan ArrivalTime { get; set; } public string FlightStatus { get; set; } public string CabinName { get; set; } public string FareClassName { get; set; } public int FlightFareId { get; set; } public decimal CurrentPrice { get; set; } public int AvailableInventory { get; set; } }
 public class FareRow { public int FlightFareId { get; set; } public int FlightId { get; set; } public int CabinClassId { get; set; } public string CabinName { get; set; } public int FareClassId { get; set; } public string FareClassName { get; set; } public bool Refundable { get; set; } public bool ChangesAllowed { get; set; } public decimal ChangeFee { get; set; } public int CheckedBagsIncluded { get; set; } public int CarryOnBagsIncluded { get; set; } public bool SeatSelectionIncluded { get; set; } public decimal BasePrice { get; set; } public decimal CurrentPrice { get; set; } public int AllocatedCapacity { get; set; } public int AvailableInventory { get; set; } }
-public class SegmentRow { public int ReservationSegmentId { get; set; } public int ReservationId { get; set; } public int FlightId { get; set; } public int FlightFareId { get; set; } public int SegmentNumber { get; set; } public string SegmentStatus { get; set; } public decimal FarePriceAtBooking { get; set; } public DateTime? CancellationDateTime { get; set; } public string? CancellationReason { get; set; } public string FlightNumber { get; set; } public string Origin { get; set; } public string Destination { get; set; } public DateTime DepartureDate { get; set; } public TimeSpan DepartureTime { get; set; } public DateTime ArrivalDate { get; set; } public TimeSpan ArrivalTime { get; set; } public string FlightStatus { get; set; } }
+public class SegmentRow { public int ReservationSegmentId { get; set; } public int ReservationId { get; set; } public int FlightId { get; set; } public int FlightFareId { get; set; } public int SegmentNumber { get; set; } public string SegmentStatus { get; set; } public decimal FarePriceAtBooking { get; set; } public DateTime? CancellationDateTime { get; set; } public string? CancellationReason { get; set; } public string FlightNumber { get; set; } public string Origin { get; set; } public string Destination { get; set; } public DateTime DepartureDate { get; set; } public TimeSpan DepartureTime { get; set; } public DateTime ArrivalDate { get; set; } public TimeSpan ArrivalTime { get; set; } public string FlightStatus { get; set; } public string? SeatNumber { get; set; } }
 public class Query1Row { public string FlightNumber { get; set; } public string OriginAirportCode { get; set; } public string DestinationAirportCode { get; set; } public DateTime DepartureDate { get; set; } public TimeSpan DepartureTime { get; set; } public string CabinName { get; set; } public string FareClassName { get; set; } public decimal CurrentPrice { get; set; } public int AvailableInventory { get; set; } }
-public class TicketRow { public int TicketId { get; set; } public string TicketNumber { get; set; } public string TicketStatus { get; set; } public decimal FareAmount { get; set; } public decimal TaxAmount { get; set; } public decimal TotalFarePaid { get; set; } public DateTime IssueDateTime { get; set; } }
+public class TicketRow { public int TicketId { get; set; } public string TicketNumber { get; set; } public string TicketStatus { get; set; } public decimal FareAmount { get; set; } public decimal TaxAmount { get; set; } public decimal TotalFarePaid { get; set; } public DateTime IssueDateTime { get; set; } public string? PassengerFirstName { get; set; } public string? PassengerLastName { get; set; } }
 
 public class EmployeeRow { public string FirstName { get; set; } public string LastName { get; set; } public DateTime? DateOfBirth { get; set; } public string Email { get; set; } public string? Phone { get; set; } }
 public class StaffFlightRow { public int FlightId { get; set; } public string FlightNumber { get; set; } public string OriginAirportCode { get; set; } public string DestinationAirportCode { get; set; } public DateTime DepartureDate { get; set; } public string FlightStatus { get; set; } public string? StatusReason { get; set; } public long BookedSeats { get; set; } }
