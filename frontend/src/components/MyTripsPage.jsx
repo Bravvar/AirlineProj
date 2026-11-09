@@ -5,7 +5,10 @@ import SeatSelectionModal from './SeatSelectionModal';
 
 const MEAL_OPTIONS = ['Standard', 'Vegetarian', 'Vegan', 'Kosher', 'Halal', 'Gluten Free'];
 
-function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, ticket, onLoadTicket, onRefundSuccess, isEditing, onEditStart, onEditEnd, onChangeSeat }) {
+function BookingCard({ 
+  booking, token, onRefresh, segments, onLoadSegments, ticket, onLoadTicket, 
+  onRefundSuccess, isEditing, onEditStart, onEditEnd, onChangeSeat, onViewTicket 
+}) {
   const [phone, setPhone] = useState('');
   const [mealSelection, setMealSelection] = useState('');
   const [additionalCheckedBags, setAdditionalCheckedBags] = useState('');
@@ -226,6 +229,14 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, tick
               >
                 {isEditing ? 'Close Form' : 'Modify Trip'}
               </button>
+
+              <button
+                onClick={() => onViewTicket(booking, segments)}
+                className="text-xs font-semibold px-4 py-2 rounded-xl border border-green-300 text-green-700 hover:bg-green-50 transition-colors"
+              >
+                View Confirmation
+              </button>
+              
               <button
                 onClick={onChangeSeat}
                 className="text-xs font-semibold px-4 py-2 rounded-xl border border-blue-300 text-blue-700 hover:bg-blue-50 transition-colors"
@@ -317,7 +328,9 @@ function BookingCard({ booking, token, onRefresh, segments, onLoadSegments, tick
   );
 }
 
-export default function MyTripsPage({ token, email, onBackToHome, onSignIn, onToggleSidebar, onRefundSuccess, auth }) {
+export default function MyTripsPage({ 
+  token, email, onBackToHome, onSignIn, onToggleSidebar, onRefundSuccess, auth, onViewTicket 
+}) {
   const [bookings, setBookings] = useState(null);
   const [segmentsById, setSegmentsById] = useState({});
   const [ticketById, setTicketById] = useState({});
@@ -325,7 +338,7 @@ export default function MyTripsPage({ token, email, onBackToHome, onSignIn, onTo
   const [editingId, setEditingId] = useState(null);
   const [showCancelled, setShowCancelled] = useState(false);
 
-  const [seatBooking, setSeatBooking] = useState(null);      // booking to change seat
+  const [seatBooking, setSeatBooking] = useState(null);
   const [seatFlightId, setSeatFlightId] = useState(null);
   const [seatModalOpen, setSeatModalOpen] = useState(false);
   const [seatError, setSeatError] = useState('');
@@ -432,7 +445,6 @@ export default function MyTripsPage({ token, email, onBackToHome, onSignIn, onTo
   const openSeatModal = async (booking) => {
     setSeatError('');
     setSeatSuccess('');
-    // Find the first active segment's flight so the seat map loads that aircraft.
     try {
       const res = await fetch(`${API_URL}/api/reservations/${booking.reservationId}/segments`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -575,6 +587,7 @@ export default function MyTripsPage({ token, email, onBackToHome, onSignIn, onTo
                     onEditStart={() => setEditingId(b.reservationId)}
                     onEditEnd={() => setEditingId(null)}
                     onChangeSeat={() => openSeatModal(b)}
+                    onViewTicket={onViewTicket}
                   />
                 ))}
               </div>
