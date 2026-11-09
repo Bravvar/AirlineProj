@@ -40,6 +40,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   const [checkoutTotal, setCheckoutTotal] = useState(0);
   const [showSeatModal, setShowSeatModal] = useState(false);
   const [selectedSeatIds, setSelectedSeatIds] = useState([]);
+  const [selectedSeatNumber, setSelectedSeatNumber] = useState(null);
 
   const [airports, setAirports] = useState(null);
   const [routes, setRoutes] = useState(null);
@@ -52,6 +53,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   const [availabilitySearching, setAvailabilitySearching] = useState(false);
 
   const RESULTS_LIMIT = 10;
+  const AIRCRAFT_SEATS = 36;
   const userRole = sessionStorage.getItem('role');
   const isStaff = userRole === 'Employee' || userRole === 'Supervisor';
 
@@ -174,7 +176,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
   useEffect(() => {
     function handleClickOutsideResults(event) {
-      if (showCheckoutModal) return;
+      if (showCheckoutModal || showSeatModal) return;
       if (!resultsPanelRef.current) return;
       if (resultsPanelRef.current.contains(event.target)) return;
       if (results === null && returnResults === null && availabilityRows === null) return;
@@ -192,7 +194,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
     document.addEventListener('mousedown', handleClickOutsideResults);
     return () => document.removeEventListener('mousedown', handleClickOutsideResults);
-  }, [results, returnResults, availabilityRows, showCheckoutModal]);
+  }, [results, returnResults, availabilityRows, showCheckoutModal, showSeatModal]);
 
   const clearResults = () => {
     if (showAllOutbound) setShowAllOutbound(false);
@@ -614,11 +616,18 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
   // works, it just has no seat assignment.
   const openSeatSelection = () => {
     setSelectedSeatIds([]);
+    setSelectedSeatNumber(null);
     setShowSeatModal(true);
   };
 
-  const handleSeatProceed = (seatIds, total) => {
+  // A seat in another cabin switches the outbound fare to that cabin's fare
+  // (First / Business / Economy each have their own price).
+  const handleSeatProceed = (seatIds, total, info) => {
     setSelectedSeatIds(Array.isArray(seatIds) ? seatIds : []);
+    setSelectedSeatNumber(info?.seatNumber || null);
+    if (info?.fare) {
+      setSelectedFlightFare((prev) => (prev ? { ...prev, fare: info.fare, outboundFare: info.fare } : prev));
+    }
     setCheckoutTotal(total);
     setShowSeatModal(false);
     setShowCheckoutModal(true);
@@ -683,6 +692,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     setReturnResults(null);
 
     const bookedFlight = selectedFlightFare?.flight;
+    const bookedFare = selectedFlightFare?.fare;
     if (onBooked) {
       onBooked({
         passengerName: sessionStorage.getItem('email')?.split('@')[0] || 'Passenger',
@@ -701,6 +711,11 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
           : '',
         duration: '3h 15m',
         stops: 'Non-stop',
+        seatNumber: selectedSeatNumber || '—',
+        cabinName: bookedFare?.cabinName || '',
+        fareClassName: bookedFare?.fareClassName || '',
+        refundable: Boolean(bookedFare?.refundable),
+        checkedBagsIncluded: bookedFare?.checkedBagsIncluded ?? 0,
       });
     }
   };
@@ -1163,6 +1178,11 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                     ? String(flight.arrivalTime).substring(0, 5)
                     : '';
                   const depDate = String(flight.departureDate).slice(0, 10);
+                  const flightFares = faresByFlight[flight.flightId] || [];
+                  const seatsLeft = flightFares.reduce(
+                    (sum, f) => sum + Number(f.availableInventory || 0),
+                    0
+                  );
 
                   return (
                     <div
@@ -1193,6 +1213,11 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
                           <div className="text-sm text-gray-500 mt-1">
                             {depDate} | {departureTime} - {arrivalTime}
                           </div>
+                          {flightFares.length > 0 && (
+                            <div className="text-xs font-semibold text-gray-600 mt-1">
+                              {seatsLeft} of {AIRCRAFT_SEATS} seats available
+                            </div>
+                          )}
                         </div>
                         {selectedOutboundFare?.flight.flightId === flight.flightId && (
                           <span className="text-xs font-semibold text-blue-600">Selected</span>
@@ -1362,7 +1387,9 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
           show={showSeatModal}
           onHide={() => setShowSeatModal(false)}
           flightId={selectedFlightFare.flight.flightId}
-          farePrice={checkoutTotal}
+          fareId={selectedFlightFare.fare.flightFareId}
+          farePrice={Number(selectedFlightFare.fare.currentPrice || 0)}
+          extraPrice={Number(selectedFlightFare.returnFare?.currentPrice || 0)}
           onProceed={handleSeatProceed}
           preselectedSeatIds={selectedSeatIds}
           mode="booking"
