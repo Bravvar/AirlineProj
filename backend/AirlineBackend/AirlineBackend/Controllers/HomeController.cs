@@ -15,10 +15,13 @@ public class HomeController : ControllerBase
     private readonly ApplicationDbContext _context;
     private readonly IConfiguration _config;
 
-    public HomeController(ApplicationDbContext context, IConfiguration config)
+    private readonly ILogger<HomeController> _logger;
+
+    public HomeController(ApplicationDbContext context, IConfiguration config, ILogger<HomeController> logger)
     {
         _context = context;
         _config = config;
+        _logger = logger;
     }
 
     private string GenerateJSONWebToken(UserAccount userInfo)
@@ -46,18 +49,35 @@ public class HomeController : ControllerBase
     [HttpPost("auth/login")]
     public IActionResult Login([FromBody] Payload log)
     {
-        if (log == null || string.IsNullOrEmpty(log.email)) return BadRequest("Invalid request");
-
-        var data = _context.UserAccount.FirstOrDefault(i => i.Email == log.email);
-        if (data == null) return Unauthorized("Credentials are incorrect");
-
-        if (!BCrypt.Net.BCrypt.Verify(log.password, data.PasswordHash))
+        if (log == null || string.IsNullOrWhiteSpace(log.email) || string.IsNullOrWhiteSpace(log.password)) 
         {
-            return Unauthorized("Credentials are incorrect");
+        return BadRequest("Invalid request");
         }
 
-        var tokenString = GenerateJSONWebToken(data);
-        return Ok(new { token = tokenString, role = data.Role, email = data.Email });
+        try
+        {
+            
+            var email = log.email.Trim().ToLowerInvariant();
+            var data = _context.UserAccount.FirstOrDefault(i => i.Email == log.email);
+            if (data == null) return Unauthorized("Credentials are incorrect");
+
+            if (data == null || !BCrypt.Net.BCrypt.Verify(log.password, data.PasswordHash))
+            {
+                return Unauthorized("Credentials are incorrect");
+            }
+        
+            var tokenString = GenerateJSONWebToken(data);
+            return Ok(new { token = tokenString, role = data.Role, email = data.Email });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred during login.");
+
+            return StatusCode(500, new
+            {
+                message = "An unexpected error occurred. Please try again later."
+            });
+        }
     }
 
     [AllowAnonymous]
