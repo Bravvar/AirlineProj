@@ -707,7 +707,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     openSeatSelection();
   };
 
-  const handlePaymentSuccess = (confirmationNumber, ticketNumber) => {
+  const handlePaymentSuccess = (confirmationNumber, ticketNumber, ticketNumbers, passengerCount, tickets) => {
     setShowCheckoutModal(false);
     setBookingMessage(`Successfully booked! Confirmation #${confirmationNumber}`);
     setFaresByFlight({});
@@ -723,6 +723,9 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         email: sessionStorage.getItem('email'),
         confirmationNumber: confirmationNumber,
         ticketNumber: ticketNumber,
+        ticketNumbers: Array.isArray(ticketNumbers) && ticketNumbers.length > 0 ? ticketNumbers : (ticketNumber ? [ticketNumber] : []),
+        tickets: Array.isArray(tickets) ? tickets : null,
+        passengerCount: passengerCount || totalTravelers || 1,
         totalAmount: checkoutTotal,
         flightNumber: bookedFlight?.flightNumber || '',
         origin: bookedFlight?.originAirportCode || from,
@@ -1422,6 +1425,8 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
           onProceed={handleSeatProceed}
           preselectedSeatIds={selectedSeatIds}
           mode="booking"
+          maxSeats={totalTravelers}
+          passengerCount={totalTravelers}
         />
       )}
 
@@ -1434,6 +1439,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
           totalPrice={checkoutTotal}
           tripType={tripType}
           seatIds={selectedSeatIds}
+          passengerCount={totalTravelers}
           onSuccess={handlePaymentSuccess}
         />
       )}
