@@ -239,29 +239,47 @@ export default function SignInModal({ show, onHide }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: username.trim(), password }),
         });
-        const text = await res.text();
-        if (!res.ok) {
-          let cleanMessage = 'Credentials are incorrect';
-          try {
-            const parsed = JSON.parse(text);
-            if (parsed.message) cleanMessage = parsed.message;
-          } catch {
-            if (text && text.length < 80 && !text.includes('{') && !text.includes('<')) {
-              cleanMessage = text;
-            }
-          }
-          setFormError(cleanMessage);
+
+       if (res.status === 401) 
+        {
+          setFormError('Credentials are incorrect.');
           return;
         }
-        const data = JSON.parse(text);
 
-        if (accountTab === 'admin' && data.role === 'Member') {
+        if (!res.ok) 
+        {
+          setFormError
+          (
+            res.status >= 500
+              ? 'Unable to sign in right now. Please try again later.'
+              : 'Unable to sign in. Please check your details.'
+          );
+          return;
+        }
+        let data;
+
+        try {
+          data = await res.json();
+        } catch {
+          setFormError('Unable to sign in right now. Please try again later.');
+          return;
+        }
+
+        if (
+          !data.token ||
+          !['Member', 'Employee', 'Supervisor'].includes(data.role)
+        ) {
+          setFormError('Unable to sign in right now. Please try again later.');
+          return;
+        }
+
+        if (accountTab === 'admin' && !['Employee', 'Supervisor'].includes(data.role)) {
           setFormError('This login is for staff accounts, use the User tab');
           return;
         }
 
         if (accountTab === 'user' && data.role !== 'Member') {
-          setFormError('This login is for member accounts, use the Staff tab');
+          setFormError('This login is for member accounts, use the Admin tab');
           return;
         }
 
@@ -437,7 +455,7 @@ export default function SignInModal({ show, onHide }) {
               accountTab === 'admin' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'
             }`}
           >
-            Staff
+            Admin
           </button>
         </div>
 
@@ -602,9 +620,48 @@ export default function SignInModal({ show, onHide }) {
                 </label>
               </div>
 
+              {/* User Tab: Member Demo Login */}
+              {accountTab === 'user' && (
+                <div className="bg-blue-50/80 border border-blue-200 rounded-2xl p-3.5 text-xs text-gray-700 mt-2">
+                  <p className="font-bold text-blue-900 mb-1">Demo Member Account for Grading</p>
+                  <p className="text-gray-600 mb-2 leading-relaxed">
+                    Log in with this demo member account. Password is <span className="font-mono font-bold text-gray-900">Airline123!</span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => { setUsername('james.wilson@google.com'); setPassword('Airline123!'); }}
+                    className="w-full text-left bg-white hover:bg-blue-100/60 border border-blue-200/80 rounded-xl px-2.5 py-1.5 transition-colors cursor-pointer"
+                  >
+                    <span className="font-bold text-blue-800">Member:</span> <span className="font-mono text-gray-800">james.wilson@google.com</span>
+                  </button>
+                </div>
+              )}
 
-
-
+              {/* Admin Tab: Staff Demo Logins */}
+              {accountTab === 'admin' && (
+                <div className="bg-purple-50/80 border border-purple-200 rounded-2xl p-3.5 text-xs text-gray-700 mt-2">
+                  <p className="font-bold text-purple-900 mb-1">Demo Staff Accounts for Grading</p>
+                  <p className="text-gray-600 mb-2 leading-relaxed">
+                    Staff accounts are for airline employees and administrators. Password is <span className="font-mono font-bold text-gray-900">Airline123!</span>
+                  </p>
+                  <div className="flex flex-col gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => { setUsername('jennifer.thomas@Coog10Employee.com'); setPassword('Airline123!'); }}
+                      className="text-left bg-white hover:bg-purple-100/60 border border-purple-200/80 rounded-xl px-2.5 py-1.5 transition-colors cursor-pointer"
+                    >
+                      <span className="font-bold text-purple-800">Employee:</span> <span className="font-mono text-gray-800">jennifer.thomas@Coog10Employee.com</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setUsername('robert.anderson@Coog10Admin.com'); setPassword('Airline123!'); }}
+                      className="text-left bg-white hover:bg-purple-100/60 border border-purple-200/80 rounded-xl px-2.5 py-1.5 transition-colors cursor-pointer"
+                    >
+                      <span className="font-bold text-indigo-800">Supervisor:</span> <span className="font-mono text-gray-800">robert.anderson@Coog10Admin.com</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </>
           )}
 
