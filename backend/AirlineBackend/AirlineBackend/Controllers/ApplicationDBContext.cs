@@ -223,10 +223,15 @@ public class MembershipAccount
 public class Seat
 {
     [Key]
+    [Column("seat_id")]
     public int SeatId { get; set; }
+    [Column("aircraft_id")]
     public int AircraftId { get; set; }
+    [Column("cabin_class_id")]
     public int CabinClassId { get; set; }
+    [Column("seat_number")]
     public string SeatNumber { get; set; } = string.Empty;
+    [Column("seat_type")]
     public string SeatType { get; set; } = "Standard";
 }
 
@@ -371,13 +376,21 @@ public class ReservationSegment
 public class SeatAssignment
 {
     [Key]
+    [Column("seat_assignment_id")]
     public int SeatAssignmentId { get; set; }
+    [Column("reservation_segment_id")]
     public int ReservationSegmentId { get; set; }
+    [Column("reservation_passenger_id")]
     public int ReservationPassengerId { get; set; }
+    [Column("seat_id")]
     public int SeatId { get; set; }
+    [Column("assignment_date_time")]
     public DateTime AssignmentDateTime { get; set; }
+    [Column("seat_fee")]
     public decimal SeatFee { get; set; }
+    [Column("flight_id")]
     public int FlightId { get; set; }
+    [Column("active_seat")]
     public int? ActiveSeat { get; set; }
 }
 
