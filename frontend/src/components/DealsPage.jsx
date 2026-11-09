@@ -310,6 +310,8 @@ export default function DealsPage({
           fareId={selectedDeal.flightFareId}
           farePrice={Number(selectedDeal.currentPrice || 0)}
           onProceed={handleSeatProceed}
+          preselectedSeatIds={selectedSeatIds}
+          mode="booking"
         />
       )}
 
