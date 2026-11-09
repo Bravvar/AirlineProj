@@ -740,6 +740,8 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
     const bookedFlight = selectedFlightFare?.flight;
     const bookedFare = selectedFlightFare?.fare;
+    const returnFlight = selectedFlightFare?.returnFlight || null;
+    const returnFare = selectedFlightFare?.returnFare || null;
     // One seat per traveler, in order (seat i -> traveler i, same as the
     // backend). Attach each traveler's seat to their ticket so the
     // confirmation page can render one ticket card per passenger.
@@ -767,6 +769,25 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
           : '',
         arrivalTime: bookedFlight?.arrivalTime
           ? String(bookedFlight.arrivalTime).substring(0, 5)
+          : '',
+        // Return leg (round trip only). Without this the confirmation
+        // page showed only the outbound leg, so a round trip looked
+        // like a one-way trip.
+        tripType: returnFlight ? 'Round Trip' : 'One Way',
+        returnFlightNumber: returnFlight?.flightNumber || '',
+        returnOrigin: returnFlight?.originAirportCode || '',
+        returnDestination: returnFlight?.destinationAirportCode || '',
+        returnDepartureTime: returnFlight?.departureTime
+          ? String(returnFlight.departureTime).substring(0, 5)
+          : '',
+        returnArrivalTime: returnFlight?.arrivalTime
+          ? String(returnFlight.arrivalTime).substring(0, 5)
+          : '',
+        returnDepartureDate: returnFlight?.departureDate
+          ? String(returnFlight.departureDate).slice(0, 10)
+          : '',
+        departureDate: bookedFlight?.departureDate
+          ? String(bookedFlight.departureDate).slice(0, 10)
           : '',
         duration: '3h 15m',
         stops: 'Non-stop',

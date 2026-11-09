@@ -183,6 +183,50 @@ export default function PaymentConfirmationPage({
               </div>
             </div>
 
+            {/* Return leg (round trip only). Without this the page showed
+                only the outbound leg, so a round trip looked one-way. */}
+            {details.returnFlightNumber && (
+              <div className="bg-gray-50 rounded-2xl p-6 mb-6">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">
+                  Return · {details.returnFlightNumber}
+                  {details.returnDepartureDate ? ` · ${details.returnDepartureDate}` : ''}
+                </p>
+                <div className="flex items-center justify-between mb-6">
+                  <div className="text-center">
+                    <p className="text-sm text-gray-500 font-semibold mb-1">Start Journey</p>
+                    <p className="text-lg font-bold text-gray-900">{details.returnDepartureTime || ''}</p>
+                    <p className="text-xs text-gray-500">| {details.returnOrigin || ''}</p>
+                  </div>
+                  <div className="flex-1 flex flex-col items-center px-4">
+                    <div className="w-full flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-blue-600"></div>
+                      <div className="flex-1 h-px bg-gray-300 border-dashed border-t-2 border-gray-300"></div>
+                      <svg className="w-5 h-5 text-blue-600 transform rotate-45" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/></svg>
+                      <div className="flex-1 h-px bg-gray-300 border-dashed border-t-2 border-gray-300"></div>
+                      <div className="w-2 h-2 rounded-full bg-blue-600"></div>
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm text-gray-500 font-semibold mb-1">End Journey</p>
+                    <p className="text-lg font-bold text-gray-900">{details.returnArrivalTime || ''}</p>
+                    <p className="text-xs text-gray-500">| {details.returnDestination || ''}</p>
+                  </div>
+                </div>
+                <div className="relative border-l-2 border-dashed border-gray-300 ml-4 pl-6 space-y-8">
+                  <div className="relative">
+                    <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-blue-600 border-4 border-gray-50"></div>
+                    <p className="text-lg font-bold text-gray-900">{details.returnDepartureTime || ''} <span className="text-sm font-medium text-gray-600 ml-2">{details.returnOrigin || ''}</span></p>
+                    <p className="text-sm text-gray-500">Departure</p>
+                  </div>
+                  <div className="relative">
+                    <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-gray-300 border-4 border-gray-50"></div>
+                    <p className="text-lg font-bold text-gray-900">{details.returnArrivalTime || ''} <span className="text-sm font-medium text-gray-600 ml-2">{details.returnDestination || ''}</span></p>
+                    <p className="text-sm text-gray-500">Arrival · Non-stop</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {!(details.checkedBagsIncluded > 0) && (
             <div className="bg-red-50 text-red-600 text-sm p-4 rounded-xl flex items-center gap-2 border border-red-100">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
