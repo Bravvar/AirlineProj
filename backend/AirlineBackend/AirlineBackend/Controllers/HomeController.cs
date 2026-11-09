@@ -308,7 +308,7 @@ public class HomeController : ControllerBase
         return Ok(data);
     }
 
-[HttpPost("reservations")]
+    [HttpPost("reservations")]
     public async Task<IActionResult> CreateReservation([FromBody] BookingPayload book)
     {
         var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -316,6 +316,7 @@ public class HomeController : ControllerBase
 
         var account = _context.UserAccount.FirstOrDefault(i => i.UserAccountId == int.Parse(userId));
         if (account == null) return BadRequest("Account not found");
+
 
         int passengerId;
         if (account.PassengerId != null)
@@ -368,7 +369,10 @@ public class HomeController : ControllerBase
         }
 
         var seatIds = book.seats ?? new List<int>();
+
+
         int? selectedSeatId = seatIds.Count > 0 ? seatIds[0] : (int?)null;
+
         decimal seatFeeTotal = selectedSeatId.HasValue ? 25 : 0;
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
@@ -396,7 +400,6 @@ public class HomeController : ControllerBase
                 MealSelection = null
             };
             _context.ReservationPassenger.Add(passenger);
-            await _context.SaveChangesAsync(); // save now so we have the ReservationPassengerId for seat assignment
 
             var segment = new ReservationSegment
             {
@@ -426,10 +429,12 @@ public class HomeController : ControllerBase
                 await _context.SaveChangesAsync();
             }
 
+
             if (selectedSeatId.HasValue)
             {
                 var seatAircraftIds = _context.Database.SqlQueryRaw<int>("SELECT aircraft_id FROM Seat WHERE seat_id = {0}", selectedSeatId).ToList();
                 if (seatAircraftIds.Count == 0) { await transaction.RollbackAsync(); return BadRequest("Seat does not exist."); }
+
 
                 if (seatAircraftIds[0] != flight.AircraftId)
                 {
@@ -445,7 +450,6 @@ public class HomeController : ControllerBase
                     segment.ReservationSegmentId, passenger.ReservationPassengerId, selectedSeatId, fare.FlightId, DateTime.Now, 25);
             }
 
-            // --- DEMO PAYMENT ---
             var paymentReference = "PAY" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper();
             await _context.Database.ExecuteSqlRawAsync(
                 "INSERT INTO Payment (reservation_id, employee_id, payment_date_time, amount, payment_method, payment_status, transaction_reference, transaction_type) VALUES ({0}, NULL, {1}, {2}, 'Card (demo)', 'Successful', {3}, 'Payment')",
@@ -574,8 +578,21 @@ public class HomeController : ControllerBase
             return BadRequest("Extra checked bags must be between 0 and 5");
 
 
-        if (mod.phone != null && mod.phone.Any(char.IsLetter))
-            return BadRequest("Phone number must contain digits only");
+        string? normalizedPhone = null;
+        if (mod.phone != null)
+        {
+            if (!System.Text.RegularExpressions.Regex.IsMatch(
+             mod.phone, @"^[0-9\s()-]+$"))
+         {
+            return BadRequest("Phone number contains invalid characters");
+         }
+             normalizedPhone = new string(mod.phone.Where(char.IsDigit).ToArray());
+
+             if (normalizedPhone.Length != 10)
+         {
+             return BadRequest("Phone number must contain exactly 10 digits");
+         }
+        }
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
         try
@@ -583,36 +600,41 @@ public class HomeController : ControllerBase
             var passenger = _context.Passenger.FirstOrDefault(i => i.PassengerId == account.PassengerId);
             if (passenger != null)
             {
-                if (mod.phone != null) passenger.Phone = mod.phone;
+                if (normalizedPhone != null) passenger.Phone = normalizedPhone;
                 if (mod.address != null) passenger.Address = mod.address;
             }
 
             if (mod.mealSelection != null) link.MealSelection = mod.mealSelection;
 
             decimal bagFee = 0;
-            int oldBags = link.AdditionalCheckedBags;
-            if (mod.additionalCheckedBags != null)
+            if (mod.additionalCheckedBags.HasValue)
             {
-                link.AdditionalCheckedBags = mod.additionalCheckedBags.Value;
-                int delta = mod.additionalCheckedBags.Value - oldBags;
-                bagFee = delta * 30m;
+                int oldBags = link.AdditionalCheckedBags;
+                int newBags = mod.additionalCheckedBags.Value;
+
+                if (newBags < 0 || newBags > 5)
+                 {
+                    return BadRequest("Extra checked bags must be between 0 and 5.");
+                 }
+
+                bagFee = (newBags - oldBags) * 30m;
+
+                link.AdditionalCheckedBags = newBags;
+
+                reservation.TotalAmount += bagFee;
             }
 
             await _context.SaveChangesAsync();
 
             if (bagFee != 0)
             {
-                if (bagFee > 0)
-                {
-                    var paymentReference = "BAG" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper();
-                    await _context.Database.ExecuteSqlRawAsync(
-                        "INSERT INTO Payment (reservation_id, employee_id, payment_date_time, amount, payment_method, payment_status, transaction_reference, transaction_type) VALUES ({0}, NULL, {1}, {2}, 'Card (demo)', 'Successful', {3}, 'Payment')",
-                        reservation.ReservationId, DateTime.Now, bagFee, paymentReference);
-                }
+                string paymentReference = "BAG" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpperInvariant();
 
-                reservation.TotalAmount += bagFee;
-                await _context.SaveChangesAsync();
+                string transactionType = bagFee > 0 ? "Payment" : "Refund";
+
+                await _context.Database.ExecuteSqlRawAsync(@"INSERT INTO Payment(reservation_id, employee_id, payment_date_time, amount, payment_method, payment_status, transaction_reference, transaction_type) VALUES({0}, NULL, {1}, {2}, 'Card (demo)', 'Successful', {3}, {4})", reservation.ReservationId, DateTime.UtcNow, Math.Abs(bagFee), paymentReference, transactionType);
             }
+            await _context.SaveChangesAsync();
 
             await transaction.CommitAsync();
             return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount, bagFee });
@@ -799,11 +821,14 @@ var report6 = _context.Database.SqlQueryRaw<Report6Row>(@"
             return BadRequest("Flight number, origin, and destination are required");
 
         if (add.origin == add.destination) return BadRequest("Origin and destination must differ");
+        if (add.departure < DateTime.Now) return BadRequest("Departure can't be made in the past.");
         if (add.arrival <= add.departure) return BadRequest("Arrival must be after departure");
 
         if (_context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM Airport WHERE airport_code = {0}", add.origin).FirstOrDefault() == 0) return BadRequest("Unknown origin airport");
         if (_context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM Airport WHERE airport_code = {0}", add.destination).FirstOrDefault() == 0) return BadRequest("Unknown destination airport");
-        if (_context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM Aircraft WHERE aircraft_id = {0}", add.aircraftId).FirstOrDefault() == 0) return BadRequest("Unknown aircraft");
+        var aircraft = await _context.Database.SqlQueryRaw<string>("SELECT aircraft_status AS Value FROM Aircraft WHERE aircraft_id = {0}", add.aircraftId).FirstOrDefaultAsync();
+        if (aircraft == null) return BadRequest("Unknown aircraft");
+        if (aircraft != "Active") return BadRequest("Aircraft is not available for flight");
 
         var flight = new Flight
         {
@@ -870,50 +895,50 @@ var report6 = _context.Database.SqlQueryRaw<Report6Row>(@"
     }
 
 
-    [HttpPut("flights/{id}/cancel")]
-    public async Task<IActionResult> CancelFlight(int id)
+[HttpPut("flights/{id}/cancel")]
+public async Task<IActionResult> CancelFlight(int id)
+{
+    var role = User.FindFirst(ClaimTypes.Role)?.Value;
+
+    if (role != "Employee" && role != "Supervisor")
+        return StatusCode(403, "Staff only");
+
+    var flight = await _context.Flight
+        .FirstOrDefaultAsync(f => f.FlightId == id);
+
+    if (flight == null)
+        return NotFound("Flight not found");
+
+    if (flight.FlightStatus != "Cancelled")
     {
-        var role = User.FindFirst(ClaimTypes.Role)?.Value;
-
-        if (role != "Employee" && role != "Supervisor")
-            return StatusCode(403, "Staff only");
-
-        var flight = await _context.Flight
-            .FirstOrDefaultAsync(f => f.FlightId == id);
-
-        if (flight == null)
-            return NotFound("Flight not found");
-
-        if (flight.FlightStatus != "Cancelled")
-        {
-            flight.FlightStatus = "Cancelled";
-            await _context.SaveChangesAsync();
-        }
-
-        try
-        {
-            await _context.Database.ExecuteSqlInterpolatedAsync(
-                $"CALL process_flight_cancellation({id})"
-            );
-        }
-        catch (Exception)
-        {
-            return StatusCode(
-                500,
-                "Flight cancellation processing failed. " +
-                "The cancellation may be pending. " +
-                "Please contact an administrator."
-            );
-        }
-
-        return Ok(new
-        {
-            flightId = flight.FlightId,
-            flightNumber = flight.FlightNumber,
-            flightStatus = "Cancelled",
-            cancellationProcessed = true
-        });
+        flight.FlightStatus = "Cancelled";
+        await _context.SaveChangesAsync();
     }
+
+    try
+    {
+        await _context.Database.ExecuteSqlInterpolatedAsync(
+            $"CALL process_flight_cancellation({id})"
+        );
+    }
+    catch (Exception)
+    {
+        return StatusCode(
+            500,
+            "Flight cancellation processing failed. " +
+            "The cancellation may be pending. " +
+            "Please contact an administrator."
+        );
+    }
+
+    return Ok(new
+    {
+        flightId = flight.FlightId,
+        flightNumber = flight.FlightNumber,
+        flightStatus = "Cancelled",
+        cancellationProcessed = true
+    });
+}
 
 
     [HttpGet("staff/flights")]
