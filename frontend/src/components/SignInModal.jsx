@@ -26,7 +26,9 @@ const getTodayStr = () => {
 };
 
 export default function SignInModal({ show, onHide }) {
-  const [accountTab, setAccountTab] = useState('user'); // 'user' | 'admin'
+  // One unified login: every account (member, employee, supervisor) signs
+  // in through this single form. The backend returns the role, and the app
+  // routes by that role. There are no separate User / Admin tabs.
   const [view, setView] = useState('login'); 
 
   // Form State
@@ -273,16 +275,8 @@ export default function SignInModal({ show, onHide }) {
           return;
         }
 
-        if (accountTab === 'admin' && !['Employee', 'Supervisor'].includes(data.role)) {
-          setFormError('This login is for staff accounts, use the User tab');
-          return;
-        }
-
-        if (accountTab === 'user' && data.role !== 'Member') {
-          setFormError('This login is for member accounts, use the Admin tab');
-          return;
-        }
-
+        // One login for every role. The backend returns the role and the
+        // app routes by it; there is no separate staff login to pick.
         sessionStorage.setItem('token', data.token);
         sessionStorage.setItem('role', data.role);
         sessionStorage.setItem('email', data.email);
@@ -437,34 +431,12 @@ export default function SignInModal({ show, onHide }) {
           </button>
         </div>
         
-        {/* User and Admin Tabs */}
-        <div className="flex bg-gray-100 p-1 rounded-2xl mb-5">
-          <button
-            type="button"
-            onClick={() => { setAccountTab('user'); setFormError(''); setFormNotice(''); }}
-            className={`flex-1 py-2 text-sm font-bold rounded-xl transition-all cursor-pointer ${
-              accountTab === 'user' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'
-            }`}
-          >
-            User
-          </button>
-          <button
-            type="button"
-            onClick={() => { setAccountTab('admin'); setView('login'); setFormError(''); setFormNotice(''); }}
-            className={`flex-1 py-2 text-sm font-bold rounded-xl transition-all cursor-pointer ${
-              accountTab === 'admin' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'
-            }`}
-          >
-            Admin
-          </button>
-        </div>
-
         <h3 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-          {accountTab === 'admin' ? 'Staff & Admin Sign In' : (view === 'login' ? 'Welcome Back' : 'Create an Account')}
+          {view === 'login' ? 'Welcome Back' : 'Create an Account'}
         </h3>
         
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          {accountTab === 'user' && view === 'signup' && (
+          {view === 'signup' && (
             <>
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -634,35 +606,29 @@ export default function SignInModal({ show, onHide }) {
           <button 
             type="submit"
             className={`w-full font-bold py-3 rounded-2xl mt-1 transition-all shadow-md hover:shadow-lg cursor-pointer ${
-              accountTab === 'user' && view === 'signup' && (!isPasswordValid || !isEmailValid || !firstName.trim() || !lastName.trim() || !dateOfBirth || !isPhoneValid)
+              view === 'signup' && (!isPasswordValid || !isEmailValid || !firstName.trim() || !lastName.trim() || !dateOfBirth || !isPhoneValid)
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
                 : 'bg-[#0066ff] hover:bg-blue-700 text-white'
             }`}
-            disabled={accountTab === 'user' && view === 'signup' && (!isPasswordValid || !isEmailValid || !firstName.trim() || !lastName.trim() || !dateOfBirth || !isPhoneValid)}
+            disabled={view === 'signup' && (!isPasswordValid || !isEmailValid || !firstName.trim() || !lastName.trim() || !dateOfBirth || !isPhoneValid)}
           >
             {view === 'login' ? 'Log In' : 'Sign Up'}
           </button>
         </form>
 
-        {accountTab === 'user' ? (
-          <p className="text-center text-sm text-gray-600 mt-5 font-medium">
-            {view === 'login' ? (
-              <>
-                Don't have an account?{' '}
-                <button onClick={() => { setView('signup'); setFormError(''); setFormNotice(''); }} className="text-blue-600 hover:underline font-semibold cursor-pointer">Sign up</button>
-              </>
-            ) : (
-              <>
-                Already have an account?{' '}
-                <button onClick={() => { setView('login'); setFormError(''); setFormNotice(''); }} className="text-blue-600 hover:underline font-semibold cursor-pointer">Log In</button>
-              </>
-            )}
-          </p>
-        ) : (
-          <p className="text-center text-xs text-gray-400 mt-5">
-            Admin login is for authorized airline staff only.
-          </p>
-        )}
+        <p className="text-center text-sm text-gray-600 mt-5 font-medium">
+          {view === 'login' ? (
+            <>
+              Don't have an account?{' '}
+              <button onClick={() => { setView('signup'); setFormError(''); setFormNotice(''); }} className="text-blue-600 hover:underline font-semibold cursor-pointer">Sign up</button>
+            </>
+          ) : (
+            <>
+              Already have an account?{' '}
+              <button onClick={() => { setView('login'); setFormError(''); setFormNotice(''); }} className="text-blue-600 hover:underline font-semibold cursor-pointer">Log In</button>
+            </>
+          )}
+        </p>
       </div>
     </div>
   );
