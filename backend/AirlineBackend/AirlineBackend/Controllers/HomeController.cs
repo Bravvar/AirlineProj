@@ -1341,9 +1341,19 @@ public class HomeController : ControllerBase
                    r.confirmation_number AS ConfirmationNumber,
                    (SELECT COUNT(*) AS Value FROM ReservationPassenger rp WHERE rp.reservation_id = r.reservation_id) AS PassengerCount,
                    r.trip_type AS TripType,
-                   r.reservation_status AS ReservationStatus
+                   r.reservation_status AS ReservationStatus,
+                   (SELECT GROUP_CONCAT(CONCAT(p2.first_name, ' ', p2.last_name) SEPARATOR ', ')
+                      FROM ReservationPassenger rp2
+                      JOIN Passenger p2 ON p2.passenger_id = rp2.passenger_id
+                     WHERE rp2.reservation_id = r.reservation_id) AS PassengerNames
             FROM Reservation r
-            WHERE {0} IS NULL OR r.confirmation_number LIKE {1}
+            WHERE {0} IS NULL
+               OR r.confirmation_number LIKE {1}
+               OR EXISTS (SELECT 1
+                            FROM ReservationPassenger rp3
+                            JOIN Passenger p3 ON p3.passenger_id = rp3.passenger_id
+                           WHERE rp3.reservation_id = r.reservation_id
+                             AND CONCAT(p3.first_name, ' ', p3.last_name) LIKE {1})
             ORDER BY r.reservation_id DESC",
             conf, conf == null ? "%" : "%" + conf + "%").ToList();
 
@@ -1552,7 +1562,20 @@ public class HomeController : ControllerBase
     {
         var role = User.FindFirst(ClaimTypes.Role)?.Value;
         if (role != "Employee" && role != "Supervisor") return StatusCode(403, "Staff only");
-        var data = _context.Database.SqlQueryRaw<StaffFlightRow>(@"SELECT f.flight_id AS FlightId, f.flight_number AS FlightNumber, f.origin_airport_code AS OriginAirportCode, f.destination_airport_code AS DestinationAirportCode, f.departure_date AS DepartureDate, f.flight_status AS FlightStatus, f.status_reason AS StatusReason, (SELECT COUNT(DISTINCT rs.reservation_id) FROM ReservationSegment rs WHERE rs.flight_id = f.flight_id AND rs.segment_status = 'Booked') AS BookedSeats FROM Flight f ORDER BY f.departure_date, f.departure_time").ToList();
+        var data = _context.Database.SqlQueryRaw<StaffFlightRow>(@"SELECT f.flight_id AS FlightId, f.flight_number AS FlightNumber, f.origin_airport_code AS OriginAirportCode, f.destination_airport_code AS DestinationAirportCode, f.departure_date AS DepartureDate, f.flight_status AS FlightStatus, f.status_reason AS StatusReason, (SELECT COUNT(DISTINCT rs.reservation_id) FROM ReservationSegment rs WHERE rs.flight_id = f.flight_id AND rs.segment_status = 'Booked') AS BookedSeats, CAST(NULL AS CHAR) AS PassengerNames FROM Flight f ORDER BY f.departure_date, f.departure_time").ToList();
+
+        // Names of passengers booked on each flight, so the Flight Status search bar can filter by name.
+        var names = _context.Database.SqlQueryRaw<StaffFlightPassengerRow>(@"
+            SELECT DISTINCT rs.flight_id AS FlightId,
+                   CONCAT(p.first_name, ' ', p.last_name) AS FullName
+            FROM ReservationSegment rs
+            JOIN ReservationPassenger rp ON rp.reservation_id = rs.reservation_id
+            JOIN Passenger p ON p.passenger_id = rp.passenger_id
+            WHERE rs.segment_status = 'Booked'").ToList();
+        var namesByFlight = names.GroupBy(n => n.FlightId).ToDictionary(g => g.Key, g => string.Join(", ", g.Select(n => n.FullName)));
+        foreach (var f in data)
+            f.PassengerNames = namesByFlight.TryGetValue(f.FlightId, out var n) ? n : null;
+
         return Ok(data);
     }
 
@@ -1620,8 +1643,9 @@ public class Query1Row { public string FlightNumber { get; set; } public string 
 public class TicketRow { public int TicketId { get; set; } public string TicketNumber { get; set; } public string TicketStatus { get; set; } public decimal FareAmount { get; set; } public decimal TaxAmount { get; set; } public decimal TotalFarePaid { get; set; } public DateTime IssueDateTime { get; set; } public string? PassengerFirstName { get; set; } public string? PassengerLastName { get; set; } }
 
 public class EmployeeRow { public string FirstName { get; set; } public string LastName { get; set; } public DateTime? DateOfBirth { get; set; } public string Email { get; set; } public string? Phone { get; set; } }
-public class StaffFlightRow { public int FlightId { get; set; } public string FlightNumber { get; set; } public string OriginAirportCode { get; set; } public string DestinationAirportCode { get; set; } public DateTime DepartureDate { get; set; } public string FlightStatus { get; set; } public string? StatusReason { get; set; } public long BookedSeats { get; set; } }
-public class StaffReservationRow { public int ReservationId { get; set; } public string ConfirmationNumber { get; set; } public long PassengerCount { get; set; } public string TripType { get; set; } public string ReservationStatus { get; set; } }
+public class StaffFlightRow { public int FlightId { get; set; } public string FlightNumber { get; set; } public string OriginAirportCode { get; set; } public string DestinationAirportCode { get; set; } public DateTime DepartureDate { get; set; } public string FlightStatus { get; set; } public string? StatusReason { get; set; } public long BookedSeats { get; set; } public string? PassengerNames { get; set; } }
+public class StaffFlightPassengerRow { public int FlightId { get; set; } public string FullName { get; set; } }
+public class StaffReservationRow { public int ReservationId { get; set; } public string ConfirmationNumber { get; set; } public long PassengerCount { get; set; } public string TripType { get; set; } public string ReservationStatus { get; set; } public string? PassengerNames { get; set; } }
 public class ManifestPassengerRow { public string FirstName { get; set; } public string LastName { get; set; } public string Email { get; set; } public string? MealSelection { get; set; } public int AdditionalCheckedBags { get; set; } }
 public class ManifestSegmentRow { public int SegmentNumber { get; set; } public int FlightId { get; set; } public string SegmentStatus { get; set; } public string FlightNumber { get; set; } public string Origin { get; set; } public string Destination { get; set; } }
 public class ManifestTicketRow { public string Passenger { get; set; } public string TicketNumber { get; set; } public string FlightNumber { get; set; } public int SegmentNumber { get; set; } public string SegmentStatus { get; set; } public decimal FarePriceAtBooking { get; set; } }

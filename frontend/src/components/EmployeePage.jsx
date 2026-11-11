@@ -117,13 +117,13 @@ export default function EmployeePage({ token, email, onBackToHome, onToggleSideb
               type="text"
               value={flightSearch}
               onChange={(e) => setFlightSearch(e.target.value)}
-              placeholder="Search flights by number, route, status, or date..."
+              placeholder="Search flights by number, route, status, date, or passenger name..."
               className="w-full max-w-md bg-white border border-gray-200 rounded-2xl px-5 py-3 text-sm font-medium outline-none focus:border-[#0066ff] focus:ring-2 focus:ring-blue-100 shadow-sm"
             />
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
               {flights.filter(f => {
                 const q = flightSearch.trim().toLowerCase();
-                return !q || (f.flightNumber || '').toLowerCase().includes(q) || (f.originAirportCode || '').toLowerCase().includes(q) || (f.destinationAirportCode || '').toLowerCase().includes(q) || (f.flightStatus || '').toLowerCase().includes(q) || String(f.departureDate || '').includes(q);
+                return !q || (f.flightNumber || '').toLowerCase().includes(q) || (f.originAirportCode || '').toLowerCase().includes(q) || (f.destinationAirportCode || '').toLowerCase().includes(q) || (f.flightStatus || '').toLowerCase().includes(q) || String(f.departureDate || '').includes(q) || (f.passengerNames || '').toLowerCase().includes(q);
               }).map(f => (
               <div key={f.flightId} className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm relative overflow-hidden">
                 <div className="flex justify-between items-start mb-6">
@@ -159,7 +159,7 @@ export default function EmployeePage({ token, email, onBackToHome, onToggleSideb
           <div className="flex flex-col gap-6">
             <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-4">
               <label className="text-xs font-semibold text-gray-600 mb-2 block">
-                Reservation Details — search by confirmation number (leave blank to list all)
+                Reservation Details — search by confirmation number or passenger name (leave blank to list all)
               </label>
               <div className="flex flex-wrap gap-2 items-center">
                 <input
@@ -167,8 +167,8 @@ export default function EmployeePage({ token, email, onBackToHome, onToggleSideb
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') loadReservations(search); }}
-                  placeholder="e.g. ARS1002"
-                  className="w-full max-w-md bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3 text-sm font-medium outline-none focus:border-[#0066ff] focus:ring-2 focus:ring-blue-100 font-mono"
+                  placeholder="e.g. ARS1002 or John Smith"
+                  className="w-full max-w-md bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3 text-sm font-medium outline-none focus:border-[#0066ff] focus:ring-2 focus:ring-blue-100"
                 />
                 <button
                   onClick={() => loadReservations(search)}
@@ -198,6 +198,7 @@ export default function EmployeePage({ token, email, onBackToHome, onToggleSideb
                       <div>
                         <h3 className="text-lg font-bold text-gray-900">{r.confirmationNumber}</h3>
                         <p className="text-sm text-gray-500 mt-1">{r.passengerCount} passenger{r.passengerCount !== 1 ? 's' : ''} · {r.tripType}</p>
+                        {r.passengerNames && <p className="text-sm text-gray-700 mt-1 font-medium">{r.passengerNames}</p>}
                         <p className="text-xs text-gray-400 mt-0.5">Reservation #{r.reservationId}</p>
                       </div>
                       <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700">
