@@ -29,7 +29,11 @@ const REPORT_DEFINITIONS = [
       { key: 'passenger', label: 'Passenger' },
       { key: 'email', label: 'Email' },
       { key: 'membershipNumber', label: 'Membership Number' },
+      { key: 'memberSince', label: 'Member Since' },
       { key: 'pointsBalance', label: 'Points Balance' },
+      { key: 'pointsToNextTier', label: 'Points to Next Tier' },
+      { key: 'pointsEarnedInApp', label: 'Points Earned (App)' },
+      { key: 'pointsReversed', label: 'Points Reversed' },
       { key: 'membershipStatus', label: 'Membership Status' },
       { key: 'tier', label: 'Tier' },
     ],
@@ -185,6 +189,7 @@ function formatCell(row, key) {
   if (!row) return '—';
   const pascal = key.charAt(0).toUpperCase() + key.slice(1);
   const val = row[key] !== undefined ? row[key] : (row[pascal] !== undefined ? row[pascal] : row[key.toLowerCase()]);
+  if (key === 'pointsToNextTier' && (val === null || val === undefined) && (row.tier ?? row.Tier) === 'Gold') return 'Top tier';
   if (val === null || val === undefined || String(val).trim() === '') return '—';
   if (['revenue', 'amount', 'totalAmount', 'avgFare'].includes(key)) {
     const num = Number(val);
