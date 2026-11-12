@@ -32,6 +32,10 @@ const CABIN_ORDER = [4, 3, 2, 1];
 
 const EMPTY = [];
 
+// While the picker is open the seat map is reloaded this often (and when the
+// tab regains focus), so seats other people just bought turn grey.
+const REFRESH_MS = 10000;
+
 const seatIdOf = (s) => s.seatId ?? s.SeatId;
 const seatNumOf = (s) => String(s.seatNumber ?? s.SeatNumber ?? '').toUpperCase();
 const occupiedOf = (s) => Boolean(s.occupied ?? s.Occupied);
@@ -175,6 +179,9 @@ function TripSteps({ steps, stepIndex, currentSeats }) {
  *  steps          optional [{ label, route, cabin, seats }] for round trips
  *  stepIndex      which step is showing
  *  continueLabel  optional button text (e.g. "Next: return seat")
+ *  onExit         optional: "Back to flights" (leave the picker to change
+ *                 flights/fares). Without it the top-left button uses onHide.
+ *  onHide         Escape / step back (round trip step 2 -> step 1)
  *  onProceed(seatIds, total, { fare, seatNumber, seatNumbers, cabinName, seatFee })
  */
 export default function SeatSelectionModal({
@@ -193,12 +200,14 @@ export default function SeatSelectionModal({
   steps = EMPTY,
   stepIndex = 0,
   continueLabel,
+  onExit,
 }) {
   const [seats, setSeats] = useState([]);
   const [fares, setFares] = useState([]);
   const [selectedSeatIds, setSelectedSeatIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [takenNotice, setTakenNotice] = useState('');
 
   const isBooking = mode === 'booking';
   const seatsNeeded = Math.max(1, maxSeats);
@@ -240,7 +249,39 @@ export default function SeatSelectionModal({
 
   useEffect(() => {
     setSelectedSeatIds(show && Array.isArray(preselectedSeatIds) ? preselectedSeatIds : []);
+    setTakenNotice('');
   }, [show, preselectedSeatIds]);
+
+  // Live seat map: reload in the background while open. A seat someone else
+  // took is dropped from the selection with a short notice.
+  useEffect(() => {
+    if (!show || !flightId) return undefined;
+    let stopped = false;
+    const refresh = () => {
+      fetch(`${API_URL}/api/flights/${flightId}/seatmap`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (stopped || !Array.isArray(data)) return;
+          setSeats(data);
+          const takenIds = new Set(data.filter(occupiedOf).map(seatIdOf));
+          setSelectedSeatIds((prev) => {
+            const lost = prev.filter((id) => takenIds.has(id));
+            if (lost.length === 0) return prev;
+            const numbers = data.filter((x) => lost.includes(seatIdOf(x))).map(seatNumOf);
+            setTakenNotice(`Seat ${numbers.join(', ')} was just taken by another traveler. Please pick another.`);
+            return prev.filter((id) => !takenIds.has(id));
+          });
+        })
+        .catch(() => { /* keep the current map; try again next time */ });
+    };
+    const timer = setInterval(refresh, REFRESH_MS);
+    window.addEventListener('focus', refresh);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [show, flightId]);
 
   useEffect(() => {
     if (!show) return undefined;
@@ -341,13 +382,13 @@ export default function SeatSelectionModal({
         <div className="max-w-6xl mx-auto px-4 sm:px-8 py-4 flex items-center justify-between gap-4">
           <button
             type="button"
-            onClick={onHide}
-            className="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-900 cursor-pointer"
+            onClick={onExit || onHide}
+            className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 border border-gray-200 text-sm font-semibold text-gray-700 px-4 py-2 rounded-full transition-colors cursor-pointer"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
             </svg>
-            Back
+            {isBooking && onExit ? 'Back to flights' : 'Back'}
           </button>
           <h2 className="text-lg font-bold">{isBooking ? 'Choose your seat' : 'Change seat'}</h2>
           {hasSteps ? (
@@ -369,6 +410,15 @@ export default function SeatSelectionModal({
               <p className="text-sm text-gray-500">
                 {hasSteps ? steps[stepIndex]?.route : 'Front of the plane is at the top'}
               </p>
+              {hasSteps && stepIndex > 0 && (
+                <button
+                  type="button"
+                  onClick={onHide}
+                  className="mt-1 text-xs font-semibold text-[#0066ff] hover:underline cursor-pointer"
+                >
+                  ← Change {steps[stepIndex - 1]?.label.toLowerCase()} seat
+                </button>
+              )}
             </div>
             {fareCabin && (
               <span className="bg-blue-50 text-[#0066ff] border border-blue-100 text-xs font-bold px-3 py-1 rounded-full">
@@ -378,6 +428,12 @@ export default function SeatSelectionModal({
           </div>
 
           <Legend />
+
+          {takenNotice && (
+            <p className="mt-4 bg-amber-50 border border-amber-200 text-amber-800 font-semibold rounded-2xl px-4 py-3 text-sm text-center">
+              {takenNotice}
+            </p>
+          )}
 
           {error && (
             <p className="mt-4 bg-red-50 border border-red-200 text-red-700 font-semibold rounded-2xl px-4 py-3 text-sm text-center">

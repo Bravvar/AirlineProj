@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import Logo from './Logo';
+import CustomerNav from './CustomerNav';
 import { API_URL } from '../config';
 import { getTierForPoints, getTierProgress } from '../membershipTiers';
 
@@ -31,8 +31,29 @@ function PlaneLine() {
   );
 }
 
+// Boarding starts 40 minutes before departure ("22:00" -> "21:20").
+function boardingTime(departure) {
+  const m = String(departure || '').match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const mins = (Number(m[1]) * 60 + Number(m[2]) - 40 + 24 * 60) % (24 * 60);
+  return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+}
+
+// "Business Class" -> "Business" so it fits the ticket's narrow column.
+const shortClass = (name) => String(name || '').replace(/\s*class$/i, '') || null;
+
+function TicketField({ label, value }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">{label}</p>
+      <p className="text-sm font-bold text-gray-900 break-words">{value || '—'}</p>
+    </div>
+  );
+}
+
 function ETicketCard({ ticket, details }) {
   const code = ticket.ticketNumber || details.confirmationNumber;
+  const isRoundTrip = Boolean(details.returnFlightNumber);
 
   return (
     <div className="border border-gray-200 rounded-2xl p-5 bg-white">
@@ -64,38 +85,22 @@ function ETicketCard({ ticket, details }) {
       </div>
 
       <div className="grid grid-cols-3 gap-4 bg-gray-50 rounded-2xl p-4 border border-gray-100 mb-8">
-        <div>
-          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
-            {details.returnFlightNumber ? 'Outbound seat' : 'Seat'}
-          </p>
-          <p className="text-sm font-bold text-gray-900">{ticket.seatNumber || '—'}</p>
-        </div>
-        <div>
-          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Gate</p>
-          <p className="text-sm font-bold text-gray-900">{details.gate || 'TBA'}</p>
-        </div>
-        <div>
-          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Boarding</p>
-          <p className="text-sm font-bold text-gray-900">{details.boardingTime || '07:10'}</p>
-        </div>
+        <TicketField label="Seat" value={ticket.seatNumber} />
+        <TicketField label="Class" value={shortClass(details.cabinName)} />
+        <TicketField label="Boarding" value={boardingTime(details.departureTime) || details.boardingTime} />
       </div>
 
-      {/* Return leg seat (round trip) */}
-      {details.returnFlightNumber && (
-        <div className="grid grid-cols-3 gap-4 bg-blue-50/60 rounded-2xl p-4 border border-blue-100 -mt-4 mb-8">
-          <div>
-            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Return</p>
-            <p className="text-sm font-bold text-gray-900">
-              {details.returnOrigin || 'ORG'} → {details.returnDestination || 'DST'}
-            </p>
-          </div>
-          <div>
-            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Class</p>
-            <p className="text-sm font-bold text-gray-900">{details.returnCabinName || '—'}</p>
-          </div>
-          <div>
-            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Return seat</p>
-            <p className="text-sm font-bold text-gray-900">{ticket.returnSeatNumber || '—'}</p>
+      {/* Return leg (round trip): small header, then the same three fields */}
+      {isRoundTrip && (
+        <div className="-mt-4 mb-8">
+          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">
+            Return · {details.returnOrigin || 'ORG'} → {details.returnDestination || 'DST'}
+            {details.returnFlightNumber ? ` · ${details.returnFlightNumber}` : ''}
+          </p>
+          <div className="grid grid-cols-3 gap-4 bg-blue-50/60 rounded-2xl p-4 border border-blue-100">
+            <TicketField label="Return seat" value={ticket.returnSeatNumber} />
+            <TicketField label="Class" value={shortClass(details.returnCabinName)} />
+            <TicketField label="Boarding" value={boardingTime(details.returnDepartureTime)} />
           </div>
         </div>
       )}
@@ -432,35 +437,33 @@ export default function PaymentConfirmationPage({
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 pb-20">
       
-      <nav className="bg-white border-b border-gray-100 px-8 py-4 flex justify-between items-center shadow-sm">
-        <div className="cursor-pointer" onClick={() => onNavigate('flights')}>
-          <Logo />
-        </div>
-        <div className="flex items-center gap-4">
-          <button onClick={() => onNavigate('flights')} className="text-gray-600 font-semibold hover:text-gray-900 transition-colors text-sm">
-            Back to Search
-          </button>
-          {auth.token && (
-            <button onClick={onToggleSidebar} className="w-10 h-10 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold shadow-md hover:scale-105 transition-transform cursor-pointer">
-              {auth.email?.charAt(0).toUpperCase()}
-            </button>
-          )}
-        </div>
-      </nav>
+      {/* Same header as the homepage (tabs + profile picture) */}
+      <CustomerNav
+        variant="solid"
+        activeTab={null}
+        auth={auth}
+        onLogoClick={() => onNavigate('flights')}
+        onFlights={() => onNavigate('flights')}
+        onDeals={() => onNavigate('deals')}
+        onMyTrips={() => onNavigate('trips')}
+        onAbout={() => onNavigate('about')}
+        onToggleSidebar={onToggleSidebar}
+      />
 
-      {/* Hero Section */}
-      <div className="relative h-72 w-full bg-gray-900 overflow-hidden pt-20">
-        <img 
-          src="/landscapes/europe.jpg" 
-          alt="Mountains" 
-          className="w-full h-full object-cover opacity-80"
-        />
-        <div className="absolute inset-0 bg-black/40"></div>
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4 pt-16">
-          <h1 className="text-4xl font-extrabold text-white mb-2 drop-shadow-lg">Booking Confirmed</h1>
-          <p className="text-white/90 text-lg drop-shadow-md">Your flight is booked. Here are your trip details.</p>
+      {/* Rounded image card like the homepage background */}
+      <section className="p-4">
+        <div className="relative h-72 rounded-[2.5rem] overflow-hidden shadow-2xl">
+          <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: 'url("/landscapes/europe.jpg")' }} />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/60" />
+          <div className="relative h-full flex flex-col items-center justify-center text-center text-white px-4 pb-14">
+            <span className="inline-block bg-white/15 border border-white/25 backdrop-blur-md text-xs font-bold uppercase tracking-wider px-4 py-1.5 rounded-full">
+              Booking Confirmed
+            </span>
+            <h1 className="text-3xl md:text-4xl font-bold mt-4">You&apos;re all set</h1>
+            <p className="text-white/85 mt-2 text-lg">Your flight is booked. Here are your trip details.</p>
+          </div>
         </div>
-      </div>
+      </section>
 
       <div className="max-w-6xl mx-auto px-4 -mt-16 relative z-10">
         <div className="flex flex-col lg:flex-row gap-8">
@@ -504,9 +507,7 @@ export default function PaymentConfirmationPage({
               <div>
                 <div className="flex gap-1 mt-1 justify-center">
                   {details.cabinName && (
-                    <span className="bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
-                      {details.cabinName}{details.seatNumber && details.seatNumber !== '—' ? ` · ${details.seatNumber}` : ''}
-                    </span>
+                    <span className="text-sm font-semibold text-gray-700">{details.cabinName}</span>
                   )}
                 </div>
               </div>
@@ -570,10 +571,7 @@ export default function PaymentConfirmationPage({
                     {details.returnDepartureDate ? ` · ${details.returnDepartureDate}` : ''}
                   </p>
                   {details.returnCabinName && (
-                    <span className="bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
-                      {details.returnCabinName}
-                      {details.returnSeatNumber && details.returnSeatNumber !== '—' ? ` · ${details.returnSeatNumber}` : ''}
-                    </span>
+                    <span className="text-sm font-semibold text-gray-700">{details.returnCabinName}</span>
                   )}
                 </div>
                 <div className="flex items-center justify-between mb-6">

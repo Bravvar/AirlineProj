@@ -787,6 +787,14 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn }) {
     else setShowSeatModal(false);
   };
 
+  // "Back to flights": leave the seat picker from any step. The search
+  // results stay open, so a different fare or flight can be picked (round
+  // trips also keep "Change Outbound"). Seats start fresh on the next pick.
+  const handleSeatExit = () => {
+    setShowSeatModal(false);
+    setSeatStep(0);
+  };
+
   const initiateBooking = (flight, fare, isReturn = false) => {
     const token = sessionStorage.getItem('token');
     if (!token) {
@@ -1551,6 +1559,7 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn }) {
           <SeatSelectionModal
             show={showSeatModal}
             onHide={handleSeatBack}
+            onExit={handleSeatExit}
             flightId={legFlight.flightId}
             fareId={legFare.flightFareId}
             farePrice={Number(legFare.currentPrice || 0)}
