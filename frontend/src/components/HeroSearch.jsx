@@ -1579,25 +1579,49 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
         );
       })()}
 
-      {selectedFlightFare && (
-        <CheckoutModal
-          show={showCheckoutModal}
-          onHide={() => setShowCheckoutModal(false)}
-          fareId={selectedFlightFare.fare.flightFareId}
-          returnFareId={selectedFlightFare.returnFare?.flightFareId ?? null}
-          totalPrice={checkoutTotal}
-          tripType={tripType}
-          seatIds={selectedSeatIds}
-          returnSeatIds={returnSeatIds}
-          passengerCount={totalTravelers}
-          onSuccess={handlePaymentSuccess}
-          summary={
-            selectedFlightFare.returnFlight
-              ? `${selectedFlightFare.flight?.flightNumber || ''} · ${selectedFlightFare.flight?.originAirportCode || ''} → ${selectedFlightFare.flight?.destinationAirportCode || ''} · ${String(selectedFlightFare.flight?.departureDate || '').slice(0, 10)} ${String(selectedFlightFare.flight?.departureTime || '').substring(0, 5)}–${String(selectedFlightFare.flight?.arrivalTime || '').substring(0, 5)}  |  Return ${selectedFlightFare.returnFlight?.flightNumber || ''} · ${selectedFlightFare.returnFlight?.originAirportCode || ''} → ${selectedFlightFare.returnFlight?.destinationAirportCode || ''} · ${String(selectedFlightFare.returnFlight?.departureDate || '').slice(0, 10)} ${String(selectedFlightFare.returnFlight?.departureTime || '').substring(0, 5)}–${String(selectedFlightFare.returnFlight?.arrivalTime || '').substring(0, 5)}`
-              : `${selectedFlightFare.flight?.flightNumber || ''} · ${selectedFlightFare.flight?.originAirportCode || ''} → ${selectedFlightFare.flight?.destinationAirportCode || ''} · ${String(selectedFlightFare.flight?.departureDate || '').slice(0, 10)} ${String(selectedFlightFare.flight?.departureTime || '').substring(0, 5)}–${String(selectedFlightFare.flight?.arrivalTime || '').substring(0, 5)}`
-          }
-        />
-      )}
+      {selectedFlightFare && (() => {
+        // Checkout page: what's being bought, leg by leg, plus the price split.
+        const f = selectedFlightFare;
+        const leg = (label, flight, fare, seats) => ({
+          label,
+          flightNumber: flight?.flightNumber || '',
+          route: `${flight?.originAirportCode || ''} → ${flight?.destinationAirportCode || ''}`,
+          when: `${String(flight?.departureDate || '').slice(0, 10)} · ${String(flight?.departureTime || '').substring(0, 5)}–${String(flight?.arrivalTime || '').substring(0, 5)}`,
+          cabin: fare?.cabinName || '',
+          fareClass: fare?.fareClassName || '',
+          seats,
+        });
+        const trip = isRoundTripBooking
+          ? [leg('Outbound', f.flight, f.fare, selectedSeatNumbers), leg('Return', f.returnFlight, f.returnFare, returnSeatNumbers)]
+          : [leg('Flight', f.flight, f.fare, selectedSeatNumbers)];
+        const fares = (Number(f.fare?.currentPrice || 0) + Number(f.returnFare?.currentPrice || 0)) * totalTravelers;
+        const priceLines = [
+          { label: `Fare${totalTravelers > 1 ? ` × ${totalTravelers}` : ''}`, amount: fares },
+          { label: 'Seat fees', amount: Math.max(0, checkoutTotal - fares) },
+        ];
+        return (
+          <CheckoutModal
+            variant="page"
+            show={showCheckoutModal}
+            onHide={() => setShowCheckoutModal(false)}
+            // Back to the last seat map with the seats still picked.
+            onBack={() => {
+              setShowCheckoutModal(false);
+              setShowSeatModal(true);
+            }}
+            navProps={navProps}
+            trip={trip}
+            priceLines={priceLines}
+            fareId={f.fare.flightFareId}
+            returnFareId={f.returnFare?.flightFareId ?? null}
+            totalPrice={checkoutTotal}
+            seatIds={selectedSeatIds}
+            returnSeatIds={returnSeatIds}
+            passengerCount={totalTravelers}
+            onSuccess={handlePaymentSuccess}
+          />
+        );
+      })()}
     </div>
   );
 }

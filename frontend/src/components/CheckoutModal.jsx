@@ -1,6 +1,58 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { API_URL } from '../config';
+import CustomerNav from './CustomerNav';
 
+// ---------------------------------------------------------------------
+// Checkout: card form + passenger names, then POST /api/reservations.
+//
+// Two layouts, same behaviour:
+//   variant="page"   full page with the site header (flight search booking).
+//   variant="modal"  centered popup (Deals cards, My Trips seat fees).
+//
+// Nothing is booked or charged until Pay succeeds. Leaving the page (Back
+// to seats, a header tab, the logo) just closes it; no request is sent.
+// ---------------------------------------------------------------------
+
+const money = (n) => `$${Number(n || 0).toFixed(2)}`;
+
+const INPUT =
+  'w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl px-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100';
+
+function Field({ label, children }) {
+  return (
+    <div>
+      <label className="text-xs font-semibold text-gray-600 mb-1 block">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="5" y="11" width="14" height="10" rx="2" strokeWidth="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/**
+ * Props
+ *  show, onHide         open / close (close = leave without paying)
+ *  fareId, returnFareId outbound + optional return fare
+ *  seatIds, returnSeatIds  one seat per traveler on each leg
+ *  totalPrice           amount shown and charged
+ *  passengerCount       one name row per traveler
+ *  onSuccess(...)       called with the booking response
+ *  onPay                optional custom charge instead of a booking (seat fees)
+ *  title, summary       heading + one-line trip summary (modal)
+ *  variant              'modal' (default) | 'page'
+ *  navProps             page only: the site header's props
+ *  onBack               page only: "Back to seats"
+ *  trip                 page only: [{ label, flightNumber, route, when, cabin, fareClass, seats }]
+ *  priceLines           page only: [{ label, amount }] shown above the total
+ */
 export default function CheckoutModal({
   show,
   onHide,
@@ -18,6 +70,11 @@ export default function CheckoutModal({
   summary,
   // Multi-passenger: how many travelers are flying. One name row per traveler.
   passengerCount = 1,
+  variant = 'modal',
+  navProps,
+  onBack,
+  trip = [],
+  priceLines = [],
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -26,6 +83,8 @@ export default function CheckoutModal({
   const [expiry, setExpiry] = useState('');
   const [cvc, setCvc] = useState('');
   const [name, setName] = useState('');
+
+  const isPage = variant === 'page';
 
   // Passenger names, one per traveler. Traveler 1 is the account holder.
   const isBooking = !onPay && fareId != null;
@@ -48,14 +107,25 @@ export default function CheckoutModal({
     setPassengers((prev) => prev.map((p, idx) => (idx === i ? { ...p, [field]: value } : p)));
   };
 
+  // Escape closes the popup. The page has its own Back button instead.
   useEffect(() => {
-    if (!show) return;
+    if (!show || isPage) return undefined;
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') onHide();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [show, onHide]);
+  }, [show, onHide, isPage]);
+
+  // The page scrolls itself; keep the page behind it from scrolling too.
+  useEffect(() => {
+    if (!show || !isPage) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [show, isPage]);
 
   if (!show) return null;
 
@@ -180,7 +250,237 @@ export default function CheckoutModal({
     }
   };
 
-  return (
+  // ------------------------------------------------------------ shared parts
+
+  const errorBox = error && (
+    <p className="bg-red-50 border border-red-200 text-red-700 font-semibold rounded-2xl px-4 py-3 text-sm text-center">
+      {error}
+    </p>
+  );
+
+  const passengerFields = isBooking && (
+    <div className="flex flex-col gap-2">
+      {passengers.map((p, i) => (
+        <div key={i} className="grid grid-cols-2 gap-2">
+          <input
+            type="text"
+            required
+            placeholder={i === 0 ? 'First name (you)' : `Traveler ${i + 1} first name`}
+            value={p.firstName}
+            onChange={(e) => setPassenger(i, 'firstName', e.target.value.replace(/[^a-zA-Z\s'-]/g, ''))}
+            className={INPUT}
+          />
+          <input
+            type="text"
+            required
+            placeholder={i === 0 ? 'Last name (you)' : `Traveler ${i + 1} last name`}
+            value={p.lastName}
+            onChange={(e) => setPassenger(i, 'lastName', e.target.value.replace(/[^a-zA-Z\s'-]/g, ''))}
+            className={INPUT}
+          />
+        </div>
+      ))}
+      <p className="text-[11px] text-gray-400">Each traveler gets their own ticket.</p>
+    </div>
+  );
+
+  const cardFields = (
+    <>
+      <Field label="Cardholder Name">
+        <input
+          type="text"
+          required
+          placeholder="John Doe"
+          value={name}
+          onChange={(e) => setName(e.target.value.replace(/[^a-zA-Z\s'-]/g, ''))}
+          className={INPUT}
+        />
+      </Field>
+      <Field label="Card Number">
+        <input
+          type="text"
+          required
+          inputMode="numeric"
+          placeholder="0000 0000 0000 0000"
+          value={cardNumber}
+          onChange={handleCardNumberChange}
+          maxLength="19"
+          className={INPUT}
+        />
+      </Field>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Expiry">
+          <input
+            type="text"
+            required
+            inputMode="numeric"
+            placeholder="MM/YY"
+            value={expiry}
+            onChange={handleExpiryChange}
+            maxLength="5"
+            className={INPUT}
+          />
+        </Field>
+        <Field label="CVC">
+          <input
+            type="text"
+            required
+            inputMode="numeric"
+            placeholder="123"
+            value={cvc}
+            onChange={(e) => setCvc(e.target.value.replace(/\D/g, ''))}
+            maxLength="4"
+            className={INPUT}
+          />
+        </Field>
+      </div>
+    </>
+  );
+
+  const payButton = (
+    <button
+      type="submit"
+      form="checkout-form"
+      disabled={loading}
+      className="w-full bg-[#0066ff] hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl shadow-md hover:shadow-lg transition-all disabled:opacity-50 cursor-pointer"
+    >
+      {loading ? 'Processing...' : `Pay ${money(totalPrice)}`}
+    </button>
+  );
+
+  // ------------------------------------------------------------ page layout
+
+  if (isPage) {
+    // Leaving is blocked only while a payment is in flight.
+    const leaveThen = (action) => () => {
+      if (loading) return;
+      onHide();
+      action?.();
+    };
+
+    return createPortal(
+      <div className="fixed inset-0 z-[110] overflow-y-auto bg-gray-50 font-sans text-gray-900">
+        {navProps && (
+          <CustomerNav
+            {...navProps}
+            onLogoClick={leaveThen(navProps.onFlights)}
+            onFlights={leaveThen(navProps.onFlights)}
+            onDeals={leaveThen(navProps.onDeals)}
+            onMyTrips={leaveThen(navProps.onMyTrips)}
+            onAbout={leaveThen(navProps.onAbout)}
+            onSignIn={leaveThen(navProps.onSignIn)}
+            onToggleSidebar={leaveThen(navProps.onToggleSidebar)}
+          />
+        )}
+
+        <div className="max-w-6xl mx-auto px-4 sm:px-8 pt-8 pb-16">
+          <div className="flex flex-wrap items-center gap-4 mb-6">
+            {onBack && (
+              <button
+                type="button"
+                onClick={() => !loading && onBack()}
+                disabled={loading}
+                className="flex items-center gap-2 bg-white hover:bg-gray-100 border border-gray-200 text-sm font-semibold text-gray-700 px-4 py-2 rounded-full transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
+                </svg>
+                Back to seats
+              </button>
+            )}
+            <div>
+              <h1 className="text-2xl font-bold">{title}</h1>
+              <p className="text-sm text-gray-500">Nothing is booked or charged until you press Pay.</p>
+            </div>
+          </div>
+
+          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_24rem] items-start">
+            {/* Left: travelers + card */}
+            <form id="checkout-form" onSubmit={handlePayment} className="flex flex-col gap-6">
+              {errorBox}
+
+              {isBooking && (
+                <section className="bg-white rounded-3xl shadow-xl border border-gray-100 p-6">
+                  <h2 className="text-lg font-bold">Travelers</h2>
+                  <p className="text-xs text-gray-500 mb-4">
+                    {travelerCount} {travelerCount === 1 ? 'traveler' : 'travelers'} · names as they appear on ID
+                  </p>
+                  {passengerFields}
+                </section>
+              )}
+
+              <section className="bg-white rounded-3xl shadow-xl border border-gray-100 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-bold">Payment details</h2>
+                  <span className="flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-50 border border-green-100 rounded-full px-3 py-1">
+                    <LockIcon /> Secure
+                  </span>
+                </div>
+                <div className="flex flex-col gap-4">{cardFields}</div>
+              </section>
+            </form>
+
+            {/* Right: trip + price + pay */}
+            <aside className="lg:sticky lg:top-24 flex flex-col gap-6">
+              {trip.length > 0 && (
+                <section className="bg-white rounded-3xl shadow-xl border border-gray-100 p-6">
+                  <h2 className="text-lg font-bold mb-4">Your trip</h2>
+                  <ul className="space-y-4">
+                    {trip.map((leg) => (
+                      <li key={leg.label} className="border-b border-gray-100 last:border-0 pb-4 last:pb-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">{leg.label}</span>
+                          <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                            {leg.flightNumber}
+                          </span>
+                        </div>
+                        <p className="font-bold mt-1">{leg.route}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{leg.when}</p>
+                        <p className="text-xs text-gray-700 mt-1">
+                          {leg.cabin}
+                          {leg.fareClass ? ` · ${leg.fareClass}` : ''}
+                          {leg.seats && leg.seats.length > 0 ? ` · Seat ${leg.seats.join(', ')}` : ''}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              <section className="bg-white rounded-3xl shadow-xl border border-gray-100 p-6">
+                <h2 className="text-lg font-bold mb-4">Price Details</h2>
+                {priceLines.length > 0 && (
+                  <div className="space-y-3 text-sm mb-4">
+                    {priceLines.map((line) => (
+                      <div key={line.label} className="flex justify-between">
+                        <span className="text-gray-500">{line.label}</span>
+                        <span className="font-bold">{money(line.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="border-t border-dashed border-gray-200 pt-4 flex justify-between font-bold text-lg mb-6">
+                  <span>Total Price</span>
+                  <span>{money(totalPrice)}</span>
+                </div>
+                {payButton}
+                <p className="text-[11px] text-gray-400 text-center mt-3">
+                  Leaving this page cancels nothing — your booking is only made when payment goes through.
+                </p>
+              </section>
+            </aside>
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+  }
+
+  // ------------------------------------------------------------ popup layout
+
+  // Rendered on <body> so it always covers the whole page, including the
+  // site header (the homepage search sits inside a lower layer).
+  return createPortal(
     <div
       className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto"
       onClick={onHide}
@@ -202,105 +502,22 @@ export default function CheckoutModal({
 
         <div className="bg-blue-50 rounded-2xl p-4 mb-6 border border-blue-100 flex justify-between items-center">
           <span className="text-blue-800 font-semibold">Total to Pay</span>
-          <span className="text-2xl font-bold text-blue-700">${totalPrice.toFixed(2)}</span>
+          <span className="text-2xl font-bold text-blue-700">{money(totalPrice)}</span>
         </div>
 
-        {error && (
-          <p className="bg-red-50 border border-red-200 text-red-700 font-semibold rounded-2xl px-4 py-3 text-sm text-center mb-4">
-            {error}
-          </p>
-        )}
+        {errorBox && <div className="mb-4">{errorBox}</div>}
 
-        <form onSubmit={handlePayment} className="flex flex-col gap-4">
+        <form id="checkout-form" onSubmit={handlePayment} className="flex flex-col gap-4">
           {isBooking && (
-            <div>
-              <label className="text-xs font-semibold text-gray-600 mb-1 block">
-                Passengers ({travelerCount} {travelerCount === 1 ? 'traveler' : 'travelers'})
-              </label>
-              <div className="flex flex-col gap-2">
-                {passengers.map((p, i) => (
-                  <div key={i} className="grid grid-cols-2 gap-2">
-                    <input
-                      type="text"
-                      required
-                      placeholder={i === 0 ? 'First name (you)' : `Traveler ${i + 1} first name`}
-                      value={p.firstName}
-                      onChange={(e) => setPassenger(i, 'firstName', e.target.value.replace(/[^a-zA-Z\s'-]/g, ''))}
-                      className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl px-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                    />
-                    <input
-                      type="text"
-                      required
-                      placeholder={i === 0 ? 'Last name (you)' : `Traveler ${i + 1} last name`}
-                      value={p.lastName}
-                      onChange={(e) => setPassenger(i, 'lastName', e.target.value.replace(/[^a-zA-Z\s'-]/g, ''))}
-                      className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl px-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                    />
-                  </div>
-                ))}
-              </div>
-              <p className="text-[11px] text-gray-400 mt-1">Each traveler gets their own ticket.</p>
-            </div>
+            <Field label={`Passengers (${travelerCount} ${travelerCount === 1 ? 'traveler' : 'travelers'})`}>
+              {passengerFields}
+            </Field>
           )}
-          <div>
-            <label className="text-xs font-semibold text-gray-600 mb-1 block">Cardholder Name</label>
-            <input
-              type="text"
-              required
-              placeholder="John Doe"
-              value={name}
-              onChange={(e) => setName(e.target.value.replace(/[^a-zA-Z\s'-]/g, ''))}
-              className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl px-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            />
-          </div>
-          <div>
-            <label className="text-xs font-semibold text-gray-600 mb-1 block">Card Number</label>
-            <input
-              type="text"
-              required
-              placeholder="0000 0000 0000 0000"
-              value={cardNumber}
-              onChange={handleCardNumberChange}
-              maxLength="19"
-              className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl px-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-semibold text-gray-600 mb-1 block">Expiry</label>
-              <input
-                type="text"
-                required
-                placeholder="MM/YY"
-                value={expiry}
-                onChange={handleExpiryChange}
-                maxLength="5"
-                className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl px-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-600 mb-1 block">CVC</label>
-              <input
-                type="text"
-                required
-                placeholder="123"
-                value={cvc}
-                onChange={(e) => setCvc(e.target.value.replace(/\D/g, ''))}
-                maxLength="4"
-                className="w-full bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-2xl px-4 py-3 outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              />
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-[#0066ff] hover:bg-blue-700 text-white font-bold py-3.5 rounded-2xl mt-2 shadow-md hover:shadow-lg transition-all disabled:opacity-50 cursor-pointer"
-          >
-            {loading ? 'Processing...' : `Pay $${totalPrice.toFixed(2)}`}
-          </button>
+          {cardFields}
+          <div className="mt-2">{payButton}</div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
