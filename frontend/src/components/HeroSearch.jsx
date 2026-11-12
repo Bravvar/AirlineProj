@@ -730,7 +730,7 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
     openSeatSelection();
   };
 
-  const handlePaymentSuccess = (confirmationNumber, ticketNumber, ticketNumbers, passengerCount, tickets) => {
+  const handlePaymentSuccess = (confirmationNumber, ticketNumber, ticketNumbers, passengerCount, tickets, loyalty) => {
     setShowCheckoutModal(false);
     setBookingMessage(`Successfully booked! Confirmation #${confirmationNumber}`);
     setFaresByFlight({});
@@ -761,6 +761,10 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
         tickets: ticketsWithSeats,
         passengerCount: passengerCount || totalTravelers || 1,
         totalAmount: checkoutTotal,
+        // Points earned on this booking (shown under Show Ticket). Only set
+        // for a fresh booking, never when re-opening an old ticket.
+        justBooked: true,
+        loyalty: loyalty || null,
         flightNumber: bookedFlight?.flightNumber || '',
         origin: bookedFlight?.originAirportCode || from,
         destination: bookedFlight?.destinationAirportCode || to,

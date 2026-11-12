@@ -163,7 +163,7 @@ export default function CheckoutModal({
       }
 
       const data = JSON.parse(text);
-      onSuccess(data.confirmationNumber, data.ticketNumber, data.ticketNumbers || (data.ticketNumber ? [data.ticketNumber] : []), data.passengerCount || 1, data.tickets || null);
+      onSuccess(data.confirmationNumber, data.ticketNumber, data.ticketNumbers || (data.ticketNumber ? [data.ticketNumber] : []), data.passengerCount || 1, data.tickets || null, data.loyalty || null);
     } catch (error) {
       clearTimeout(timeoutId);
       if (error && error.name === 'AbortError') {

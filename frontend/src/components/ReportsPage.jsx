@@ -81,7 +81,7 @@ const FILTER_FIELDS = {
   minTickets: { label: 'Min. tickets sold', type: 'number', placeholder: 'e.g. 3', inputClass: 'w-28' },
   minRevenue: { label: 'Min. revenue', type: 'number', placeholder: 'e.g. 500', inputClass: 'w-28' },
   maxRevenue: { label: 'Max. revenue', type: 'number', placeholder: 'e.g. 5000', inputClass: 'w-28' },
-  tier: { label: 'Tier', type: 'select', options: ['', 'Gold', 'Silver', 'Bronze', 'Basic', 'Inactive'] },
+  tier: { label: 'Tier', type: 'select', options: ['', 'Gold', 'Silver', 'Bronze', 'Not Enrolled'] },
   membershipStatus: { label: 'Membership status', type: 'select', options: ['', 'Active', 'Inactive'] },
   minPoints: { label: 'Min. points', type: 'number', placeholder: 'e.g. 1000', inputClass: 'w-28' },
   transactionType: { label: 'Transaction type', type: 'select', options: ['', 'Payment', 'Refund'] },

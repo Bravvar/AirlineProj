@@ -68,9 +68,7 @@ export default function CancellationRequestsPanel({ token, onChanged, embedded =
         setError(`Refund cannot exceed the refundable balance of ${money(req.refundableAmount)}.`);
         return;
       }
-      if (!window.confirm(
-        `Approve cancellation for ${req.confirmationNumber} and refund ${money(amount)}? This cancels the booking.`
-      )) return;
+      // No browser confirm: clicking "Approve & Refund" approves immediately.
       body = { amount, notes: (notes[id] || '').trim() || null };
     }
 

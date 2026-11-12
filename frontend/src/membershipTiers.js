@@ -1,28 +1,25 @@
-// Membership tier rules for the Coog10 loyalty program.
-//
+
 // Status Points (SP) decide the tier; they are never spent.
 // Redeemable Points (RP) are the spendable balance.
-// The backend currently stores one balance (MembershipAccount.points_balance),
-// so the UI uses that number as the member's Status Points until a separate
-// SP column exists.
+
 
 export const SP_PER_DOLLAR = 5;
 export const RP_VALUE_CENTS = 1; // 100 RP = $1
 
 export const TIERS = [
   {
-    id: 'basic',
-    name: 'Basic',
+    id: 'bronze',
+    name: 'Bronze',
     minPoints: 0,
     howToGet: 'Free, automatic when you sign up',
     tagline: 'Start earning from your first flight.',
     rpMultiplier: 1,
     accent: {
-      text: 'text-slate-700',
-      badge: 'bg-slate-100 text-slate-700',
-      ring: 'ring-slate-200',
-      bar: 'bg-slate-400',
-      card: 'from-slate-50 to-white',
+      text: 'text-orange-800',
+      badge: 'bg-gradient-to-r from-orange-200 to-amber-100 text-orange-900',
+      ring: 'ring-orange-200',
+      bar: 'bg-gradient-to-r from-orange-700 to-amber-500',
+      card: 'from-orange-50 to-white',
     },
     benefits: [
       'Earn SP and RP on every qualifying flight',
