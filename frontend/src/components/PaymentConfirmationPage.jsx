@@ -1,8 +1,355 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Logo from './Logo';
-import TicketCarousel from './TicketCarousel';
-import PointsEarnedCard from './PointsEarnedCard';
+import { API_URL } from '../config';
+import { getTierForPoints, getTierProgress } from '../membershipTiers';
 
+// ---------------------------------------------------------------------------
+// E-ticket: one passenger's ticket
+// ---------------------------------------------------------------------------
+// Barcode bar widths come from the ticket number, so each ticket looks different
+// but the same ticket always draws the same barcode.
+function barcodeWidths(seed, count = 40) {
+  let h = 0;
+  for (const ch of String(seed || 'TICKET')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return Array.from({ length: count }, (_, i) => {
+    h = (h * 1103515245 + 12345 + i) >>> 0;
+    return [1, 2, 4, 1, 3][h % 5];
+  });
+}
+
+function PlaneLine() {
+  return (
+    <div className="w-full flex items-center gap-2">
+      <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+      <div className="flex-1 border-t-2 border-dashed border-gray-300" />
+      <svg className="w-5 h-5 text-blue-600 transform rotate-45" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+      </svg>
+      <div className="flex-1 border-t-2 border-dashed border-gray-300" />
+      <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+    </div>
+  );
+}
+
+function ETicketCard({ ticket, details }) {
+  const code = ticket.ticketNumber || details.confirmationNumber;
+
+  return (
+    <div className="border border-gray-200 rounded-2xl p-5 bg-white">
+      <div className="flex justify-between items-center mb-8 pb-6 border-b border-gray-100">
+        <div className="min-w-0">
+          <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider mb-1">Passenger</p>
+          <p className="font-bold text-gray-900 truncate max-w-[150px]">{ticket.passengerName}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider mb-1">Confirmation</p>
+          <p className="font-mono font-bold text-gray-900">{details.confirmationNumber}</p>
+        </div>
+      </div>
+
+      <div className="flex justify-between items-center mb-8">
+        <div className="text-center w-1/3">
+          <p className="text-xs text-gray-400 font-bold mb-1">From</p>
+          <p className="text-4xl font-extrabold text-gray-900">{details.origin || 'ORG'}</p>
+          <p className="text-sm font-semibold text-gray-600 mt-1">{details.departureTime || '00:00'}</p>
+        </div>
+        <div className="flex-1 px-4 flex flex-col items-center">
+          <PlaneLine />
+        </div>
+        <div className="text-center w-1/3">
+          <p className="text-xs text-gray-400 font-bold mb-1">To</p>
+          <p className="text-4xl font-extrabold text-gray-900">{details.destination || 'DST'}</p>
+          <p className="text-sm font-semibold text-gray-600 mt-1">{details.arrivalTime || '00:00'}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4 bg-gray-50 rounded-2xl p-4 border border-gray-100 mb-8">
+        <div>
+          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Seat</p>
+          <p className="text-sm font-bold text-gray-900">{ticket.seatNumber || '—'}</p>
+        </div>
+        <div>
+          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Gate</p>
+          <p className="text-sm font-bold text-gray-900">{details.gate || 'TBA'}</p>
+        </div>
+        <div>
+          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Boarding</p>
+          <p className="text-sm font-bold text-gray-900">{details.boardingTime || '07:10'}</p>
+        </div>
+      </div>
+
+      {/* Barcode */}
+      <div className="bg-white p-4 rounded-xl border border-gray-200 flex flex-col items-center justify-center relative overflow-hidden">
+        <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-[#f8f9fc] rounded-full shadow-inner border-r border-gray-200" />
+        <div className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-[#f8f9fc] rounded-full shadow-inner border-l border-gray-200" />
+        <div className="flex w-full h-16 mb-2 justify-center overflow-hidden items-stretch opacity-80">
+          {barcodeWidths(code).map((w, i) => (
+            <div
+              key={i}
+              className="bg-black"
+              style={{ width: `${w}px`, height: '100%', marginRight: `${i % 4 === 0 ? 3 : 1}px` }}
+            />
+          ))}
+        </div>
+        <p className="text-[10px] font-mono tracking-widest text-gray-500 mt-1">{code}</p>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Ticket viewer: one ticket at a time, arrows + "Ticket X of N"
+// ---------------------------------------------------------------------------
+// Arrows (or ← / → keys, or the dots) move between tickets.
+
+function ArrowButton({ direction, disabled, onClick }) {
+  const isPrev = direction === 'prev';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={isPrev ? 'Previous ticket' : 'Next ticket'}
+      className={`absolute top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white border border-gray-200 shadow-lg
+        flex items-center justify-center text-gray-700 transition-all cursor-pointer
+        hover:bg-[#0066ff] hover:text-white hover:border-[#0066ff] hover:scale-105
+        disabled:opacity-0 disabled:pointer-events-none
+        ${isPrev ? 'left-2 sm:left-0 sm:-translate-x-1/2' : 'right-2 sm:right-0 sm:translate-x-1/2'}`}
+    >
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d={isPrev ? 'M15 19l-7-7 7-7' : 'M9 5l7 7-7 7'} />
+      </svg>
+    </button>
+  );
+}
+
+function TicketCarousel({ tickets, details, airlineCode, airlineName, onClose }) {
+  const [index, setIndex] = useState(0);
+  const total = tickets.length;
+  const multiple = total > 1;
+
+  const go = useCallback(
+    (step) => setIndex((i) => Math.min(total - 1, Math.max(0, i + step))),
+    [total]
+  );
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft') go(-1);
+      if (e.key === 'ArrowRight') go(1);
+    };
+    window.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [go, onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="E-ticket"
+        className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl animate-in zoom-in-95 duration-200 my-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header / airline brand */}
+        <div className="relative bg-slate-900 rounded-t-3xl p-6 pb-8 overflow-hidden">
+          <div className="absolute inset-0 bg-cover bg-center opacity-30" style={{ backgroundImage: "url('/landscapes/europe.jpg')" }} />
+          <div className="relative z-10 flex justify-between items-start">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-slate-900 font-extrabold shadow-sm">
+                {airlineCode || '--'}
+              </div>
+              <div>
+                <p className="font-bold text-white text-sm">{airlineName}</p>
+                <p className="text-xs font-semibold text-white/70">E-Ticket Receipt</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {multiple && (
+                <span className="px-3 py-1 rounded-full bg-white/20 text-white text-xs font-bold" aria-live="polite">
+                  Ticket {index + 1} of {total}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close"
+                className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Ticket track: one ticket visible, slides left/right */}
+        <div className="relative">
+          <div className="overflow-hidden">
+            <div
+              className="flex transition-transform duration-300 ease-out"
+              style={{ transform: `translateX(-${index * 100}%)` }}
+            >
+              {tickets.map((t, i) => (
+                <div
+                  key={t.ticketNumber || `${t.passengerName}-${i}`}
+                  className="w-full flex-shrink-0 p-6"
+                  aria-hidden={i !== index}
+                >
+                  <ETicketCard ticket={t} details={details} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {multiple && (
+            <>
+              <ArrowButton direction="prev" disabled={index === 0} onClick={() => go(-1)} />
+              <ArrowButton direction="next" disabled={index === total - 1} onClick={() => go(1)} />
+            </>
+          )}
+        </div>
+
+        {/* Position indicator */}
+        {multiple && (
+          <div className="px-6 pb-6 -mt-2 flex flex-col items-center gap-2">
+            <div className="flex items-center gap-2">
+              {tickets.map((t, i) => (
+                <button
+                  key={t.ticketNumber || `dot-${i}`}
+                  type="button"
+                  onClick={() => setIndex(i)}
+                  aria-label={`Show ticket ${i + 1}`}
+                  className={`h-2 rounded-full transition-all cursor-pointer ${
+                    i === index ? 'w-6 bg-[#0066ff]' : 'w-2 bg-gray-300 hover:bg-gray-400'
+                  }`}
+                />
+              ))}
+            </div>
+            <p className="text-xs font-semibold text-gray-500">
+              {tickets[index]?.passengerName} · Passenger {index + 1} of {total}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Points Earned box (under Show Ticket)
+// ---------------------------------------------------------------------------
+// Rule: 1 point for every whole dollar of the flight price ($20 -> 20 points).
+//
+// Props
+//   totalAmount  flight price paid for this booking
+//   loyalty      optional, from the booking response: { pointsEarned, pointsBalance, membershipStatus }
+//   account      optional, from GET /api/loyalty/mine: { pointsBalance, membershipStatus }
+//   justBooked   true right after paying; false when re-opening an older booking
+//   onViewLoyalty  optional, shows a "View My Rewards" button
+
+const POINTS_PER_DOLLAR = 1;
+
+function pointsForPrice(amount) {
+  return Math.max(0, Math.floor((Number(amount) || 0) * POINTS_PER_DOLLAR));
+}
+
+function PointsEarnedCard({ totalAmount, loyalty, account, justBooked = true, onViewLoyalty }) {
+  const status = loyalty?.membershipStatus ?? account?.membershipStatus ?? null;
+  const inactive = Boolean(status) && status !== 'Active';
+  const earned = inactive ? 0 : pointsForPrice(totalAmount);
+
+  const rawBalance = loyalty?.pointsBalance ?? account?.pointsBalance;
+  const balance = justBooked && rawBalance != null ? Number(rawBalance) || 0 : null;
+  const tier = balance != null ? getTierForPoints(balance) : null;
+  const progress = balance != null ? getTierProgress(balance) : null;
+
+  return (
+    <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-6">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-bold text-gray-900">Points Earned</h3>
+          <p className="text-xs text-gray-500 mt-0.5">Coog10 Rewards · 1 point per $1</p>
+        </div>
+        {tier && (
+          <span className={`px-3 py-1 rounded-full text-xs font-bold ${tier.accent.badge}`}>{tier.name}</span>
+        )}
+      </div>
+
+      <div className="mt-5 flex items-center gap-4 bg-blue-50 rounded-2xl p-4 border border-blue-100">
+        <div className="w-12 h-12 rounded-2xl bg-[#0066ff] text-white flex items-center justify-center flex-shrink-0 shadow-md">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 2l2.9 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14l-5-4.87 7.1-1.01L12 2z" />
+          </svg>
+        </div>
+        <div>
+          <p className="text-3xl font-extrabold text-blue-900 leading-none">
+            +{earned.toLocaleString()}
+            <span className="text-sm font-bold text-blue-700 ml-1">pts</span>
+          </p>
+          <p className="text-xs font-semibold text-blue-700 mt-1">
+            {justBooked ? 'Added to your account' : 'Earned on this booking'} · ${Number(totalAmount || 0).toFixed(2)} flight
+          </p>
+        </div>
+      </div>
+
+      {inactive && (
+        <p className="mt-4 text-xs font-semibold text-red-600 bg-red-50 border border-red-100 rounded-xl p-3">
+          Your membership is {status}, so this booking did not earn points.
+        </p>
+      )}
+
+      {balance != null && (
+        <div className="mt-5">
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-500">New balance</span>
+            <span className="font-bold text-gray-900">{balance.toLocaleString()} pts</span>
+          </div>
+          <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden mt-3">
+            <div
+              className={`h-full rounded-full transition-all duration-700 ${tier.accent.bar}`}
+              style={{ width: `${progress.percent}%` }}
+            />
+          </div>
+          <p className="text-xs text-gray-500 mt-2">
+            {progress.next ? (
+              <>
+                <span className="font-bold text-gray-900">{progress.remaining.toLocaleString()}</span> points to{' '}
+                <span className="font-bold text-gray-900">{progress.next.name}</span>
+              </>
+            ) : (
+              <span className="font-bold text-gray-900">Top tier reached</span>
+            )}
+          </p>
+        </div>
+      )}
+
+      {onViewLoyalty && (
+        <button
+          type="button"
+          onClick={onViewLoyalty}
+          className="w-full mt-5 bg-white border border-gray-300 text-gray-700 font-semibold py-3 rounded-2xl hover:bg-gray-50 transition-colors cursor-pointer"
+        >
+          View My Rewards
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 export default function PaymentConfirmationPage({ 
   details, 
   onNavigate, 
@@ -11,10 +358,30 @@ export default function PaymentConfirmationPage({
   onSignOut
 }) {
   const [showTicket, setShowTicket] = useState(false);
+  const [account, setAccount] = useState(null);
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
+
+  // Right after a booking, load the member's balance so the points box can
+  // show the new total and tier progress. Skipped when the booking response
+  // already included it, and when re-opening an older booking.
+  const needsAccount = Boolean(details?.justBooked && !details?.loyalty && auth?.token);
+  useEffect(() => {
+    if (!needsAccount) return undefined;
+    const controller = new AbortController();
+    fetch(`${API_URL}/api/loyalty/mine`, {
+      headers: { Authorization: `Bearer ${auth.token}` },
+      signal: controller.signal,
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && data.enrolled !== false) setAccount(data);
+      })
+      .catch(() => { /* balance is optional; the earned points still show */ });
+    return () => controller.abort();
+  }, [needsAccount, auth?.token]);
 
   if (!details) return null;
 
@@ -243,15 +610,14 @@ export default function PaymentConfirmationPage({
               </button>
             </div>
 
-            {/* Points earned on this purchase (fresh bookings only) */}
-            {details.justBooked && (
-              <PointsEarnedCard
-                loyalty={details.loyalty}
-                totalAmount={details.totalAmount}
-                passengerCount={details.passengerCount || ticketList.length}
-                onViewLoyalty={() => onNavigate('loyalty')}
-              />
-            )}
+            {/* Points earned on this flight: 1 point per $1 */}
+            <PointsEarnedCard
+              totalAmount={details.totalAmount}
+              loyalty={details.loyalty}
+              account={account}
+              justBooked={Boolean(details.justBooked)}
+              onViewLoyalty={auth?.token ? () => onNavigate('loyalty') : undefined}
+            />
           </div>
 
         </div>

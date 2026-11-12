@@ -1,7 +1,39 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { API_URL } from '../config';
 
 const FILTERS = ['Pending', 'Approved', 'Rejected', 'All'];
+
+// Show at most this many rows of request cards; the rest scroll inside the list.
+const MAX_VISIBLE_ROWS = 2;
+
+// Caps the grid's height at the bottom of row MAX_VISIBLE_ROWS. Works for both
+// the 1-column (mobile) and 2-column (desktop) layouts and re-measures when a
+// card changes size (typing, approve/reject, window resize).
+function useMaxRows(gridRef, deps) {
+  useLayoutEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return undefined;
+
+    const measure = () => {
+      const cols = getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length || 1;
+      const limit = cols * MAX_VISIBLE_ROWS;
+      const cards = grid.children;
+      if (cards.length <= limit) {
+        grid.style.maxHeight = '';
+        return;
+      }
+      const lastVisible = cards[limit - 1];
+      grid.style.maxHeight = `${lastVisible.offsetTop + lastVisible.offsetHeight}px`;
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(grid);
+    Array.from(grid.children).forEach((card) => observer.observe(card));
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+}
 
 const money = (value) =>
   value == null ? '—' : `$${Number(value).toFixed(2)}`;
@@ -128,6 +160,9 @@ export default function CancellationRequestsPanel({ token, onChanged, embedded =
     return statusOk && searchOk;
   });
 
+  const gridRef = useRef(null);
+  useMaxRows(gridRef, [shown.length, filter, query]);
+
   return (
     <div className={embedded ? 'space-y-5' : 'bg-white rounded-3xl border border-gray-100 p-6 shadow-sm space-y-5'}>
       <div className="flex flex-wrap justify-between gap-4 items-center">
@@ -184,7 +219,10 @@ export default function CancellationRequestsPanel({ token, onChanged, embedded =
           {loading ? 'Loading requests...' : filter === 'Pending' ? 'No requests waiting for review.' : 'No matching requests.'}
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div
+          ref={gridRef}
+          className="relative grid grid-cols-1 lg:grid-cols-2 gap-5 overflow-y-auto pr-1 -mr-1 overscroll-contain"
+        >
           {shown.map((req) => {
             const pending = req.requestStatus === 'Pending';
             const busy = busyId !== null;

@@ -3,15 +3,43 @@ import { API_URL } from '../config';
 import CheckoutModal from './CheckoutModal';
 import SeatSelectionModal from './SeatSelectionModal';
 
+
+// A different landscape photo for each deal card.
+// Destinations with a matching photo get it; the rest get one from the pool
+// (same route -> same photo), skipping any photo already used in the list.
+const IMG = (name) => `/landscapes/${name}.jpg`;
 const DEAL_IMG = {
-  DEL: '/landscapes/india.jpg',
-  AKL: '/landscapes/new zea.jpg',
-  SYD: '/landscapes/ausi.jpg',
-  FCO: '/landscapes/italy.jpg',
-  HND: '/landscapes/japan.jpg',
-  LIM: '/landscapes/peru.jpg',
+  SFO: IMG('san fran'), LAX: IMG('cali'), SAN: IMG('cali'), SJC: IMG('cali'),
+  LHR: IMG('england'), NRT: IMG('japan'), HND: IMG('japan'), SYD: IMG('ausi'),
+  FCO: IMG('italy'), DEL: IMG('india'), AKL: IMG('new zea'), LIM: IMG('peru'),
+  PEK: IMG('china'), PVG: IMG('china'), MNL: IMG('philippines'), SGN: IMG('vietnam'),
+  HAN: IMG('vietnam'), SVO: IMG('russia'), SJD: IMG('cabo'), CUN: IMG('cabo'),
 };
-const FALLBACK_IMG = '/landscapes/europe.jpg';
+const IMG_POOL = [
+  'europe', 'cabo', 'new zea', 'peru', 'vietnam', 'italy', 'philippines',
+  'japan', 'india', 'england', 'russia', 'china', 'ausi', 'cali', 'san fran',
+].map(IMG);
+
+function pickDealImages(deals) {
+  const used = new Set();
+  return deals.map((deal) => {
+    const code = (deal.destination || '').toUpperCase();
+    if (DEAL_IMG[code] && !used.has(DEAL_IMG[code])) {
+      used.add(DEAL_IMG[code]);
+      return DEAL_IMG[code];
+    }
+    let h = 0;
+    for (const ch of code + (deal.origin || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    for (let step = 0; step < IMG_POOL.length; step++) {
+      const img = IMG_POOL[(h + step) % IMG_POOL.length];
+      if (!used.has(img)) {
+        used.add(img);
+        return img;
+      }
+    }
+    return IMG_POOL[h % IMG_POOL.length];
+  });
+}
 
 export default function DealsSection({ onSeeAll, onSignIn, onBooked }) {
   const [deals, setDeals] = useState([]);
@@ -64,7 +92,7 @@ export default function DealsSection({ onSeeAll, onSignIn, onBooked }) {
     setShowCheckoutModal(true);
   };
 
-  const handlePaymentSuccess = (confirmationNumber, ticketNumber) => {
+  const handlePaymentSuccess = (confirmationNumber, ticketNumber, ticketNumbers, passengerCount, tickets, loyalty) => {
     const deal = selectedDeal;
     setShowCheckoutModal(false);
     setSelectedDeal(null);
@@ -76,7 +104,15 @@ export default function DealsSection({ onSeeAll, onSignIn, onBooked }) {
         email: sessionStorage.getItem('email'),
         confirmationNumber: confirmationNumber,
         ticketNumber: ticketNumber,
+        ticketNumbers: Array.isArray(ticketNumbers) && ticketNumbers.length > 0 ? ticketNumbers : (ticketNumber ? [ticketNumber] : []),
+        tickets: Array.isArray(tickets)
+          ? tickets.map((t) => ({ ...t, seatNumber: selectedSeatNumber || '—' }))
+          : null,
+        passengerCount: passengerCount || 1,
         totalAmount: checkoutTotal,
+        // Shows the Points Earned box on the confirmation page.
+        justBooked: true,
+        loyalty: loyalty || null,
         flightNumber: deal.flightNumber,
         origin: deal.origin,
         destination: deal.destination,
@@ -141,6 +177,9 @@ export default function DealsSection({ onSeeAll, onSignIn, onBooked }) {
     };
   }, []);
 
+  // A different photo for each card.
+  const dealImages = pickDealImages(deals);
+
   return (
     <div className="max-w-6xl mx-auto py-16 px-4">
       <div className="flex justify-between items-end mb-8">
@@ -170,7 +209,7 @@ export default function DealsSection({ onSeeAll, onSignIn, onBooked }) {
             >
               <div className="relative h-48 overflow-hidden bg-gray-100">
                 <img
-                  src={DEAL_IMG[deal.destination] || FALLBACK_IMG}
+                  src={dealImages[idx]}
                   alt={`${deal.origin} to ${deal.destination}`}
                   className="w-full h-full object-cover"
                 />

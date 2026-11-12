@@ -2,7 +2,6 @@
 // Status Points (SP) decide the tier; they are never spent.
 // Redeemable Points (RP) are the spendable balance.
 
-
 export const SP_PER_DOLLAR = 5;
 export const RP_VALUE_CENTS = 1; // 100 RP = $1
 

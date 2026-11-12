@@ -23,6 +23,14 @@ const BACKGROUNDS = [
   { src: '/landscapes/peru.jpg', name: 'Andes Mountains, Peru' },
 ];
 
+// Stats strip under the home hero (same as the About page).
+const HOME_STATS = [
+  { value: '15+', label: 'Destinations' },
+  { value: '4', label: 'Continents' },
+  { value: '24/7', label: 'Customer support' },
+  { value: '3', label: 'Membership tiers' },
+];
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('flights');
   const [showSignIn, setShowSignIn] = useState(false);
@@ -354,68 +362,113 @@ export default function App() {
     );
   }
 
+  // Home page: same layout as the About page for every visitor — white
+  // header, rounded image hero (backgrounds still rotate) and a stats strip.
   return (
-    <div className="min-h-screen bg-white font-sans p-4">
-      <div className="relative min-h-[calc(100vh-2rem)] pb-12 flex flex-col">
-        <div className="absolute inset-0 rounded-[2.5rem] overflow-hidden shadow-2xl pointer-events-none z-0">
-          <div
-            className="w-full h-full bg-cover bg-center transition-all duration-1000 ease-in-out"
-            style={{ backgroundImage: `url(${currentBg.src})` }}
-          >
-            <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60 transition-opacity duration-1000"></div>
+    <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
+      <CustomerNav
+        variant="solid"
+        activeTab="flights"
+        auth={auth}
+        onLogoClick={() => goHome()}
+        onFlights={() => goHome('flights')}
+        onMyTrips={() => setCurrentPage('trips')}
+        onAbout={() => setCurrentPage('about')}
+        onSignIn={() => setShowSignIn(true)}
+        onToggleSidebar={() => setShowSidebar(true)}
+      />
+
+      <section className="p-4">
+        <div className="relative rounded-[2.5rem] shadow-2xl">
+          {/* Background photos, clipped to the rounded card. Content is not
+              clipped, so search dropdowns can extend past the card. */}
+          <div className="absolute inset-0 rounded-[2.5rem] overflow-hidden pointer-events-none">
+            {BACKGROUNDS.map((bg, i) => (
+              <div
+                key={bg.src}
+                className={`absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ease-in-out ${
+                  i === bgIndex ? 'opacity-100' : 'opacity-0'
+                }`}
+                style={{ backgroundImage: `url("${bg.src}")` }}
+              />
+            ))}
+            <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/60" />
           </div>
-        </div>
 
-        <CustomerNav
-          variant="overlay"
-          activeTab={null}
-          showFlightsTab={false}
-          auth={auth}
-          onLogoClick={() => goHome()}
-          onMyTrips={() => setCurrentPage('trips')}
-          onAbout={() => setCurrentPage('about')}
-          onSignIn={() => setShowSignIn(true)}
-          onToggleSidebar={() => setShowSidebar(true)}
-        />
-
-        {accountDeletedNotice && !auth.token && (
-          <div className="relative z-30 mx-auto mt-2 w-full max-w-3xl px-4">
-            <div className="flex items-center justify-between gap-4 bg-white/95 backdrop-blur-md rounded-2xl shadow-lg px-5 py-4">
-              <p className="text-sm text-gray-700">
-                <span className="font-bold text-gray-900">Your account has been deleted.</span>{' '}
-                Sign in or create a new account to book flights.
+          <div className="relative z-30 px-4 pt-16 md:pt-20 pb-24 flex flex-col items-center">
+            <div className="text-center text-white max-w-3xl mx-auto mb-8">
+              <span className="inline-block bg-white/15 border border-white/25 backdrop-blur-md text-xs font-bold uppercase tracking-wider px-4 py-1.5 rounded-full">
+                Coog10 Airlines
+              </span>
+              <h1 className="text-4xl md:text-5xl font-bold mt-5 leading-tight">Where would you like to go?</h1>
+              <p className="text-white/85 mt-4 text-lg">
+                Search flights, pick your seat and earn a point for every dollar you fly.
               </p>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                  onClick={() => setShowSignIn(true)}
-                  className="bg-[#0066ff] hover:bg-blue-700 text-white font-bold text-sm px-5 py-2 rounded-full cursor-pointer"
-                >
-                  Sign In
-                </button>
-                <button
-                  onClick={() => setAccountDeletedNotice(false)}
-                  aria-label="Dismiss"
-                  className="text-gray-400 hover:text-gray-700 text-2xl leading-none px-1 cursor-pointer"
-                >
-                  &times;
-                </button>
+            </div>
+
+            {accountDeletedNotice && !auth.token && (
+              <div className="relative z-30 mx-auto mt-2 w-full max-w-3xl px-4">
+                <div className="flex items-center justify-between gap-4 bg-white/95 backdrop-blur-md rounded-2xl shadow-lg px-5 py-4">
+                  <p className="text-sm text-gray-700">
+                    <span className="font-bold text-gray-900">Your account has been deleted.</span>{' '}
+                    Sign in or create a new account to book flights.
+                  </p>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => setShowSignIn(true)}
+                      className="bg-[#0066ff] hover:bg-blue-700 text-white font-bold text-sm px-5 py-2 rounded-full cursor-pointer"
+                    >
+                      Sign In
+                    </button>
+                    <button
+                      onClick={() => setAccountDeletedNotice(false)}
+                      aria-label="Dismiss"
+                      className="text-gray-400 hover:text-gray-700 text-2xl leading-none px-1 cursor-pointer"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                </div>
               </div>
+            )}
+
+            <div id="flight-search" className="relative z-30 flex flex-col items-center w-full">
+              <HeroSearch
+                activeTab={activeTab}
+                setActiveTab={handleTabChange}
+                onSignIn={() => setShowSignIn(true)}
+                onBooked={handleBooked}
+              />
             </div>
           </div>
-        )}
 
-        <div
-          id="flight-search"
-          className="relative z-30 flex-grow flex flex-col justify-start items-center px-4 w-full mt-4"
-        >
-          <HeroSearch
-            activeTab={activeTab}
-            setActiveTab={handleTabChange}
-            onSignIn={() => setShowSignIn(true)}
-            onBooked={handleBooked}
-          />
+          {/* Which photo is showing */}
+          <div className="absolute left-8 bottom-16 z-20 hidden md:flex items-center gap-3 pointer-events-none">
+            <span className="bg-white/15 border border-white/25 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full">
+              {currentBg.name}
+            </span>
+            <div className="flex gap-1.5">
+              {BACKGROUNDS.map((bg, i) => (
+                <span
+                  key={bg.src}
+                  className={`h-1.5 rounded-full transition-all duration-500 ${i === bgIndex ? 'w-5 bg-white' : 'w-1.5 bg-white/50'}`}
+                />
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
+      </section>
+
+      <section className="max-w-6xl mx-auto px-4 -mt-12 relative z-20">
+        <div className="bg-white rounded-3xl border border-gray-200 shadow-[0_4px_20px_rgb(0,0,0,0.08)] grid grid-cols-2 md:grid-cols-4 divide-x divide-gray-100">
+          {HOME_STATS.map((stat) => (
+            <div key={stat.label} className="py-8 text-center">
+              <p className="text-3xl font-bold text-[#0066ff]">{stat.value}</p>
+              <p className="text-sm text-gray-500 font-medium mt-1">{stat.label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <DealsSection
         onSeeAll={() => setCurrentPage('deals')}
