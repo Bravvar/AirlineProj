@@ -1358,6 +1358,7 @@ public class HomeController : ControllerBase
         f.origin_airport_code AS Origin,
         f.destination_airport_code AS Destination,
         f.flight_status AS FlightStatus,
+        CONCAT(DATE_FORMAT(f.departure_date, '%Y-%m-%d'), ' ', TIME_FORMAT(f.departure_time, '%H:%i')) AS Departure,
         COUNT(DISTINCT CASE
             WHEN t.ticket_id IS NOT NULL
              AND rs.segment_status <> 'Cancelled'
@@ -1368,7 +1369,27 @@ public class HomeController : ControllerBase
              AND rs.segment_status <> 'Cancelled'
             THEN rs.fare_price_at_booking
             ELSE 0
-        END), 0.00) AS Revenue
+        END), 0.00) AS Revenue,
+        CAST((SELECT COALESCE(SUM(ff.allocated_capacity), 0)
+                FROM FlightFare ff
+               WHERE ff.flight_id = f.flight_id) AS SIGNED) AS Capacity,
+        ROUND(100.0 * COUNT(DISTINCT CASE
+            WHEN t.ticket_id IS NOT NULL
+             AND rs.segment_status <> 'Cancelled'
+            THEN t.ticket_id
+        END) / NULLIF((SELECT SUM(ff2.allocated_capacity)
+                         FROM FlightFare ff2
+                        WHERE ff2.flight_id = f.flight_id), 0), 1) AS LoadFactor,
+        ROUND(COALESCE(SUM(CASE
+            WHEN t.ticket_id IS NOT NULL
+             AND rs.segment_status <> 'Cancelled'
+            THEN rs.fare_price_at_booking
+            ELSE 0
+        END), 0) / NULLIF(COUNT(DISTINCT CASE
+            WHEN t.ticket_id IS NOT NULL
+             AND rs.segment_status <> 'Cancelled'
+            THEN t.ticket_id
+        END), 0), 2) AS AvgFare
     FROM Flight f
     LEFT JOIN ReservationSegment rs
         ON rs.flight_id = f.flight_id
@@ -1382,7 +1403,10 @@ public class HomeController : ControllerBase
         f.flight_id,
         f.flight_number,
         f.origin_airport_code,
-        f.destination_airport_code
+        f.destination_airport_code,
+        f.flight_status,
+        f.departure_date,
+        f.departure_time
     " + r1HavingSql + @"
     ORDER BY Revenue DESC",
       r1Args.ToArray()).ToList();
@@ -1772,7 +1796,7 @@ public record AddFlightPayload(string flightNumber, string origin, string destin
 public record AddFarePayload(int cabinClassId, int fareClassId, decimal price, int allocatedCapacity);
 
 
-public class Report1Row { public string FlightNumber { get; set; } public string Origin { get; set; } public string Destination { get; set; } public string FlightStatus { get; set; } public long TicketsSold { get; set; } public decimal Revenue { get; set; } }
+public class Report1Row { public string FlightNumber { get; set; } public string Origin { get; set; } public string Destination { get; set; } public string FlightStatus { get; set; } public string? Departure { get; set; } public long TicketsSold { get; set; } public decimal Revenue { get; set; } public long Capacity { get; set; } public decimal? LoadFactor { get; set; } public decimal? AvgFare { get; set; } }
 public class Report2Row { public int PassengerId { get; set; } public string Passenger { get; set; } public string Email { get; set; } public string? MembershipNumber { get; set; } public int? PointsBalance { get; set; } public string? MembershipStatus { get; set; } public string Tier { get; set; } }
 public class Report3Row { public string ConfirmationNumber { get; set; } public string TransactionReference { get; set; } public string TransactionType { get; set; } public decimal Amount { get; set; } public string PaymentStatus { get; set; } public string ProcessedBy { get; set; } public string? EmployeeRole { get; set; } public DateTime PaymentDateTime { get; set; } }
 public class Report4Row { public string FlightNumber { get; set; } public string FlightStatus { get; set; } public string CabinName { get; set; } public int FareClassId { get; set; } public int AvailableInventory { get; set; } public int AllocatedCapacity { get; set; } public decimal PctFull { get; set; } }
