@@ -23,14 +23,6 @@ const BACKGROUNDS = [
   { src: '/landscapes/peru.jpg', name: 'Andes Mountains, Peru' },
 ];
 
-// Stats strip under the home hero (same as the About page).
-const HOME_STATS = [
-  { value: '15+', label: 'Destinations' },
-  { value: '4', label: 'Continents' },
-  { value: '24/7', label: 'Customer support' },
-  { value: '3', label: 'Membership tiers' },
-];
-
 export default function App() {
   const [activeTab, setActiveTab] = useState('flights');
   const [showSignIn, setShowSignIn] = useState(false);
@@ -363,7 +355,7 @@ export default function App() {
   }
 
   // Home page: same layout as the About page for every visitor — white
-  // header, rounded image hero (backgrounds still rotate) and a stats strip.
+  // header, rounded image hero (backgrounds still rotate).
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
       <CustomerNav
@@ -395,7 +387,7 @@ export default function App() {
             <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/60" />
           </div>
 
-          <div className="relative z-30 px-4 pt-16 md:pt-20 pb-24 flex flex-col items-center">
+          <div className="relative z-30 px-4 pt-16 md:pt-20 pb-16 flex flex-col items-center">
             <div className="text-center text-white max-w-3xl mx-auto mb-8">
               <span className="inline-block bg-white/15 border border-white/25 backdrop-blur-md text-xs font-bold uppercase tracking-wider px-4 py-1.5 rounded-full">
                 Coog10 Airlines
@@ -443,7 +435,7 @@ export default function App() {
           </div>
 
           {/* Which photo is showing */}
-          <div className="absolute left-8 bottom-16 z-20 hidden md:flex items-center gap-3 pointer-events-none">
+          <div className="absolute left-8 bottom-6 z-20 hidden md:flex items-center gap-3 pointer-events-none">
             <span className="bg-white/15 border border-white/25 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full">
               {currentBg.name}
             </span>
@@ -456,17 +448,6 @@ export default function App() {
               ))}
             </div>
           </div>
-        </div>
-      </section>
-
-      <section className="max-w-6xl mx-auto px-4 -mt-12 relative z-20">
-        <div className="bg-white rounded-3xl border border-gray-200 shadow-[0_4px_20px_rgb(0,0,0,0.08)] grid grid-cols-2 md:grid-cols-4 divide-x divide-gray-100">
-          {HOME_STATS.map((stat) => (
-            <div key={stat.label} className="py-8 text-center">
-              <p className="text-3xl font-bold text-[#0066ff]">{stat.value}</p>
-              <p className="text-sm text-gray-500 font-medium mt-1">{stat.label}</p>
-            </div>
-          ))}
         </div>
       </section>
 
