@@ -37,6 +37,9 @@ export default function CustomerNav({
   onAbout,
   onSignIn,
   onToggleSidebar,
+  // Optional element shown instead of the logo (the seat picker puts its
+  // "Back to flights" button here). Every other page shows the logo.
+  leading = null,
 }) {
   const overlay = variant === 'overlay';
   const tabs = showFlightsTab ? [FLIGHTS_TAB, ...BASE_TABS] : BASE_TABS;
@@ -64,9 +67,11 @@ export default function CustomerNav({
 
   return (
     <nav className={wrapperClass}>
-      <div className="cursor-pointer flex items-center gap-2" onClick={onLogoClick}>
-        <Logo light={overlay} />
-      </div>
+      {leading || (
+        <div className="cursor-pointer flex items-center gap-2" onClick={onLogoClick}>
+          <Logo light={overlay} />
+        </div>
+      )}
 
       <div className="flex items-center gap-4">
         {/* Bubble tabs: [Flights] | Deals | My Trips | About Us, with a sliding pill */}

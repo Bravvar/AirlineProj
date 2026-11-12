@@ -426,6 +426,16 @@ export default function App() {
                 activeTab={activeTab}
                 onSignIn={() => setShowSignIn(true)}
                 onBooked={handleBooked}
+                navProps={{
+                  auth,
+                  activeTab: 'flights',
+                  onFlights: () => goHome('flights'),
+                  onDeals: () => setCurrentPage('deals'),
+                  onMyTrips: () => setCurrentPage('trips'),
+                  onAbout: () => setCurrentPage('about'),
+                  onSignIn: () => setShowSignIn(true),
+                  onToggleSidebar: () => setShowSidebar(true),
+                }}
               />
             </div>
           </div>

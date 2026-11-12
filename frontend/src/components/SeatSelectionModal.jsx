@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { API_URL } from '../config';
+import CustomerNav from './CustomerNav';
 
 // ---------------------------------------------------------------------
 // Seat picker shown before checkout (booking) and from My Trips (change).
@@ -182,6 +184,9 @@ function TripSteps({ steps, stepIndex, currentSeats }) {
  *  onExit         optional: "Back to flights" (leave the picker to change
  *                 flights/fares). Without it the top-left button uses onHide.
  *  onHide         Escape / step back (round trip step 2 -> step 1)
+ *  navProps       optional: the site header's props. When given, the picker
+ *                 shows the normal site header (tabs + profile) with the
+ *                 "Back to flights" button where the logo usually is.
  *  onProceed(seatIds, total, { fare, seatNumber, seatNumbers, cabinName, seatFee })
  */
 export default function SeatSelectionModal({
@@ -201,6 +206,7 @@ export default function SeatSelectionModal({
   stepIndex = 0,
   continueLabel,
   onExit,
+  navProps,
 }) {
   const [seats, setSeats] = useState([]);
   const [fares, setFares] = useState([]);
@@ -375,33 +381,60 @@ export default function SeatSelectionModal({
       ? `Choose ${remaining} more seat${remaining === 1 ? '' : 's'}`
       : continueLabel || 'Continue to Payment';
 
-  return (
+  // Rendered on <body> so it always covers the whole page, including the
+  // site header (the homepage search sits inside a lower layer).
+  const leave = onExit || onHide;
+  // Run a header action after closing the picker (e.g. open My Trips).
+  const leaveThen = (action) => () => {
+    leave();
+    action?.();
+  };
+
+  const backButton = (
+    <button
+      type="button"
+      onClick={leave}
+      className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 border border-gray-200 text-sm font-semibold text-gray-700 px-4 py-2 rounded-full transition-colors cursor-pointer whitespace-nowrap"
+    >
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
+      </svg>
+      {isBooking && onExit ? 'Back to flights' : 'Back'}
+    </button>
+  );
+
+  return createPortal(
     <div className="fixed inset-0 z-[100] overflow-y-auto bg-gray-50 font-sans text-gray-900">
-      {/* Header bar, same style as the app's white header */}
-      <div className="sticky top-0 z-20 bg-white border-b border-gray-100 shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 sm:px-8 py-4 flex items-center justify-between gap-4">
-          <button
-            type="button"
-            onClick={onExit || onHide}
-            className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 border border-gray-200 text-sm font-semibold text-gray-700 px-4 py-2 rounded-full transition-colors cursor-pointer"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
-            </svg>
-            {isBooking && onExit ? 'Back to flights' : 'Back'}
-          </button>
-          <h2 className="text-lg font-bold">{isBooking ? 'Choose your seat' : 'Change seat'}</h2>
-          {hasSteps ? (
-            <span className="bg-blue-50 text-[#0066ff] border border-blue-100 text-xs font-bold px-3 py-1 rounded-full">
-              Seat {stepIndex + 1} of {steps.length}
-            </span>
-          ) : (
-            <span className="w-16" />
-          )}
+      {/* Header: the site header with "Back to flights" in the logo's place.
+          Any header action leaves the seat picker first. */}
+      {navProps ? (
+        <CustomerNav
+          {...navProps}
+          leading={backButton}
+          onFlights={leaveThen(navProps.onFlights)}
+          onDeals={leaveThen(navProps.onDeals)}
+          onMyTrips={leaveThen(navProps.onMyTrips)}
+          onAbout={leaveThen(navProps.onAbout)}
+          onSignIn={leaveThen(navProps.onSignIn)}
+          onToggleSidebar={leaveThen(navProps.onToggleSidebar)}
+        />
+      ) : (
+        <div className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm px-8 py-4 flex items-center">
+          {backButton}
         </div>
+      )}
+
+      {/* Page title + round-trip progress */}
+      <div className="max-w-6xl mx-auto px-4 sm:px-8 pt-8 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-2xl font-bold">{isBooking ? 'Choose your seat' : 'Change seat'}</h2>
+        {hasSteps && (
+          <span className="bg-blue-50 text-[#0066ff] border border-blue-100 text-xs font-bold px-3 py-1 rounded-full">
+            Seat {stepIndex + 1} of {steps.length}
+          </span>
+        )}
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-8 py-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] items-start">
+      <div className="max-w-6xl mx-auto px-4 sm:px-8 pt-5 pb-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] items-start">
         {/* Plane */}
         <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-6">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
@@ -576,6 +609,7 @@ export default function SeatSelectionModal({
           </div>
         </aside>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -84,7 +84,8 @@ function CabinFareGrid({ fares, freeByCabin, onPick, disabled, compact = false }
   );
 }
 
-export default function HeroSearch({ activeTab, onBooked, onSignIn }) {
+// navProps: the site header's props, so the seat picker can show the same header.
+export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) {
   const currentTab = activeTab === 'deals' ? activeTab : 'flights';
 
   const [tripType, setTripType] = useState('round-trip');
@@ -1560,6 +1561,7 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn }) {
             show={showSeatModal}
             onHide={handleSeatBack}
             onExit={handleSeatExit}
+            navProps={navProps}
             flightId={legFlight.flightId}
             fareId={legFare.flightFareId}
             farePrice={Number(legFare.currentPrice || 0)}
