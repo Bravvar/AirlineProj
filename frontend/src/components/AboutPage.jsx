@@ -283,6 +283,7 @@ export default function AboutPage({
         auth={auth}
         onLogoClick={() => onBackToHome()}
         onFlights={() => onBackToHome('flights')}
+        onDeals={() => onBackToHome('deals')}
         onMyTrips={onMyTrips}
         onAbout={() => {}}
         onSignIn={onSignIn}

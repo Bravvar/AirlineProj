@@ -576,6 +576,7 @@ export default function MyTripsPage({
         auth={{ token, email }}
         onLogoClick={() => onBackToHome()}
         onFlights={() => onBackToHome('flights')}
+        onDeals={() => onBackToHome('deals')}
         onMyTrips={() => {}}
         onAbout={onAbout}
         onSignIn={onSignIn}

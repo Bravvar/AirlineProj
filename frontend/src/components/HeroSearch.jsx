@@ -2,9 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { API_URL } from '../config';
 import CheckoutModal from './CheckoutModal';
 import SeatSelectionModal from './SeatSelectionModal';
-import TabToggle from './TabToggle';
 
-export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn }) {
+export default function HeroSearch({ activeTab, onBooked, onSignIn }) {
   const currentTab = activeTab === 'deals' ? activeTab : 'flights';
 
   const [tripType, setTripType] = useState('round-trip');
@@ -824,10 +823,6 @@ export default function HeroSearch({ activeTab, setActiveTab, onBooked, onSignIn
 
   return (
     <div className="relative z-[60] w-full max-w-5xl mx-auto flex flex-col items-center mt-4">
-      <div className="mb-5">
-        <TabToggle activeTab={currentTab} setActiveTab={setActiveTab} isDarkBackground={true} />
-      </div>
-
       <div className="w-full flex flex-col items-center relative z-30">
         {currentTab === 'flights' && (
           <>

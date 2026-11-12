@@ -9,8 +9,18 @@ function PlaneIcon() {
   );
 }
 
+function TagIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+      <circle cx="7" cy="7" r="1.5" fill="currentColor" />
+    </svg>
+  );
+}
+
 const FLIGHTS_TAB = { id: 'flights', label: 'Flights', icon: <PlaneIcon /> };
 const BASE_TABS = [
+  { id: 'deals', label: 'Deals', icon: <TagIcon /> },
   { id: 'trips', label: 'My Trips' },
   { id: 'about', label: 'About Us' },
 ];
@@ -22,6 +32,7 @@ export default function CustomerNav({
   auth,
   onLogoClick,
   onFlights,
+  onDeals,
   onMyTrips,
   onAbout,
   onSignIn,
@@ -30,7 +41,7 @@ export default function CustomerNav({
   const overlay = variant === 'overlay';
   const tabs = showFlightsTab ? [FLIGHTS_TAB, ...BASE_TABS] : BASE_TABS;
   const activeIndex = tabs.findIndex((t) => t.id === activeTab);
-  const handlers = { flights: onFlights, trips: onMyTrips, about: onAbout };
+  const handlers = { flights: onFlights, deals: onDeals, trips: onMyTrips, about: onAbout };
 
   const wrapperClass = overlay
     ? 'relative z-30 flex justify-between items-center px-8 py-6 w-full'
@@ -58,7 +69,7 @@ export default function CustomerNav({
       </div>
 
       <div className="flex items-center gap-4">
-        {/* Bubble tabs: [Flights] | My Trips | About Us, with a sliding pill */}
+        {/* Bubble tabs: [Flights] | Deals | My Trips | About Us, with a sliding pill */}
         <div role="tablist" className={`relative flex items-center p-1 rounded-full ${trackClass}`}>
           <span
             aria-hidden="true"

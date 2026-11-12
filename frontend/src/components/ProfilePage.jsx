@@ -448,6 +448,7 @@ export default function ProfilePage({
         auth={auth}
         onLogoClick={() => onBackToHome()}
         onFlights={() => onBackToHome('flights')}
+        onDeals={() => onBackToHome('deals')}
         onMyTrips={onMyTrips}
         onAbout={onAbout}
         onSignIn={onSignIn}

@@ -198,10 +198,11 @@ export default function DealsPage({
     <div className="min-h-screen bg-white font-sans text-gray-900">
       <CustomerNav
         variant="solid"
-        activeTab={null}
+        activeTab="deals"
         auth={auth}
         onLogoClick={() => onBackToHome()}
         onFlights={() => onBackToHome('flights')}
+        onDeals={() => {}}
         onMyTrips={onMyTrips}
         onAbout={onAbout}
         onSignIn={onSignIn}

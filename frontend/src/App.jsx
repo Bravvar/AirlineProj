@@ -110,17 +110,12 @@ export default function App() {
 
   const currentBg = BACKGROUNDS[bgIndex];
 
-  const handleTabChange = (tabId) => {
-    if (tabId === 'deals') {
-      setCurrentPage('deals');
-      setActiveTab('flights');
-    } else {
-      setCurrentPage('home');
-      setActiveTab(typeof tabId === 'string' && tabId ? tabId : 'flights');
-    }
-  };
-
+  // Pages call onBackToHome('deals') from the header's Deals tab.
   const goHome = (tab = 'flights') => {
+    if (tab === 'deals') {
+      setCurrentPage('deals');
+      return;
+    }
     setCurrentPage('home');
     setActiveTab(typeof tab === 'string' && tab ? tab : 'flights');
   };
@@ -364,6 +359,7 @@ export default function App() {
         auth={auth}
         onLogoClick={() => goHome()}
         onFlights={() => goHome('flights')}
+        onDeals={() => setCurrentPage('deals')}
         onMyTrips={() => setCurrentPage('trips')}
         onAbout={() => setCurrentPage('about')}
         onSignIn={() => setShowSignIn(true)}
@@ -427,7 +423,6 @@ export default function App() {
             <div id="flight-search" className="relative z-30 flex flex-col items-center w-full">
               <HeroSearch
                 activeTab={activeTab}
-                setActiveTab={handleTabChange}
                 onSignIn={() => setShowSignIn(true)}
                 onBooked={handleBooked}
               />
