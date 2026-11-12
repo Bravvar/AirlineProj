@@ -230,20 +230,18 @@ END$$
 DELIMITER ;
 
 -- Include historical requests in the queue.
-INSERT INTO CancellationReviewQueue (
+INSERT IGNORE INTO CancellationReviewQueue (
     request_id,
     queue_status,
     queued_at,
     processed_at
 )
 SELECT
-    request_id,
-    request_status,
-    requested_at,
-    reviewed_at
-FROM CancellationRequest
-ON DUPLICATE KEY UPDATE
-    request_id = request_id;
+    cr.request_id,
+    cr.request_status,
+    cr.requested_at,
+    cr.reviewed_at
+FROM CancellationRequest cr;
 
 -- Confirm the three new triggers exist.
 SELECT
