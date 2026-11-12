@@ -1348,12 +1348,12 @@ public class HomeController : ControllerBase
                      WHERE rp2.reservation_id = r.reservation_id) AS PassengerNames
             FROM Reservation r
             WHERE {0} IS NULL
-               OR r.confirmation_number LIKE {1}
+               OR LOWER(r.confirmation_number) LIKE LOWER({1})
                OR EXISTS (SELECT 1
                             FROM ReservationPassenger rp3
                             JOIN Passenger p3 ON p3.passenger_id = rp3.passenger_id
                            WHERE rp3.reservation_id = r.reservation_id
-                             AND CONCAT(p3.first_name, ' ', p3.last_name) LIKE {1})
+                             AND LOWER(CONCAT(p3.first_name, ' ', p3.last_name)) LIKE LOWER({1}))
             ORDER BY r.reservation_id DESC",
             conf, conf == null ? "%" : "%" + conf + "%").ToList();
 
