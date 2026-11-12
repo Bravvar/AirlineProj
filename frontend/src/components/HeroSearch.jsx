@@ -3,6 +3,87 @@ import { API_URL } from '../config';
 import CheckoutModal from './CheckoutModal';
 import SeatSelectionModal from './SeatSelectionModal';
 
+// ---------------------------------------------------------------------
+// Fare picker: one column per class (Economy, Premium Economy, Business),
+// each with its own fares and prices. A class with no fares on the flight
+// shows "Not offered on this flight".
+// ---------------------------------------------------------------------
+const CABIN_GROUPS = [
+  { id: 1, name: 'Economy' },
+  { id: 2, name: 'Premium Economy' },
+  { id: 3, name: 'Business' },
+];
+
+const fareCabinId = (fare) => {
+  const v = fare?.cabinClassId ?? fare?.CabinClassId;
+  if (v !== undefined && v !== null) return Number(v);
+  const n = String(fare?.cabinName ?? '').toLowerCase();
+  if (n.includes('business')) return 3;
+  if (n.includes('premium')) return 2;
+  return 1;
+};
+
+function fareDetails(fare) {
+  const bits = [fare.refundable ? 'Refundable' : 'Non-refundable'];
+  if (fare.checkedBagsIncluded > 0)
+    bits.push(`${fare.checkedBagsIncluded} checked bag${fare.checkedBagsIncluded > 1 ? 's' : ''}`);
+  if (fare.changesAllowed && fare.changeFee > 0) bits.push(`Change fee $${fare.changeFee}`);
+  if (!fare.changesAllowed) bits.push('No changes');
+  return bits.join(' · ');
+}
+
+function CabinFareGrid({ fares, freeByCabin, onPick, disabled, compact = false }) {
+  if (!fares || fares.length === 0) {
+    return <div className="text-xs text-gray-400 py-2">No fares available for this flight.</div>;
+  }
+  return (
+    <div className={`grid grid-cols-1 md:grid-cols-3 ${compact ? 'gap-2' : 'gap-3'}`}>
+      {CABIN_GROUPS.map((cabin) => {
+        const cabinFares = fares
+          .filter((f) => fareCabinId(f) === cabin.id)
+          .sort((a, b) => Number(a.currentPrice) - Number(b.currentPrice));
+        const free = freeByCabin?.[cabin.id];
+        return (
+          <div key={cabin.id} className="rounded-2xl border border-gray-100 bg-gray-50/70 p-3 flex flex-col gap-2">
+            <div className="flex items-baseline justify-between px-1">
+              <span className="text-xs font-bold text-gray-900 uppercase tracking-wide">{cabin.name}</span>
+              {cabinFares.length > 0 && (
+                <span className="text-[11px] font-semibold text-gray-500">from ${cabinFares[0].currentPrice}</span>
+              )}
+            </div>
+            {cabinFares.length === 0 ? (
+              <p className="text-[11px] text-gray-400 px-1 py-2">Not offered on this flight</p>
+            ) : (
+              cabinFares.map((fare) => {
+                const seatsLeft = free ?? fare.availableInventory;
+                return (
+                  <button
+                    key={fare.flightFareId}
+                    type="button"
+                    onClick={() => onPick(fare)}
+                    disabled={disabled}
+                    title={disabled ? 'Staff accounts cannot book flights.' : undefined}
+                    className="flex flex-col items-start text-left bg-white border border-gray-200 rounded-xl px-3 py-2 hover:border-blue-500 hover:bg-blue-50 transition-colors group cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-gray-200 disabled:hover:bg-white"
+                  >
+                    <span className="flex w-full items-baseline justify-between gap-2">
+                      <span className="text-sm font-bold text-gray-900 group-hover:text-blue-700">${fare.currentPrice}</span>
+                      <span className="text-[10px] text-gray-400">
+                        {seatsLeft} seat{seatsLeft === 1 ? '' : 's'} left
+                      </span>
+                    </span>
+                    <span className="text-xs text-gray-600">{fare.fareClassName}</span>
+                    {!compact && <span className="text-[10px] text-gray-400 mt-0.5">{fareDetails(fare)}</span>}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function HeroSearch({ activeTab, onBooked, onSignIn }) {
   const currentTab = activeTab === 'deals' ? activeTab : 'flights';
 
@@ -43,6 +124,11 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn }) {
   const [selectedSeatNumber, setSelectedSeatNumber] = useState(null);
   // Seat numbers in the same order as selectedSeatIds (seat i -> traveler i).
   const [selectedSeatNumbers, setSelectedSeatNumbers] = useState([]);
+  // Round trip: seats are picked in two steps (0 = outbound, 1 = return).
+  const [seatStep, setSeatStep] = useState(0);
+  const [outboundSeatFee, setOutboundSeatFee] = useState(0);
+  const [returnSeatIds, setReturnSeatIds] = useState([]);
+  const [returnSeatNumbers, setReturnSeatNumbers] = useState([]);
 
   const [airports, setAirports] = useState(null);
   const [routes, setRoutes] = useState(null);
@@ -654,28 +740,51 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn }) {
   };
 
   // Seat selection runs after the final fare is picked, before checkout.
-  // The seat is for the outbound flight (the backend books one seat, on
-  // the first segment). Skipping the seat is allowed: the booking still
-  // works, it just has no seat assignment.
+  // A seat is required for every traveler. Round trips pick seats twice:
+  // step 0 on the outbound flight (outbound fare's class only), then step 1
+  // on the return flight (return fare's class only).
   const openSeatSelection = () => {
     setSelectedSeatIds([]);
     setSelectedSeatNumber(null);
     setSelectedSeatNumbers([]);
+    setReturnSeatIds([]);
+    setReturnSeatNumbers([]);
+    setOutboundSeatFee(0);
+    setSeatStep(0);
     setShowSeatModal(true);
   };
 
-  // A seat in another cabin switches the outbound fare to that cabin's fare
-  // (First / Business / Economy each have their own price).
+  const isRoundTripBooking = Boolean(selectedFlightFare?.returnFlight && selectedFlightFare?.returnFare);
+
   const handleSeatProceed = (seatIds, total, info) => {
-    setSelectedSeatIds(Array.isArray(seatIds) ? seatIds : []);
-    setSelectedSeatNumber(info?.seatNumber || null);
-    setSelectedSeatNumbers(Array.isArray(info?.seatNumbers) ? info.seatNumbers : []);
-    if (info?.fare) {
-      setSelectedFlightFare((prev) => (prev ? { ...prev, fare: info.fare, outboundFare: info.fare } : prev));
+    const ids = Array.isArray(seatIds) ? seatIds : [];
+    const numbers = Array.isArray(info?.seatNumbers) ? info.seatNumbers : [];
+
+    if (seatStep === 0) {
+      setSelectedSeatIds(ids);
+      setSelectedSeatNumber(numbers[0] || null);
+      setSelectedSeatNumbers(numbers);
+      if (isRoundTripBooking) {
+        // Next: the return flight's seat map.
+        setOutboundSeatFee(Number(info?.seatFee || 0));
+        setSeatStep(1);
+        return;
+      }
+    } else {
+      setReturnSeatIds(ids);
+      setReturnSeatNumbers(numbers);
     }
+
     setCheckoutTotal(total);
     setShowSeatModal(false);
     setShowCheckoutModal(true);
+  };
+
+  // Back from the return seat map goes to the outbound one; back from the
+  // outbound one closes the picker.
+  const handleSeatBack = () => {
+    if (seatStep === 1) setSeatStep(0);
+    else setShowSeatModal(false);
   };
 
   const initiateBooking = (flight, fare, isReturn = false) => {
@@ -748,6 +857,7 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn }) {
       ? tickets.map((t, i) => ({
           ...t,
           seatNumber: selectedSeatNumbers[i] || selectedSeatNumber || '—',
+          returnSeatNumber: returnFlight ? returnSeatNumbers[i] || '—' : null,
         }))
       : null;
     if (onBooked) {
@@ -796,6 +906,8 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn }) {
         stops: 'Non-stop',
         seatNumber: selectedSeatNumber || '—',
         cabinName: bookedFare?.cabinName || '',
+        returnSeatNumber: returnFlight ? returnSeatNumbers[0] || '—' : '',
+        returnCabinName: returnFare?.cabinName || '',
         fareClassName: bookedFare?.fareClassName || '',
         refundable: Boolean(bookedFare?.refundable),
         checkedBagsIncluded: bookedFare?.checkedBagsIncluded ?? 0,
@@ -809,17 +921,6 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn }) {
       <path d="M16.5 16.5L21 21" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
     </svg>
   );
-
-  const fareDescriptor = (fare) => {
-    const bits = [];
-    if (fare.cabinName) bits.push(fare.cabinName);
-    bits.push(fare.refundable ? 'Refundable' : 'Non-refundable');
-    if (fare.checkedBagsIncluded > 0)
-      bits.push(`${fare.checkedBagsIncluded} checked bag${fare.checkedBagsIncluded > 1 ? 's' : ''}`);
-    if (fare.changesAllowed && fare.changeFee > 0) bits.push(`Change fee $${fare.changeFee}`);
-    if (!fare.changesAllowed) bits.push('No changes');
-    return bits.join(' · ');
-  };
 
   return (
     <div className="relative z-[60] w-full max-w-5xl mx-auto flex flex-col items-center mt-4">
@@ -1306,50 +1407,20 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn }) {
                           )}
                         </div>
                         {selectedOutboundFare?.flight.flightId === flight.flightId && (
-                          <span className="text-xs font-semibold text-blue-600">Selected</span>
+                          <span className="text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-100 rounded-full px-3 py-1">
+                            Outbound: {selectedOutboundFare.fare.cabinName} · ${selectedOutboundFare.fare.currentPrice}
+                          </span>
                         )}
                       </div>
 
                       {selectedOutboundFare?.flight.flightId !== flight.flightId && (
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {(faresByFlight[flight.flightId] || []).length > 0 ? (
-                            faresByFlight[flight.flightId].map((fare) => (
-                              <button
-                                key={fare.flightFareId}
-                                onClick={() => initiateBooking(flight, fare)}
-                                disabled={isStaff}
-                                title={isStaff ? 'Staff accounts cannot book flights.' : undefined}
-                                className="flex flex-col items-start border border-gray-200 rounded-xl px-4 py-2 hover:border-blue-500 hover:bg-blue-50 transition-colors text-left group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-gray-200 disabled:hover:bg-transparent"
-                              >
-                                <span className="text-sm font-bold text-gray-900 group-hover:text-blue-700">
-                                  ${fare.currentPrice}
-                                </span>
-                                <span className="text-xs text-gray-500">
-                                  {fare.cabinName} - {fare.fareClassName}
-                                </span>
-                                <span className="text-[10px] text-gray-400 mt-0.5">
-                                  {fareDescriptor(fare)}
-                                </span>
-                                <span className="text-[10px] text-gray-400 mt-0.5">
-                                  {(() => {
-                                    // Show the cabin's real free seats, not the fare's own counter.
-                                    const cabinFree = seatCounts?.freeByCabin?.[fare.cabinClassId];
-                                    const n = cabinFree ?? fare.availableInventory;
-                                    return `${n} seat${n === 1 ? '' : 's'} left`;
-                                  })()}
-                                </span>
-                                {isStaff && (
-                                  <span className="text-[10px] text-gray-400 mt-0.5">
-                                    Staff can't book
-                                  </span>
-                                )}
-                              </button>
-                            ))
-                          ) : (
-                            <div className="text-xs text-gray-400 py-2">
-                              No fares available for this flight.
-                            </div>
-                          )}
+                        <div className="mt-2">
+                          <CabinFareGrid
+                            fares={flightFares}
+                            freeByCabin={seatCounts?.freeByCabin}
+                            onPick={(fare) => initiateBooking(flight, fare)}
+                            disabled={isStaff}
+                          />
                         </div>
                       )}
 
@@ -1420,41 +1491,14 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn }) {
                                           {rDepDate} | {rDepTime} - {rArrTime}
                                         </span>
                                       </div>
-                                      <div className="flex flex-wrap gap-1 mt-1">
-                                        {(faresByFlight[rFlight.flightId] || []).length > 0 ? (
-                                          faresByFlight[rFlight.flightId].map((rFare) => (
-                                            <button
-                                              key={rFare.flightFareId}
-                                              onClick={() => selectReturnFare(rFlight, rFare)}
-                                              disabled={isStaff}
-                                              title={
-                                                isStaff
-                                                  ? 'Staff accounts cannot book flights.'
-                                                  : undefined
-                                              }
-                                              className="text-left border border-blue-200 bg-blue-50 rounded-md px-2 py-1 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-50"
-                                            >
-                                              <div className="text-xs font-bold text-blue-800">
-                                                ${rFare.currentPrice}{' '}
-                                                <span className="font-normal text-blue-600">
-                                                  - {rFare.cabinName}
-                                                </span>
-                                              </div>
-                                              <div className="text-[9px] text-gray-500 mt-0.5">
-                                                {fareDescriptor(rFare)}
-                                              </div>
-                                              {isStaff && (
-                                                <div className="text-[9px] text-gray-400 mt-0.5">
-                                                  Staff can't book
-                                                </div>
-                                              )}
-                                            </button>
-                                          ))
-                                        ) : (
-                                          <div className="text-[10px] text-gray-400 py-1">
-                                            No fares available.
-                                          </div>
-                                        )}
+                                      <div className="mt-2">
+                                        <CabinFareGrid
+                                          fares={faresByFlight[rFlight.flightId] || []}
+                                          freeByCabin={seatCountsByFlight[rFlight.flightId]?.freeByCabin}
+                                          onPick={(rFare) => selectReturnFare(rFlight, rFare)}
+                                          disabled={isStaff}
+                                          compact
+                                        />
                                       </div>
                                     </div>
                                   );
@@ -1490,21 +1534,39 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn }) {
         </div>
       )}
 
-      {selectedFlightFare && (
-        <SeatSelectionModal
-          show={showSeatModal}
-          onHide={() => setShowSeatModal(false)}
-          flightId={selectedFlightFare.flight.flightId}
-          fareId={selectedFlightFare.fare.flightFareId}
-          farePrice={Number(selectedFlightFare.fare.currentPrice || 0)}
-          extraPrice={Number(selectedFlightFare.returnFare?.currentPrice || 0)}
-          onProceed={handleSeatProceed}
-          preselectedSeatIds={selectedSeatIds}
-          mode="booking"
-          maxSeats={totalTravelers}
-          passengerCount={totalTravelers}
-        />
-      )}
+      {selectedFlightFare && (() => {
+        // Which leg the seat map is for: outbound (step 0) or return (step 1).
+        const onReturn = isRoundTripBooking && seatStep === 1;
+        const legFlight = onReturn ? selectedFlightFare.returnFlight : selectedFlightFare.flight;
+        const legFare = onReturn ? selectedFlightFare.returnFare : selectedFlightFare.fare;
+        const otherFare = onReturn ? selectedFlightFare.fare : selectedFlightFare.returnFare;
+        const route = (f) => `${f?.originAirportCode || ''} → ${f?.destinationAirportCode || ''} · ${f?.flightNumber || ''}`;
+        const steps = isRoundTripBooking
+          ? [
+              { label: 'Outbound', route: route(selectedFlightFare.flight), cabin: selectedFlightFare.fare.cabinName, seats: selectedSeatNumbers },
+              { label: 'Return', route: route(selectedFlightFare.returnFlight), cabin: selectedFlightFare.returnFare.cabinName, seats: returnSeatNumbers },
+            ]
+          : [];
+        return (
+          <SeatSelectionModal
+            show={showSeatModal}
+            onHide={handleSeatBack}
+            flightId={legFlight.flightId}
+            fareId={legFare.flightFareId}
+            farePrice={Number(legFare.currentPrice || 0)}
+            extraPrice={Number(otherFare?.currentPrice || 0)}
+            extraFees={onReturn ? outboundSeatFee : 0}
+            onProceed={handleSeatProceed}
+            preselectedSeatIds={onReturn ? returnSeatIds : selectedSeatIds}
+            mode="booking"
+            maxSeats={totalTravelers}
+            passengerCount={totalTravelers}
+            steps={steps}
+            stepIndex={onReturn ? 1 : 0}
+            continueLabel={isRoundTripBooking && !onReturn ? 'Next: Choose Return Seat' : 'Continue to Payment'}
+          />
+        );
+      })()}
 
       {selectedFlightFare && (
         <CheckoutModal
@@ -1515,6 +1577,7 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn }) {
           totalPrice={checkoutTotal}
           tripType={tripType}
           seatIds={selectedSeatIds}
+          returnSeatIds={returnSeatIds}
           passengerCount={totalTravelers}
           onSuccess={handlePaymentSuccess}
           summary={

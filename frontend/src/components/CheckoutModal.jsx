@@ -9,6 +9,8 @@ export default function CheckoutModal({
   totalPrice,
   onSuccess,
   seatIds = [],
+  // Round trip: seats on the return flight (one per traveler, same order).
+  returnSeatIds = [],
   // Optional: run a custom charge (e.g. a seat change) instead of creating a
   // booking. Should resolve on success, or throw an Error with a message.
   onPay,
@@ -132,6 +134,9 @@ export default function CheckoutModal({
       };
       if (returnFareId) {
         body.returnFareId = returnFareId;
+        body.returnSeats = Array.isArray(returnSeatIds)
+          ? returnSeatIds.filter((n) => Number.isInteger(n) && n > 0)
+          : [];
       }
 
       const res = await fetch(`${API_URL}/api/reservations`, {

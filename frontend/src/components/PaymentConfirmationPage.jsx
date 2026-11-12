@@ -65,7 +65,9 @@ function ETicketCard({ ticket, details }) {
 
       <div className="grid grid-cols-3 gap-4 bg-gray-50 rounded-2xl p-4 border border-gray-100 mb-8">
         <div>
-          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Seat</p>
+          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+            {details.returnFlightNumber ? 'Outbound seat' : 'Seat'}
+          </p>
           <p className="text-sm font-bold text-gray-900">{ticket.seatNumber || '—'}</p>
         </div>
         <div>
@@ -77,6 +79,26 @@ function ETicketCard({ ticket, details }) {
           <p className="text-sm font-bold text-gray-900">{details.boardingTime || '07:10'}</p>
         </div>
       </div>
+
+      {/* Return leg seat (round trip) */}
+      {details.returnFlightNumber && (
+        <div className="grid grid-cols-3 gap-4 bg-blue-50/60 rounded-2xl p-4 border border-blue-100 -mt-4 mb-8">
+          <div>
+            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Return</p>
+            <p className="text-sm font-bold text-gray-900">
+              {details.returnOrigin || 'ORG'} → {details.returnDestination || 'DST'}
+            </p>
+          </div>
+          <div>
+            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Class</p>
+            <p className="text-sm font-bold text-gray-900">{details.returnCabinName || '—'}</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Return seat</p>
+            <p className="text-sm font-bold text-gray-900">{ticket.returnSeatNumber || '—'}</p>
+          </div>
+        </div>
+      )}
 
       {/* Barcode */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 flex flex-col items-center justify-center relative overflow-hidden">
@@ -398,11 +420,13 @@ export default function PaymentConfirmationPage({
         passengerName: t.passengerName || details.passengerName,
         ticketNumber: t.ticketNumber,
         seatNumber: t.seatNumber || details.seatNumber || '—',
+        returnSeatNumber: t.returnSeatNumber || details.returnSeatNumber || null,
       }))
     : [{
         passengerName: details.passengerName,
         ticketNumber: details.ticketNumber || details.confirmationNumber,
         seatNumber: details.seatNumber || '—',
+        returnSeatNumber: details.returnSeatNumber || null,
       }];
 
   return (
@@ -540,10 +564,18 @@ export default function PaymentConfirmationPage({
                 only the outbound leg, so a round trip looked one-way. */}
             {details.returnFlightNumber && (
               <div className="bg-gray-50 rounded-2xl p-6 mb-6">
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">
-                  Return · {details.returnFlightNumber}
-                  {details.returnDepartureDate ? ` · ${details.returnDepartureDate}` : ''}
-                </p>
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                    Return · {details.returnFlightNumber}
+                    {details.returnDepartureDate ? ` · ${details.returnDepartureDate}` : ''}
+                  </p>
+                  {details.returnCabinName && (
+                    <span className="bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
+                      {details.returnCabinName}
+                      {details.returnSeatNumber && details.returnSeatNumber !== '—' ? ` · ${details.returnSeatNumber}` : ''}
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center justify-between mb-6">
                   <div className="text-center">
                     <p className="text-sm text-gray-500 font-semibold mb-1">Start Journey</p>

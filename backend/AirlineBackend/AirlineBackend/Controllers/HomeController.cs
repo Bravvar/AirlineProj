@@ -833,7 +833,11 @@ public class HomeController : ControllerBase
         var seatIds = (book.seats ?? new List<int>()).Distinct().ToList();
         if (seatIds.Count > passengerCount) return BadRequest("You can only pick one seat per passenger.");
 
-        decimal seatFeeTotal = 25m * seatIds.Count;
+        // Round trip: seats on the return flight, one per passenger, same order.
+        var returnSeatIds = returnFare == null ? new List<int>() : (book.returnSeats ?? new List<int>()).Distinct().ToList();
+        if (returnSeatIds.Count > passengerCount) return BadRequest("You can only pick one return seat per passenger.");
+
+        decimal seatFeeTotal = 25m * (seatIds.Count + returnSeatIds.Count);
         decimal farePerPerson = fare.CurrentPrice + (returnFare == null ? 0 : returnFare.CurrentPrice);
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
@@ -936,6 +940,28 @@ public class HomeController : ControllerBase
                     segment.ReservationSegmentId, reservationPassengers[i].ReservationPassengerId, seatId, fare.FlightId, DateTime.Now, 25m);
             }
 
+            // Return seats go on the return segment / return flight.
+            if (returnSegment != null && returnFlight != null)
+            {
+                for (int i = 0; i < returnSeatIds.Count; i++)
+                {
+                    int seatId = returnSeatIds[i];
+
+                    var seat = _context.Seat.FirstOrDefault(s => s.SeatId == seatId);
+                    if (seat == null) { await transaction.RollbackAsync(); return BadRequest("Return seat does not exist."); }
+                    if (seat.AircraftId != returnFlight.AircraftId) { await transaction.RollbackAsync(); return BadRequest("Return seat is not on the return flight."); }
+
+                    var taken = _context.Database.SqlQueryRaw<long>(
+                        "SELECT COUNT(*) AS Value FROM SeatAssignment WHERE flight_id = {0} AND seat_id = {1} AND active_seat = 1",
+                        returnFare!.FlightId, seatId).FirstOrDefault() > 0;
+                    if (taken) { await transaction.RollbackAsync(); return BadRequest("That return seat was just taken."); }
+
+                    await _context.Database.ExecuteSqlRawAsync(
+                        "INSERT INTO SeatAssignment (reservation_segment_id, reservation_passenger_id, seat_id, flight_id, assignment_date_time, seat_fee, active_seat) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, 1)",
+                        returnSegment.ReservationSegmentId, reservationPassengers[i].ReservationPassengerId, seatId, returnFare.FlightId, DateTime.Now, 25m);
+                }
+            }
+
             var paymentReference = "PAY" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper();
             await _context.Database.ExecuteSqlRawAsync(
                 "INSERT INTO Payment (reservation_id, employee_id, payment_date_time, amount, payment_method, payment_status, transaction_reference, transaction_type) VALUES ({0}, NULL, {1}, {2}, 'Card (demo)', 'Successful', {3}, 'Payment')",
@@ -951,7 +977,8 @@ public class HomeController : ControllerBase
                 {
                     var rp = reservationPassengers[i];
                     bool hasSeat = i < seatIds.Count;
-                    decimal perPersonTotal = farePerPerson + (hasSeat ? 25m : 0m);
+                    bool hasReturnSeat = i < returnSeatIds.Count;
+                    decimal perPersonTotal = farePerPerson + (hasSeat ? 25m : 0m) + (hasReturnSeat ? 25m : 0m);
                     string tkt = "TKT-" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpper();
                     await _context.Database.ExecuteSqlRawAsync(
                         "INSERT INTO Ticket (ticket_number, reservation_id, passenger_id, employee_id, issue_date_time, ticket_status, fare_amount, tax_amount, total_fare_paid, exchange_rate) VALUES ({0}, {1}, {2}, NULL, {3}, 'Issued', {4}, {5}, {6}, 1.0000)",
@@ -1735,7 +1762,7 @@ public class HomeController : ControllerBase
 
 public record Payload(string email, string password);
 public record RegisterPayload(string email, string password, int? passengerId, string? firstName, string? lastName, string? Phone, DateTime? dateOfBirth);
-public record BookingPayload(int flightFareId, int? returnFareId, List<int>? seats, List<PassengerName>? passengers);
+public record BookingPayload(int flightFareId, int? returnFareId, List<int>? seats, List<PassengerName>? passengers, List<int>? returnSeats = null);
 public record PassengerName(string firstName, string lastName);
 public record ChangeSeatPayload(int seatId);
 public record UpdateProfilePayload(string? email, string? phone, string? currentPassword);
