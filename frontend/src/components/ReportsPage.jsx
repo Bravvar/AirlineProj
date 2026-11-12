@@ -12,8 +12,12 @@ const REPORT_DEFINITIONS = [
       { key: 'origin', label: 'Origin' },
       { key: 'destination', label: 'Destination' },
       {key: 'flightStatus', label: 'Flight Status'},
+      { key: 'departure', label: 'Departure' },
       { key: 'ticketsSold', label: 'Tickets Sold' },
+      { key: 'capacity', label: 'Capacity' },
+      { key: 'loadFactor', label: 'Load Factor' },
       { key: 'revenue', label: 'Revenue' },
+      { key: 'avgFare', label: 'Avg. Fare' },
     ],
   },
   {
@@ -182,11 +186,11 @@ function formatCell(row, key) {
   const pascal = key.charAt(0).toUpperCase() + key.slice(1);
   const val = row[key] !== undefined ? row[key] : (row[pascal] !== undefined ? row[pascal] : row[key.toLowerCase()]);
   if (val === null || val === undefined || String(val).trim() === '') return '—';
-  if (['revenue', 'amount', 'totalAmount'].includes(key)) {
+  if (['revenue', 'amount', 'totalAmount', 'avgFare'].includes(key)) {
     const num = Number(val);
     if (!isNaN(num)) return `$${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
-  if (key === 'pctFull') {
+  if (key === 'pctFull' || key === 'loadFactor') {
     const num = Number(val);
     if (!isNaN(num)) return `${num}%`;
   }
