@@ -23,6 +23,100 @@ const BACKGROUNDS = [
   { src: '/landscapes/peru.jpg', name: 'Andes Mountains, Peru' },
 ];
 
+// ---------------------------------------------------------------------
+// "View Confirmation" in My Trips: rebuild the same details the
+// confirmation page gets right after paying, from the saved booking.
+//   * both legs (segment 1 = outbound, segment 2 = return)
+//   * each leg's class / fare, looked up from the flight's fares
+//   * one ticket per traveler, with their seat on each leg
+// ---------------------------------------------------------------------
+// Staff only see their workspaces. Any other page (flight search, deals,
+// My Trips...) sends them to their own workspace instead.
+const STAFF_PAGES = {
+  Supervisor: { home: 'admin', allowed: ['admin', 'employee', 'reports', 'refund'] },
+  Employee: { home: 'employee', allowed: ['employee', 'reports', 'refund'] },
+};
+
+const hhmm = (t) => (t ? String(t).substring(0, 5) : '');
+const ymd = (d) => (d ? String(d).slice(0, 10) : '');
+
+// Seats on a segment, one per traveler in booking order. Uses the full list
+// when the backend sends it (seatNumbers "A01,A02"), else the single seat.
+const segmentSeats = (seg) => {
+  const list = seg?.seatNumbers ?? seg?.SeatNumbers;
+  if (list) return String(list).split(',').map((x) => x.trim()).filter(Boolean);
+  const one = seg?.seatNumber ?? seg?.SeatNumber;
+  return one ? [one] : [];
+};
+
+async function loadTripDetails(booking, segments, auth) {
+  const headers = { Authorization: `Bearer ${auth.token}` };
+  const legs = [...(segments || [])].sort((a, b) => (a.segmentNumber || 0) - (b.segmentNumber || 0));
+  const out = legs[0] || {};
+  const ret = legs.length > 1 ? legs[1] : null;
+
+  // Tickets + each leg's fare (class, fare name, bags) in parallel.
+  const fareFor = (seg) =>
+    seg?.flightId
+      ? fetch(`${API_URL}/api/flights/${seg.flightId}/fares`)
+          .then((r) => (r.ok ? r.json() : []))
+          .then((fares) => (Array.isArray(fares) ? fares.find((f) => f.flightFareId === seg.flightFareId) || null : null))
+          .catch(() => null)
+      : Promise.resolve(null);
+  const ticketReq = fetch(`${API_URL}/api/reservations/${booking.reservationId}/ticket`, { headers })
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null);
+  const [ticketData, outFare, retFare] = await Promise.all([ticketReq, fareFor(out), fareFor(ret)]);
+
+  const outSeats = segmentSeats(out);
+  const retSeats = ret ? segmentSeats(ret) : [];
+  const rows = Array.isArray(ticketData?.tickets) ? ticketData.tickets : [];
+  const tickets = rows.length > 0
+    ? rows.map((t, i) => ({
+        ticketNumber: t.ticketNumber,
+        passengerName: [t.passengerFirstName, t.passengerLastName].filter(Boolean).join(' ') || 'Passenger',
+        seatNumber: outSeats[i] || '—',
+        returnSeatNumber: ret ? retSeats[i] || '—' : null,
+      }))
+    : null;
+  const ticketNumbers = tickets ? tickets.map((t) => t.ticketNumber) : ticketData?.ticketNumber ? [ticketData.ticketNumber] : [];
+
+  return {
+    passengerName: auth.email?.split('@')[0] || 'Passenger',
+    email: auth.email,
+    confirmationNumber: booking.confirmationNumber,
+    ticketNumber: ticketNumbers[0] || booking.confirmationNumber,
+    ticketNumbers,
+    tickets,
+    passengerCount: ticketNumbers.length || 1,
+    totalAmount: booking.totalAmount,
+    tripType: ret ? 'Round Trip' : 'One Way',
+    stops: 'Non-stop',
+    // Outbound
+    flightNumber: out.flightNumber || '',
+    origin: out.origin || '',
+    destination: out.destination || '',
+    departureDate: ymd(out.departureDate),
+    departureTime: hhmm(out.departureTime),
+    arrivalTime: hhmm(out.arrivalTime),
+    seatNumber: outSeats[0] || '—',
+    cabinName: outFare?.cabinName || '',
+    fareClassName: outFare?.fareClassName || '',
+    refundable: Boolean(outFare?.refundable),
+    checkedBagsIncluded: outFare?.checkedBagsIncluded ?? 0,
+    // Return (round trip only)
+    returnFlightNumber: ret?.flightNumber || '',
+    returnOrigin: ret?.origin || '',
+    returnDestination: ret?.destination || '',
+    returnDepartureDate: ymd(ret?.departureDate),
+    returnDepartureTime: hhmm(ret?.departureTime),
+    returnArrivalTime: hhmm(ret?.arrivalTime),
+    returnSeatNumber: ret ? retSeats[0] || '—' : '',
+    returnCabinName: retFare?.cabinName || '',
+    gate: 'TBA',
+  };
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('flights');
   const [showSignIn, setShowSignIn] = useState(false);
@@ -32,7 +126,7 @@ export default function App() {
   const [accountDeletedNotice, setAccountDeletedNotice] = useState(
     () => sessionStorage.getItem('accountDeleted') === '1'
   );
-  const [currentPage, setCurrentPage] = useState('home');
+  const [requestedPage, setCurrentPage] = useState('home');
   const [bgIndex, setBgIndex] = useState(0);
 
   const [refundDetails, setRefundDetails] = useState(null);
@@ -43,6 +137,10 @@ export default function App() {
     role: sessionStorage.getItem('role'),
     email: sessionStorage.getItem('email'),
   }));
+
+  // Staff never see customer pages (see STAFF_PAGES).
+  const staff = auth.token ? STAFF_PAGES[auth.role] : null;
+  const currentPage = staff && !staff.allowed.includes(requestedPage) ? staff.home : requestedPage;
 
   const refreshAuth = () => {
     setAuth({
@@ -238,44 +336,7 @@ export default function App() {
             setCurrentPage('refund');
           }}
           onViewTicket={async (booking, segments) => {
-            const activeSeg = segments && segments.length > 0 ? segments[0] : {};
-            let ticketNumbers = [];
-            let tickets = null;
-            try {
-              const res = await fetch(`${API_URL}/api/reservations/${booking.reservationId}/ticket`, {
-                headers: { Authorization: `Bearer ${auth.token}` },
-              });
-              if (res.ok) {
-                const data = await res.json();
-                if (Array.isArray(data.tickets) && data.tickets.length > 0) {
-                  tickets = data.tickets.map((t) => ({
-                    ticketNumber: t.ticketNumber,
-                    passengerName: [t.passengerFirstName, t.passengerLastName].filter(Boolean).join(' ') || 'Passenger',
-                  }));
-                  ticketNumbers = tickets.map((t) => t.ticketNumber);
-                } else if (data.ticketNumber) {
-                  ticketNumbers = [data.ticketNumber];
-                }
-              }
-            } catch { /* fall back to the confirmation number below */ }
-            setPaymentDetails({
-              passengerName: auth.email?.split('@')[0] || 'Passenger',
-              email: auth.email,
-              confirmationNumber: booking.confirmationNumber,
-              ticketNumber: ticketNumbers[0] || booking.confirmationNumber,
-              ticketNumbers,
-              tickets,
-              passengerCount: ticketNumbers.length || 1,
-              totalAmount: booking.totalAmount,
-              flightNumber: activeSeg.flightNumber || 'FLT',
-              origin: activeSeg.origin || 'ORG',
-              destination: activeSeg.destination || 'DST',
-              departureTime: activeSeg.departureTime ? String(activeSeg.departureTime).substring(0, 5) : '00:00',
-              arrivalTime: activeSeg.arrivalTime ? String(activeSeg.arrivalTime).substring(0, 5) : '00:00',
-              seatNumber: activeSeg.seatNumber || '—',
-              gate: 'TBA',
-              boardingTime: '07:10',
-            });
+            setPaymentDetails(await loadTripDetails(booking, segments, auth));
             setCurrentPage('payment-success');
           }}
         />

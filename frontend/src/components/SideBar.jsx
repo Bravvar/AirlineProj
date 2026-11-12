@@ -24,8 +24,6 @@ export default function SideBar({ show, onHide, auth, onLogout, onNavigate }) {
   if (auth.role === 'Supervisor') {
     roleTitle = 'Admin Console';
     menuItems = [
-      { id: 'dashboard', label: 'Flight Search', icon: homeIcon },
-      { id: 'deals', label: 'Deals', icon: dealsIcon },
       { id: 'admin', label: 'Admin Dashboard', icon: adminIcon },
       { id: 'employee', label: 'Staff Workspace', icon: employeeIcon },
       { id: 'reports', label: 'Operational Reports', icon: reportsIcon },
@@ -33,8 +31,6 @@ export default function SideBar({ show, onHide, auth, onLogout, onNavigate }) {
   } else if (auth.role === 'Employee') {
     roleTitle = 'Staff Workspace';
     menuItems = [
-      { id: 'dashboard', label: 'Flight Search', icon: homeIcon },
-      { id: 'deals', label: 'Deals', icon: dealsIcon },
       { id: 'employee', label: 'Flight & Passengers', icon: passengerIcon },
       { id: 'reports', label: 'Operational Reports', icon: reportsIcon },
     ];

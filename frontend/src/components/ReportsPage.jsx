@@ -81,7 +81,7 @@ const FILTER_FIELDS = {
   minTickets: { label: 'Min. tickets sold', type: 'number', placeholder: 'e.g. 3', inputClass: 'w-28' },
   minRevenue: { label: 'Min. revenue', type: 'number', placeholder: 'e.g. 500', inputClass: 'w-28' },
   maxRevenue: { label: 'Max. revenue', type: 'number', placeholder: 'e.g. 5000', inputClass: 'w-28' },
-  tier: { label: 'Tier', type: 'select', options: ['', 'Gold', 'Silver', 'Bronze', 'Not Enrolled'] },
+  tier: { label: 'Tier', type: 'select', options: ['', 'Gold', 'Silver', 'Bronze', 'Basic', 'Inactive'] },
   membershipStatus: { label: 'Membership status', type: 'select', options: ['', 'Active', 'Inactive'] },
   minPoints: { label: 'Min. points', type: 'number', placeholder: 'e.g. 1000', inputClass: 'w-28' },
   transactionType: { label: 'Transaction type', type: 'select', options: ['', 'Payment', 'Refund'] },
@@ -380,7 +380,7 @@ function ReportTable({ def, rows, search, hiddenColumns, toggleColumn, loading }
   );
 }
 
-export default function ReportsPage({ token, email, role, onBackToHome, onMyTrips, onSignIn, onToggleSidebar }) {
+export default function ReportsPage({ token, email, role, onBackToHome, onSignIn, onToggleSidebar }) {
   const [reportsData, setReportsData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -507,12 +507,6 @@ export default function ReportsPage({ token, email, role, onBackToHome, onMyTrip
           <Logo />
         </div>
         <div className="flex items-center gap-6">
-          <button onClick={() => onBackToHome('flights')} className="text-gray-600 hover:text-gray-900 font-semibold text-sm transition-colors">
-            Flights
-          </button>
-          <button onClick={onMyTrips} className="text-gray-600 hover:text-gray-900 font-semibold text-sm transition-colors">
-            My Trips
-          </button>
           <span className="text-blue-600 font-semibold flex items-center gap-2 text-sm">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
             Reports
