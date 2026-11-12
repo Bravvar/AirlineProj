@@ -1,6 +1,7 @@
 
 import { useEffect, useState } from 'react';
 import { API_URL } from '../config';
+import { getTierForPoints, getTierProgress } from '../membershipTiers';
 
 export default function MyLoyaltyPage({
   token,
@@ -113,6 +114,20 @@ export default function MyLoyaltyPage({
                   <p className="text-gray-700 mt-2">
                     Membership Status: {loyalty.membershipStatus}
                   </p>
+
+                  <p className="text-gray-700 mt-2 flex items-center gap-2">
+                    Membership Level:
+                    <span className={`px-3 py-0.5 rounded-full text-sm font-bold ${getTierForPoints(loyalty.pointsBalance).accent.badge}`}>
+                      {getTierForPoints(loyalty.pointsBalance).name}
+                    </span>
+                  </p>
+
+                  {getTierProgress(loyalty.pointsBalance).next && (
+                    <p className="text-sm text-gray-500 mt-2">
+                      {getTierProgress(loyalty.pointsBalance).remaining.toLocaleString()} points to{' '}
+                      {getTierProgress(loyalty.pointsBalance).next.name}
+                    </p>
+                  )}
                 </div>
 
               </div>

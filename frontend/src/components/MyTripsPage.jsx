@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import Logo from './Logo';
+import CustomerNav from './CustomerNav';
 import { API_URL } from '../config';
 import SeatSelectionModal from './SeatSelectionModal';
 import CheckoutModal from './CheckoutModal';
@@ -371,7 +371,7 @@ function BookingCard({
 }
 
 export default function MyTripsPage({ 
-  token, email, onBackToHome, onSignIn, onToggleSidebar, onRefundSuccess, auth, onViewTicket 
+  token, email, onBackToHome, onSignIn, onToggleSidebar, onRefundSuccess, auth, onViewTicket, onAbout 
 }) {
   const [bookings, setBookings] = useState(null);
   const [segmentsById, setSegmentsById] = useState({});
@@ -570,30 +570,17 @@ export default function MyTripsPage({
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
-      <nav className="sticky top-0 z-50 bg-white border-b border-gray-100 px-8 py-4 flex justify-between items-center shadow-sm">
-        <div className="cursor-pointer" onClick={() => onBackToHome()}>
-          <Logo />
-        </div>
-        <div className="flex items-center gap-6">
-          <button className="text-gray-600 hover:text-black transition-colors flex items-center gap-2 text-sm font-semibold">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-          </button>
-
-          <button className="text-blue-600 font-semibold flex items-center gap-2 text-sm">
-            My Trips
-          </button>
-
-          {token ? (
-            <button onClick={onToggleSidebar} className="w-10 h-10 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold shadow-md hover:scale-105 transition-transform cursor-pointer ml-2">
-              {email?.charAt(0).toUpperCase()}
-            </button>
-          ) : (
-            <button onClick={onSignIn} className="border border-blue-600 text-blue-600 font-semibold px-6 py-2 rounded-full hover:bg-blue-50 transition-all text-sm ml-2">
-              Sign In
-            </button>
-          )}
-        </div>
-      </nav>
+      <CustomerNav
+        variant="solid"
+        activeTab="trips"
+        auth={{ token, email }}
+        onLogoClick={() => onBackToHome()}
+        onFlights={() => onBackToHome('flights')}
+        onMyTrips={() => {}}
+        onAbout={onAbout}
+        onSignIn={onSignIn}
+        onToggleSidebar={onToggleSidebar}
+      />
 
       <div className="max-w-6xl mx-auto py-12 px-4">
         {!token ? (

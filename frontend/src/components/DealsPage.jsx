@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import Logo from './Logo';
+import CustomerNav from './CustomerNav';
 import { API_URL } from '../config';
 import CheckoutModal from './CheckoutModal';
 import SeatSelectionModal from './SeatSelectionModal';
@@ -18,7 +18,8 @@ export default function DealsPage({
   onBackToHome,
   onSignIn,
   onMyTrips,
-  user,
+  onAbout,
+  auth,
   onToggleSidebar,
   onBooked,
 }) {
@@ -159,57 +160,17 @@ export default function DealsPage({
 
   return (
     <div className="min-h-screen bg-white font-sans text-gray-900">
-      <nav className="sticky top-0 z-50 bg-white border-b border-gray-100 px-8 py-4 flex justify-between items-center shadow-sm">
-        <div className="cursor-pointer" onClick={() => onBackToHome('flights')}>
-          <Logo />
-        </div>
-
-        <div className="flex items-center gap-6">
-          <button
-            onClick={() => onBackToHome('flights')}
-            className="text-gray-600 hover:text-gray-900 font-semibold text-sm transition-colors cursor-pointer"
-          >
-            Flights
-          </button>
-          <a
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              onMyTrips();
-            }}
-            className="text-gray-600 font-semibold hover:text-black flex items-center gap-2 text-sm transition-colors"
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <path d="m21 21-4.3-4.3" />
-            </svg>
-            My Trips
-          </a>
-
-          {user ? (
-            <button
-              onClick={onToggleSidebar}
-              className="w-10 h-10 rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold shadow-md hover:scale-105 transition-transform cursor-pointer"
-            >
-              {user.email?.charAt(0).toUpperCase()}
-            </button>
-          ) : (
-            <button
-              onClick={onSignIn}
-              className="border border-blue-600 text-blue-600 font-semibold px-6 py-2 rounded-full hover:bg-blue-50 transition-all text-sm cursor-pointer"
-            >
-              Sign In
-            </button>
-          )}
-        </div>
-      </nav>
+      <CustomerNav
+        variant="solid"
+        activeTab={null}
+        auth={auth}
+        onLogoClick={() => onBackToHome()}
+        onFlights={() => onBackToHome('flights')}
+        onMyTrips={onMyTrips}
+        onAbout={onAbout}
+        onSignIn={onSignIn}
+        onToggleSidebar={onToggleSidebar}
+      />
 
       <div className="max-w-6xl mx-auto py-12 px-4">
         <div className="mb-10">
