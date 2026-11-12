@@ -367,7 +367,8 @@ export default function App() {
       />
 
       <section className="p-4">
-        <div className="relative rounded-[2.5rem] shadow-2xl">
+        {/* Fills the screen under the header, so Deals start below the fold. */}
+        <div className="relative rounded-[2.5rem] shadow-2xl min-h-[calc(100vh-8rem)] flex flex-col">
           {/* Background photos, clipped to the rounded card. Content is not
               clipped, so search dropdowns can extend past the card. */}
           <div className="absolute inset-0 rounded-[2.5rem] overflow-hidden pointer-events-none">
@@ -383,7 +384,7 @@ export default function App() {
             <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/30 to-black/60" />
           </div>
 
-          <div className="relative z-30 px-4 pt-16 md:pt-20 pb-16 flex flex-col items-center">
+          <div className="relative z-30 flex-1 px-4 pt-16 md:pt-20 pb-20 flex flex-col items-center justify-center">
             <div className="text-center text-white max-w-3xl mx-auto mb-8">
               <span className="inline-block bg-white/15 border border-white/25 backdrop-blur-md text-xs font-bold uppercase tracking-wider px-4 py-1.5 rounded-full">
                 Coog10 Airlines
