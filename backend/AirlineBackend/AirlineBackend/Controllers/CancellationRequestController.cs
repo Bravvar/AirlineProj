@@ -191,7 +191,10 @@ public class CancellationRequestsController : ControllerBase
                             AND x.payment_status = 'Refunded'), 0)
             )                      AS RefundableAmount
         FROM CancellationRequest cr
-        JOIN Reservation r   ON r.reservation_id = cr.reservation_id
+JOIN CancellationReviewQueue cq
+    ON cq.request_id = cr.request_id
+JOIN Reservation r
+    ON r.reservation_id = cr.reservation_id
         JOIN UserAccount ua  ON ua.user_account_id = cr.requested_by_user_id
         LEFT JOIN Passenger p ON p.passenger_id = ua.passenger_id
         LEFT JOIN Employee e  ON e.employee_id = cr.reviewed_by_employee_id
