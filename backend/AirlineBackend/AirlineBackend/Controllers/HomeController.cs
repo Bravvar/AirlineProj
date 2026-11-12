@@ -979,6 +979,9 @@ public class HomeController : ControllerBase
 
             await transaction.CommitAsync();
 
+            // Loyalty: add points for this booking.
+            await LoyaltyService.AwardForPaymentAsync(_context, _logger, paymentReference);
+
             var ticketDetails = reservationPassengers.Select((rp, i) => new
             {
                 ticketNumber = i < ticketNumbers.Count ? ticketNumbers[i] : (string?)null,
@@ -1053,9 +1056,11 @@ public class HomeController : ControllerBase
                 "INSERT INTO SeatAssignment (reservation_segment_id, reservation_passenger_id, seat_id, flight_id, assignment_date_time, seat_fee, active_seat) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, 1)",
                 segment.ReservationSegmentId, link.ReservationPassengerId, body.seatId, segment.FlightId, DateTime.Now, fee);
 
+            string? seatPaymentReference = null;
             if (fee > 0)
             {
                 string reference = "SEAT" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpperInvariant();
+                seatPaymentReference = reference;
                 await _context.Database.ExecuteSqlRawAsync(
                     "INSERT INTO Payment (reservation_id, employee_id, payment_date_time, amount, payment_method, payment_status, transaction_reference, transaction_type) VALUES ({0}, NULL, {1}, {2}, 'Card (demo)', 'Successful', {3}, 'Payment')",
                     reservation.ReservationId, DateTime.Now, fee, reference);
@@ -1065,6 +1070,9 @@ public class HomeController : ControllerBase
             }
 
             await tx.CommitAsync();
+
+            // Loyalty: the $25 seat fee earns points too.
+            await LoyaltyService.AwardForPaymentAsync(_context, _logger, seatPaymentReference);
 
             return Ok(new
             {
@@ -1214,9 +1222,11 @@ public class HomeController : ControllerBase
 
             await _context.SaveChangesAsync();
 
+            string? bagPaymentReference = null;
             if (bagFee != 0)
             {
                 string paymentReference = "BAG" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpperInvariant();
+                if (bagFee > 0) bagPaymentReference = paymentReference;
 
                 string transactionType = bagFee > 0 ? "Payment" : "Refund";
 
@@ -1229,6 +1239,10 @@ public class HomeController : ControllerBase
             await _context.SaveChangesAsync();
 
             await transaction.CommitAsync();
+
+            // Loyalty: paid extra bags earn points too.
+            await LoyaltyService.AwardForPaymentAsync(_context, _logger, bagPaymentReference);
+
             return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount, bagFee });
         }
         catch (Exception ex)

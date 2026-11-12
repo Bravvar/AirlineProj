@@ -264,6 +264,9 @@ public class CancellationRequestsController : ControllerBase
             await _db.Database.ExecuteSqlInterpolatedAsync(
                 $"CALL approve_cancellation_request({id}, {employeeId.Value}, {amount}, {reference}, {notes})");
 
+            // Loyalty: take back the points earned on the refunded booking.
+            await LoyaltyService.ReverseForRefundAsync(_db, _logger, reference);
+
             return Ok(await GetRequest(id));
         }
         catch (Exception ex)

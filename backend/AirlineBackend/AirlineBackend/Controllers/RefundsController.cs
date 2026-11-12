@@ -356,6 +356,9 @@ public class RefundsController : ControllerBase
             await _db.Database.ExecuteSqlInterpolatedAsync(
                 $"CALL complete_flight_refund({id}, {employeeId.Value}, {reference})");
 
+            // Loyalty: take back the points earned on the refunded booking.
+            await LoyaltyService.ReverseForRefundAsync(_db, _logger, reference);
+
             return Ok(await GetReview(id));
         }
         catch (Exception ex)
