@@ -87,7 +87,9 @@ export default function RefundManagement({ token }) {
       const amt = Number(r.amount ?? 0);
       if (q && !(
         (r.confirmationNumber || '').toLowerCase().includes(q) ||
-        (r.supervisorEmail || '').toLowerCase().includes(q)
+        (r.supervisorEmail || '').toLowerCase().includes(q) ||
+        (r.passengerNames || '').toLowerCase().includes(q) ||
+        (r.transactionReference || '').toLowerCase().includes(q)
       )) return false;
       if (f.supervisor !== 'All' && r.supervisorEmail !== f.supervisor) return false;
       if (f.from && day < f.from) return false;
@@ -191,7 +193,7 @@ export default function RefundManagement({ token }) {
             <input
               value={auditFilters.search}
               onChange={setAudit('search')}
-              placeholder="Confirmation or supervisor email"
+              placeholder="Confirmation, passenger, supervisor email, or transaction ref"
               className={`${inputCls} w-full`}
             />
           </div>
@@ -238,21 +240,36 @@ export default function RefundManagement({ token }) {
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50/30 text-xs font-semibold text-gray-600 uppercase tracking-wider">
                 <th className="px-4 py-3">Confirmation</th>
+                <th className="px-4 py-3">Passenger</th>
                 <th className="px-4 py-3">Supervisor Email</th>
-                <th className="px-4 py-3">Amount</th>
+                <th className="px-4 py-3">Original Paid</th>
+                <th className="px-4 py-3">Refund Amount</th>
+                <th className="px-4 py-3">Transaction Ref</th>
                 <th className="px-4 py-3">Payment Date & Time</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredAudit.length === 0 ? (
-                <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-400 text-sm">
+                <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-400 text-sm">
                   {auditLoading ? 'Loading...' : 'No matching records.'}
                 </td></tr>
               ) : filteredAudit.map((r, i) => (
                 <tr key={`${r.confirmationNumber}-${r.paymentDateTime}-${i}`} className="hover:bg-blue-50/30">
                   <td className="px-4 py-3 font-mono">{r.confirmationNumber}</td>
+                  <td className="px-4 py-3">{r.passengerNames || '—'}</td>
                   <td className="px-4 py-3">{r.supervisorEmail}</td>
-                  <td className="px-4 py-3">{money(r.amount)}</td>
+                  <td className="px-4 py-3">{money(r.originalAmountPaid)}</td>
+                  <td className="px-4 py-3">
+                    {money(r.amount)}
+                    {Number(r.originalAmountPaid) > 0 && (
+                      <span className="block text-xs text-gray-400">
+                        {Number(r.amount) >= Number(r.originalAmountPaid)
+                          ? 'Full refund'
+                          : `Partial (${Math.round((Number(r.amount) / Number(r.originalAmountPaid)) * 100)}%)`}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs">{r.transactionReference}</td>
                   <td className="px-4 py-3">{formatDateTime(r.paymentDateTime)}</td>
                 </tr>
               ))}

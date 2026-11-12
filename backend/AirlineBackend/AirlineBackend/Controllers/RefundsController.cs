@@ -156,7 +156,17 @@ public class RefundsController : ControllerBase
                     SELECT r.confirmation_number AS ConfirmationNumber,
                            e.email AS SupervisorEmail,
                            p.amount AS Amount,
-                           p.payment_date_time AS PaymentDateTime
+                           p.payment_date_time AS PaymentDateTime,
+                           p.transaction_reference AS TransactionReference,
+                           (SELECT GROUP_CONCAT(CONCAT(pa.first_name, ' ', pa.last_name) SEPARATOR ', ')
+                              FROM ReservationPassenger rp
+                              JOIN Passenger pa ON pa.passenger_id = rp.passenger_id
+                             WHERE rp.reservation_id = r.reservation_id) AS PassengerNames,
+                           (SELECT COALESCE(SUM(op.amount), 0)
+                              FROM Payment op
+                             WHERE op.reservation_id = r.reservation_id
+                               AND op.transaction_type = 'Payment'
+                               AND op.payment_status = 'Successful') AS OriginalAmountPaid
                     FROM Payment p
                     JOIN Reservation r ON r.reservation_id = p.reservation_id
                     JOIN Employee e ON e.employee_id = p.employee_id
@@ -407,6 +417,9 @@ public class RefundAuditRow
     public string SupervisorEmail { get; set; } = "";
     public decimal Amount { get; set; }
     public DateTime PaymentDateTime { get; set; }
+    public string TransactionReference { get; set; } = "";
+    public string? PassengerNames { get; set; }
+    public decimal OriginalAmountPaid { get; set; }
 }
 
 public class CancelledRefundRow
