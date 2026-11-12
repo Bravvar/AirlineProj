@@ -1170,7 +1170,9 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn }) {
       {currentTab === 'flights' && (searching || results !== null || availabilitySearching || availabilityRows !== null) && (
         <div
           ref={resultsPanelRef}
-          className="w-full bg-white rounded-3xl shadow-2xl mt-4 p-6 text-gray-800 relative z-10 max-h-[500px] overflow-y-auto"
+          // Floats over the page (absolute), so opening results never makes the
+          // homepage background taller; it overlaps the hero and the deals below.
+          className="absolute left-0 right-0 top-full mt-4 z-[70] bg-white rounded-3xl shadow-2xl p-6 text-gray-800 max-h-[500px] overflow-y-auto"
         >
           <div className="flex justify-between items-center mb-4 sticky top-0 bg-white z-20 pb-2">
             <h3 className="text-lg font-bold text-gray-900">
