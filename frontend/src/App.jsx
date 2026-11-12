@@ -12,7 +12,7 @@ import SideBar from './components/SideBar';
 import MyLoyaltyPage from './components/MyLoyaltyPage';
 import RefundConfirmationPage from './components/RefundConfirmationPage';
 import PaymentConfirmationPage from './components/PaymentConfirmationPage';
-import ProfileModal from './components/ProfileModal';
+import ProfilePage from './components/ProfilePage';
 import AboutPage from './components/AboutPage';
 import CustomerNav from './components/CustomerNav';
 
@@ -27,7 +27,11 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('flights');
   const [showSignIn, setShowSignIn] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
+  // Set right before the reload that follows an account deletion, so the
+  // home page can tell the visitor what happened.
+  const [accountDeletedNotice, setAccountDeletedNotice] = useState(
+    () => sessionStorage.getItem('accountDeleted') === '1'
+  );
   const [currentPage, setCurrentPage] = useState('home');
   const [bgIndex, setBgIndex] = useState(0);
 
@@ -64,11 +68,25 @@ export default function App() {
     window.location.reload();
   };
 
+  // Account deleted: drop the session and land on the signed-out flight search.
+  const handleAccountDeleted = () => {
+    sessionStorage.setItem('accountDeleted', '1');
+    handleLogout();
+  };
+
+  // Email changed on the profile page: keep the session in step.
+  const handleEmailChanged = (email, token) => {
+    if (email) sessionStorage.setItem('email', email);
+    if (token) sessionStorage.setItem('token', token);
+    refreshAuth();
+  };
+
+  useEffect(() => {
+    if (accountDeletedNotice) sessionStorage.removeItem('accountDeleted');
+  }, [accountDeletedNotice]);
+
   const handleNavigate = (pageId) => {
-    if (pageId === 'profile') {
-      setShowProfile(true);
-      return;
-    }
+    if (pageId === 'profile') setCurrentPage('profile');
     if (pageId === 'deals') setCurrentPage('deals');
     if (pageId === 'admin') setCurrentPage('admin');
     if (pageId === 'employee') setCurrentPage('employee');
@@ -118,14 +136,6 @@ export default function App() {
         onLogout={handleLogout}
         onNavigate={handleNavigate}
       />
-      {showProfile && auth.token && (
-        <ProfileModal
-          show
-          onHide={() => setShowProfile(false)}
-          token={auth.token}
-          onAccountDeleted={handleLogout}
-        />
-      )}
     </>
   );
 
@@ -181,6 +191,25 @@ export default function App() {
     );
   }
 
+
+  if (currentPage === 'profile' && auth.token && auth.role === 'Member') {
+    return (
+      <>
+        <ProfilePage
+          auth={auth}
+          onBackToHome={goHome}
+          onMyTrips={() => setCurrentPage('trips')}
+          onAbout={() => setCurrentPage('about')}
+          onSignIn={() => setShowSignIn(true)}
+          onToggleSidebar={() => setShowSidebar(true)}
+          onEmailChanged={handleEmailChanged}
+          onAccountDeleted={handleAccountDeleted}
+        />
+        {modal}
+        {sidebar}
+      </>
+    );
+  }
 
   if (currentPage === 'about') {
     return (
@@ -348,6 +377,32 @@ export default function App() {
           onSignIn={() => setShowSignIn(true)}
           onToggleSidebar={() => setShowSidebar(true)}
         />
+
+        {accountDeletedNotice && !auth.token && (
+          <div className="relative z-30 mx-auto mt-2 w-full max-w-3xl px-4">
+            <div className="flex items-center justify-between gap-4 bg-white/95 backdrop-blur-md rounded-2xl shadow-lg px-5 py-4">
+              <p className="text-sm text-gray-700">
+                <span className="font-bold text-gray-900">Your account has been deleted.</span>{' '}
+                Sign in or create a new account to book flights.
+              </p>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={() => setShowSignIn(true)}
+                  className="bg-[#0066ff] hover:bg-blue-700 text-white font-bold text-sm px-5 py-2 rounded-full cursor-pointer"
+                >
+                  Sign In
+                </button>
+                <button
+                  onClick={() => setAccountDeletedNotice(false)}
+                  aria-label="Dismiss"
+                  className="text-gray-400 hover:text-gray-700 text-2xl leading-none px-1 cursor-pointer"
+                >
+                  &times;
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div
           id="flight-search"

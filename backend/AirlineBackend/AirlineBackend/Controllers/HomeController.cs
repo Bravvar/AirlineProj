@@ -514,6 +514,108 @@ public class HomeController : ControllerBase
         }
     }
 
+    // ---------------------------------------------------------------
+    // Update profile: phone and/or email.
+    //  * Phone can be changed on its own (10 digits).
+    //  * Changing email requires the current password, must not be a
+    //    staff domain, and must not already be used by another account.
+    //    UserAccount.email and Passenger.email are kept in sync, and a
+    //    fresh token is returned so the session carries the new email.
+    // ---------------------------------------------------------------
+    [HttpPut("profile/mine")]
+    public async Task<IActionResult> UpdateMyProfile([FromBody] UpdateProfilePayload body)
+    {
+        var userIdText = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!int.TryParse(userIdText, out int userId)) return Unauthorized();
+        if (body == null) return BadRequest(new { message = "Nothing to update." });
+
+        var account = _context.UserAccount.FirstOrDefault(u => u.UserAccountId == userId);
+        if (account == null) return Unauthorized();
+        if (account.Role != "Member" || account.PassengerId == null) return Forbid();
+
+        var passenger = _context.Passenger.FirstOrDefault(p => p.PassengerId == account.PassengerId.Value);
+        if (passenger == null) return NotFound(new { message = "Profile not found." });
+
+        var emailChanged = false;
+
+        if (body.phone != null)
+        {
+            var digits = new string(body.phone.Where(char.IsDigit).ToArray());
+            if (digits.Length != 10)
+                return BadRequest(new { message = "Please enter a valid 10-digit phone number." });
+            passenger.Phone = digits;
+        }
+
+        if (!string.IsNullOrWhiteSpace(body.email))
+        {
+            var newEmail = body.email.Trim().ToLowerInvariant();
+
+            if (!string.Equals(newEmail, account.Email, StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrEmpty(body.currentPassword) ||
+                    !BCrypt.Net.BCrypt.Verify(body.currentPassword, account.PasswordHash))
+                    return BadRequest(new { message = "Your current password is incorrect." });
+
+                if (!System.Text.RegularExpressions.Regex.IsMatch(newEmail, @"^[^@\s]+@[^@\s]+\.[^@\s]+$") || newEmail.Length > 100)
+                    return BadRequest(new { message = "Please enter a valid email address." });
+
+                if (newEmail.EndsWith("@coog10admin.com") || newEmail.EndsWith("@coog10employee.com"))
+                    return BadRequest(new { message = "This email domain is reserved for staff accounts." });
+
+                var taken = _context.UserAccount.Any(u => u.Email == newEmail && u.UserAccountId != userId)
+                         || _context.Passenger.Any(p => p.Email == newEmail && p.PassengerId != passenger.PassengerId);
+                if (taken)
+                    return BadRequest(new { message = "That email is already in use by another account." });
+
+                account.Email = newEmail;
+                passenger.Email = newEmail;
+                emailChanged = true;
+            }
+        }
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            message = "Your profile has been updated.",
+            email = account.Email,
+            phone = passenger.Phone,
+            token = emailChanged ? GenerateJSONWebToken(account) : null
+        });
+    }
+
+    // ---------------------------------------------------------------
+    // Change password: current password must match before the new one
+    // is saved. Same rules as sign-up: 8+ chars, 1 uppercase, 1 symbol.
+    // ---------------------------------------------------------------
+    [HttpPut("profile/password")]
+    public async Task<IActionResult> ChangeMyPassword([FromBody] ChangePasswordPayload body)
+    {
+        var userIdText = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (!int.TryParse(userIdText, out int userId)) return Unauthorized();
+        if (body == null || string.IsNullOrEmpty(body.currentPassword) || string.IsNullOrEmpty(body.newPassword))
+            return BadRequest(new { message = "Enter your current and new password." });
+
+        var account = _context.UserAccount.FirstOrDefault(u => u.UserAccountId == userId);
+        if (account == null) return Unauthorized();
+        if (account.Role != "Member") return Forbid();
+
+        if (!BCrypt.Net.BCrypt.Verify(body.currentPassword, account.PasswordHash))
+            return BadRequest(new { message = "Your current password is incorrect." });
+
+        var pw = body.newPassword;
+        if (pw.Length < 8 || !pw.Any(char.IsUpper) || pw.All(char.IsLetterOrDigit))
+            return BadRequest(new { message = "New password needs 8+ characters, an uppercase letter and a symbol." });
+
+        if (BCrypt.Net.BCrypt.Verify(pw, account.PasswordHash))
+            return BadRequest(new { message = "New password must be different from your current one." });
+
+        account.PasswordHash = BCrypt.Net.BCrypt.HashPassword(pw);
+        await _context.SaveChangesAsync();
+
+        return Ok(new { message = "Your password has been changed." });
+    }
+
     [HttpGet("reservations/mine")]
     public IActionResult MyReservations()
     {
@@ -1622,6 +1724,8 @@ public record RegisterPayload(string email, string password, int? passengerId, s
 public record BookingPayload(int flightFareId, int? returnFareId, List<int>? seats, List<PassengerName>? passengers);
 public record PassengerName(string firstName, string lastName);
 public record ChangeSeatPayload(int seatId);
+public record UpdateProfilePayload(string? email, string? phone, string? currentPassword);
+public record ChangePasswordPayload(string currentPassword, string newPassword);
 public record ModifyPayload(string? phone, string? address, string? mealSelection, int? additionalCheckedBags);
 public record AddFlightPayload(string flightNumber, string origin, string destination, int aircraftId, DateTime departure, DateTime arrival);
 public record AddFarePayload(int cabinClassId, int fareClassId, decimal price, int allocatedCapacity);
