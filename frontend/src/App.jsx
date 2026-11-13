@@ -522,6 +522,16 @@ export default function App() {
         onSeeAll={() => setCurrentPage('deals')}
         onBooked={handleBooked}
         onSignIn={() => setShowSignIn(true)}
+        navProps={{
+          auth,
+          activeTab: 'flights',
+          onFlights: () => goHome('flights'),
+          onDeals: () => setCurrentPage('deals'),
+          onMyTrips: () => setCurrentPage('trips'),
+          onAbout: () => setCurrentPage('about'),
+          onSignIn: () => setShowSignIn(true),
+          onToggleSidebar: () => setShowSidebar(true),
+        }}
       />
 
       {modal}

@@ -63,6 +63,18 @@ export default function DealsPage({
 
   const cityOf = (code) => cityByCode[(code || '').toUpperCase()] || code;
 
+  // Site header for the seat + checkout pages (same tabs as this page).
+  const navProps = {
+    auth,
+    activeTab: 'deals',
+    onFlights: () => onBackToHome('flights'),
+    onDeals: () => {},
+    onMyTrips,
+    onAbout,
+    onSignIn,
+    onToggleSidebar,
+  };
+
   const token = typeof window !== 'undefined' ? sessionStorage.getItem('token') : null;
 
   useEffect(() => {
@@ -308,6 +320,7 @@ export default function DealsPage({
           fareId={selectedDeal.flightFareId}
           farePrice={Number(selectedDeal.currentPrice || 0)}
           onProceed={handleSeatProceed}
+          navProps={navProps}
           preselectedSeatIds={selectedSeatIds}
           mode="booking"
         />
@@ -315,15 +328,36 @@ export default function DealsPage({
 
       {selectedDeal && (
         <CheckoutModal
+          variant="page"
           show={showCheckoutModal}
           onHide={() => {
             setShowCheckoutModal(false);
             setSelectedDeal(null);
           }}
+          // Back to the seat map with the seat still picked.
+          onBack={() => {
+            setShowCheckoutModal(false);
+            setShowSeatModal(true);
+          }}
+          navProps={navProps}
+          trip={[
+            {
+              label: 'Flight',
+              flightNumber: selectedDeal.flightNumber || '',
+              route: `${selectedDeal.origin || ''} → ${selectedDeal.destination || ''}`,
+              when: `${String(selectedDeal.departureDate || '').slice(0, 10)} · ${String(selectedDeal.departureTime || '').substring(0, 5)}–${String(selectedDeal.arrivalTime || '').substring(0, 5)}`,
+              cabin: selectedDeal.cabinName || '',
+              fareClass: selectedDeal.fareClassName || '',
+              seats: selectedSeatNumber ? [selectedSeatNumber] : [],
+            },
+          ]}
+          priceLines={[
+            { label: 'Fare', amount: Number(selectedDeal.currentPrice || 0) },
+            { label: 'Seat fees', amount: Math.max(0, checkoutTotal - Number(selectedDeal.currentPrice || 0)) },
+          ]}
           fareId={selectedDeal.flightFareId}
           returnFareId={null}
           totalPrice={checkoutTotal}
-          tripType="one-way"
           seatIds={selectedSeatIds}
           onSuccess={handlePaymentSuccess}
         />
