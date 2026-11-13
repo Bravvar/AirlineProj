@@ -59,12 +59,20 @@ const REPORT_DEFINITIONS = [
     filters: ['origin', 'destination', 'startDate', 'endDate', 'flightStatus', 'cabinName', 'minPctFull', 'maxPctFull'],
     columns: [
       { key: 'flightNumber', label: 'Flight Number' },
+      { key: 'departure', label: 'Departure' },
+      { key: 'origin', label: 'Origin' },
+      { key: 'destination', label: 'Destination' },
       { key: 'flightStatus', label: 'Flight Status'},
       { key: 'cabinName', label: 'Cabin Name' },
       { key: 'fareClassId', label: 'Fare Class ID' },
+      { key: 'fareClassName', label: 'Fare Class' },
       { key: 'availableInventory', label: 'Available Inventory' },
       { key: 'allocatedCapacity', label: 'Allocated Capacity' },
+      { key: 'seatsSold', label: 'Seats Sold' },
       { key: 'pctFull', label: '% Full' },
+      { key: 'basePrice', label: 'Base Price' },
+      { key: 'currentPrice', label: 'Current Price' },
+      { key: 'revenue', label: 'Revenue' },
     ],
   },
   {
@@ -191,7 +199,7 @@ function formatCell(row, key) {
   const val = row[key] !== undefined ? row[key] : (row[pascal] !== undefined ? row[pascal] : row[key.toLowerCase()]);
   if (key === 'pointsToNextTier' && (val === null || val === undefined) && (row.tier ?? row.Tier) === 'Gold') return 'Top tier';
   if (val === null || val === undefined || String(val).trim() === '') return '—';
-  if (['revenue', 'amount', 'totalAmount', 'avgFare'].includes(key)) {
+  if (['revenue', 'amount', 'totalAmount', 'avgFare', 'basePrice', 'currentPrice'].includes(key)) {
     const num = Number(val);
     if (!isNaN(num)) return `$${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
