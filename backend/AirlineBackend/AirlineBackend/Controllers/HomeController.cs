@@ -632,6 +632,14 @@ public class HomeController : ControllerBase
 
         var data = _context.Reservation.Where(i => ids.Contains(i.ReservationId)).ToList();
 
+        // The member's own add-ons on each booking (extra bags, meal), so
+        // Modify Trip can show what is already there.
+        var myLinks = _context.ReservationPassenger
+            .Where(i => i.PassengerId == account.PassengerId)
+            .ToList()
+            .GroupBy(i => i.ReservationId)
+            .ToDictionary(g => g.Key, g => g.First());
+
         // Latest cancellation request per booking (migration 18).
         var latest = new Dictionary<int, MemberCancellationRow>();
         try
@@ -695,6 +703,7 @@ public class HomeController : ControllerBase
         {
             latest.TryGetValue(r.ReservationId, out var req);
             flightCancels.TryGetValue(r.ReservationId, out var fc);
+            myLinks.TryGetValue(r.ReservationId, out var myLink);
             bool refunded = r.ReservationStatus == "Cancelled" && req?.RequestStatus == "Approved";
             bool pending = req?.RequestStatus == "Pending";
 
@@ -708,6 +717,8 @@ public class HomeController : ControllerBase
                 r.HoldExpiration,
                 r.TripType,
                 r.TotalAmount,
+                AdditionalCheckedBags = myLink?.AdditionalCheckedBags ?? 0,
+                MealSelection = myLink?.MealSelection,
                 // "Refunded" / "Cancellation Pending" / the raw status
                 DisplayStatus = refunded ? "Refunded"
                               : pending ? "Cancellation Pending"
@@ -1250,14 +1261,18 @@ public class HomeController : ControllerBase
             await _context.SaveChangesAsync();
 
             string? bagPaymentReference = null;
+            string? receiptReference = null;
+            DateTime? paidAt = null;
             if (bagFee != 0)
             {
                 string paymentReference = "BAG" + Guid.NewGuid().ToString("N").Substring(0, 12).ToUpperInvariant();
                 if (bagFee > 0) bagPaymentReference = paymentReference;
+                receiptReference = paymentReference;
+                paidAt = DateTime.UtcNow;
 
                 string transactionType = bagFee > 0 ? "Payment" : "Refund";
 
-                await _context.Database.ExecuteSqlRawAsync(@"INSERT INTO Payment(reservation_id, employee_id, payment_date_time, amount, payment_method, payment_status, transaction_reference, transaction_type) VALUES({0}, NULL, {1}, {2}, 'Card (demo)', 'Successful', {3}, {4})", reservation.ReservationId, DateTime.UtcNow, Math.Abs(bagFee), paymentReference, transactionType);
+                await _context.Database.ExecuteSqlRawAsync(@"INSERT INTO Payment(reservation_id, employee_id, payment_date_time, amount, payment_method, payment_status, transaction_reference, transaction_type) VALUES({0}, NULL, {1}, {2}, 'Card (demo)', 'Successful', {3}, {4})", reservation.ReservationId, paidAt, Math.Abs(bagFee), paymentReference, transactionType);
 
                 await _context.Database.ExecuteSqlRawAsync(
                     "UPDATE Ticket SET fare_amount = {0}, total_fare_paid = {0} WHERE reservation_id = {1} AND ticket_status = 'Issued'",
@@ -1270,13 +1285,63 @@ public class HomeController : ControllerBase
             // Loyalty: paid extra bags earn points too.
             await LoyaltyService.AwardForPaymentAsync(_context, _logger, bagPaymentReference);
 
-            return Ok(new { reservationId = reservation.ReservationId, confirmationNumber = reservation.ConfirmationNumber, reservationStatus = reservation.ReservationStatus, totalAmount = reservation.TotalAmount, bagFee });
+            return Ok(new
+            {
+                reservationId = reservation.ReservationId,
+                confirmationNumber = reservation.ConfirmationNumber,
+                reservationStatus = reservation.ReservationStatus,
+                totalAmount = reservation.TotalAmount,
+                bagFee,
+                // Receipt for the modification confirmation page.
+                paymentReference = receiptReference,
+                paidAt,
+                additionalCheckedBags = link.AdditionalCheckedBags,
+                mealSelection = link.MealSelection
+            });
         }
         catch (Exception ex)
         {
             await transaction.RollbackAsync();
             return StatusCode(500, "Internal Server Error: " + ex.Message);
         }
+    }
+
+    // -----------------------------------------------------------------
+    // Receipts for trip modifications (extra checked bags), newest first.
+    // Bag charges are the Payment rows whose reference starts with "BAG".
+    // -----------------------------------------------------------------
+    [HttpGet("reservations/{id}/modifications")]
+    public IActionResult ReservationModifications(int id)
+    {
+        var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (userId == null) return Unauthorized();
+        var account = _context.UserAccount.FirstOrDefault(i => i.UserAccountId == int.Parse(userId));
+        if (account == null || account.PassengerId == null) return Unauthorized();
+        var link = _context.ReservationPassenger.FirstOrDefault(i => i.ReservationId == id && i.PassengerId == account.PassengerId);
+        if (link == null) return NotFound("No reservation like that");
+
+        var rows = _context.Database.SqlQueryRaw<ModificationReceiptRow>(@"
+            SELECT p.payment_id AS PaymentId, p.transaction_reference AS Reference,
+                   p.transaction_type AS TransactionType, p.payment_status AS PaymentStatus,
+                   p.payment_method AS PaymentMethod, p.amount AS Amount, p.payment_date_time AS PaidAt
+            FROM Payment p
+            WHERE p.reservation_id = {0} AND p.transaction_reference LIKE 'BAG%'
+            ORDER BY p.payment_date_time DESC, p.payment_id DESC", id).ToList();
+
+        return Ok(rows.Select(r => new
+        {
+            r.PaymentId,
+            r.Reference,
+            r.TransactionType,
+            r.PaymentStatus,
+            r.PaymentMethod,
+            r.Amount,
+            // Bag payments are stored in UTC (DateTime.UtcNow); say so, so the
+            // browser shows the member's local time.
+            PaidAt = DateTime.SpecifyKind(r.PaidAt, DateTimeKind.Utc),
+            // $30 per extra checked bag
+            Bags = (int)Math.Round(r.Amount / 30m)
+        }));
     }
 
     [HttpGet("reservations/{id}/ticket")]
@@ -1821,6 +1886,7 @@ public class ManifestTicketRow { public string Passenger { get; set; } public st
 public class SeatMapRow { public int SeatId { get; set; } public string SeatNumber { get; set; } public int CabinClassId { get; set; } public string SeatType { get; set; } public int Occupied { get; set; } }
 public class AdminUserRow { public int UserAccountId { get; set; } public string Email { get; set; } public string Role { get; set; } public int? EmployeeId { get; set; } public int? PassengerId { get; set; } }
 // Airline-cancelled flight refund info per booking (migration 19).
+public class ModificationReceiptRow { public int PaymentId { get; set; } public string Reference { get; set; } = ""; public string TransactionType { get; set; } = ""; public string PaymentStatus { get; set; } = ""; public string? PaymentMethod { get; set; } public decimal Amount { get; set; } public DateTime PaidAt { get; set; } }
 public class FlightCancellationRow { public int ReservationId { get; set; } public string FlightNumber { get; set; } public string ReviewStatus { get; set; } public decimal? ApprovedAmount { get; set; } public decimal RefundedAmount { get; set; } public string? RefundReference { get; set; } }
 public class AdminFlightRow { public int FlightId { get; set; } public string FlightNumber { get; set; } public string OriginAirportCode { get; set; } public string DestinationAirportCode { get; set; } public string FlightStatus { get; set; } }
 public class AdminFareRow { public int FlightId { get; set; } public int FlightFareId { get; set; } public int FareClassId { get; set; } public decimal CurrentPrice { get; set; } public int AvailableInventory { get; set; } }

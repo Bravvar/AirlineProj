@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import CustomerNav from './CustomerNav';
 import { API_URL } from '../config';
 import CancelRefundModal from './CancelRefundModal';
+import CheckoutModal from './CheckoutModal';
 import TabToggle from './TabToggle';
 
 // ---------------------------------------------------------------------
@@ -99,6 +100,13 @@ function bookingTone(state) {
   return 'bg-blue-50 text-blue-700 border-blue-200';
 }
 
+// UTC timestamp → "Nov 13, 2026, 1:52 PM" in the viewer's time zone.
+function localDateTime(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
 const initials = (first, last) =>
   `${String(first || '').charAt(0)}${String(last || '').charAt(0)}`.toUpperCase() || 'P';
 
@@ -171,6 +179,15 @@ function TicketIcon({ className = 'w-4 h-4' }) {
     <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
       <path strokeLinejoin="round" d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4V8z" />
       <path strokeLinecap="round" strokeDasharray="2 3" d="M14 6v12" />
+    </svg>
+  );
+}
+
+function ReceiptIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+      <path strokeLinejoin="round" d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z" />
+      <path strokeLinecap="round" d="M9 8h6M9 12h6M9 16h3" />
     </svg>
   );
 }
@@ -321,10 +338,85 @@ function TicketsPanel({ ticket }) {
 }
 
 // =====================================================================
+// Receipts panel: one receipt per paid trip modification (extra bags)
+// =====================================================================
+
+// receipts = response of GET /api/reservations/{id}/modifications
+function ReceiptsPanel({ receipts, booking }) {
+  const bags = Number(booking.additionalCheckedBags || 0);
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap gap-2 text-xs">
+        <span className="bg-gray-100 text-gray-700 font-semibold px-3 py-1 rounded-full">
+          {bags} extra {bags === 1 ? 'bag' : 'bags'} on this trip
+        </span>
+        {booking.mealSelection && (
+          <span className="bg-gray-100 text-gray-700 font-semibold px-3 py-1 rounded-full">Meal: {booking.mealSelection}</span>
+        )}
+      </div>
+
+      {receipts.length === 0 ? (
+        <p className="text-sm text-gray-400 bg-gray-50 rounded-2xl px-4 py-5">
+          No paid changes yet. Extra bags you add with Modify Trip will show a receipt here.
+        </p>
+      ) : (
+        receipts.map((r) => {
+          const refund = String(r.transactionType).toLowerCase() === 'refund';
+          return (
+            <div key={r.paymentId || r.reference} className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
+              <div className="flex items-center justify-between gap-2 px-4 py-3 bg-gray-50 border-b border-dashed border-gray-200">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${refund ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                    <ReceiptIcon />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-gray-900">{refund ? 'Bag refund' : 'Extra checked bags'}</p>
+                    <p className="text-[11px] font-mono text-gray-500 truncate">{r.reference}</p>
+                  </div>
+                </div>
+                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ${
+                  String(r.paymentStatus).toLowerCase() === 'successful'
+                    ? 'bg-green-50 text-green-700 border-green-200'
+                    : 'bg-gray-100 text-gray-600 border-gray-200'
+                }`}>
+                  {r.paymentStatus}
+                </span>
+              </div>
+              <div className="px-4 py-3 text-xs flex flex-col gap-1.5">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">{r.bags} {r.bags === 1 ? 'bag' : 'bags'} × {money(BAG_FEE)}</span>
+                  <span className="font-semibold text-gray-900">{money(r.amount)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Date</span>
+                  <span className="text-gray-900">{localDateTime(r.paidAt)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Paid with</span>
+                  <span className="text-gray-900">{r.paymentMethod || 'Card'}</span>
+                </div>
+                <div className="flex justify-between pt-2 mt-1 border-t border-gray-100 text-sm">
+                  <span className="font-bold text-gray-900">{refund ? 'Refunded' : 'Total paid'}</span>
+                  <span className={`font-extrabold ${refund ? 'text-amber-700' : 'text-blue-700'}`}>
+                    {refund ? '−' : ''}{money(r.amount)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+// =====================================================================
 // Booking card
 // =====================================================================
 
 const MEAL_OPTIONS = ['Standard', 'Vegetarian', 'Vegan', 'Kosher', 'Halal', 'Gluten Free'];
+const BAG_FEE = 30; // per extra checked bag (same as the backend)
+const MAX_EXTRA_BAGS = 5;
 
 const ACTION =
   'text-xs font-semibold px-4 py-2 rounded-xl border transition-colors cursor-pointer';
@@ -334,23 +426,40 @@ const ACTION =
  *  state            tripState(booking) from tripUtils
  *  segments/ticket  loaded data (undefined until first opened)
  *  onLoadSegments / onLoadTicket(id)  fetch them (no-op when already loaded)
+ *  receipts / onLoadReceipts(id, force)  paid modifications (extra bags)
+ *  autoOpenReceipts open Receipts and scroll here (after a modification)
+ *  onModified(details)  a modification went through: show its confirmation
  */
 function BookingCard({
-  booking, state, token, onRefresh, segments, onLoadSegments, ticket, onLoadTicket,
+  booking, state, token, segments, onLoadSegments, ticket, onLoadTicket,
   onRequestCancel, isEditing, onEditStart, onEditEnd, onViewTicket,
+  receipts, onLoadReceipts, autoOpenReceipts, onModified, navProps,
 }) {
   const [legsOpen, setLegsOpen] = useState(false);
   const [ticketOpen, setTicketOpen] = useState(false);
 
   const [phone, setPhone] = useState('');
   const [mealSelection, setMealSelection] = useState('');
-  const [additionalCheckedBags, setAdditionalCheckedBags] = useState('');
+  const [bagsToAdd, setBagsToAdd] = useState(0);
+  const [pendingChange, setPendingChange] = useState(null); // waiting on payment
   const [loadingModify, setLoadingModify] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
+
+  const [receiptsOpen, setReceiptsOpen] = useState(Boolean(autoOpenReceipts));
+  const cardRef = useRef(null);
 
   const { request, flightCancel } = state;
   const showModify = isEditing && state.canAct;
+  const currentBags = Number(booking.additionalCheckedBags || 0);
+  const maxAdd = Math.max(0, MAX_EXTRA_BAGS - currentBags);
+  const bagCost = bagsToAdd * BAG_FEE;
+
+  // Coming back from a modification: open Receipts and scroll to this trip.
+  useEffect(() => {
+    if (!autoOpenReceipts) return;
+    onLoadReceipts(booking.reservationId, true);
+    cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [autoOpenReceipts, booking.reservationId, onLoadReceipts]);
 
   // Click to open (loads the first time), click again to close.
   const toggleLegs = () => {
@@ -361,11 +470,61 @@ function BookingCard({
     if (!ticketOpen) onLoadTicket(booking.reservationId);
     setTicketOpen((o) => !o);
   };
+  const toggleReceipts = () => {
+    if (!receiptsOpen) onLoadReceipts(booking.reservationId);
+    setReceiptsOpen((o) => !o);
+  };
 
+  const resetForm = () => {
+    setPhone('');
+    setMealSelection('');
+    setBagsToAdd(0);
+    setErrorMsg('');
+  };
+
+  // PUT the change. Resolves with the server's response, or throws.
+  const sendModification = async (body) => {
+    let res;
+    try {
+      res = await fetch(`${API_URL}/api/reservations/${booking.reservationId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      throw new Error('Unable to connect to server.');
+    }
+    const text = await res.text();
+    if (!res.ok) {
+      let msg = text || 'Could not modify reservation.';
+      try { msg = JSON.parse(text).message || msg; } catch { /* plain text */ }
+      throw new Error(msg);
+    }
+    try { return JSON.parse(text); } catch { return {}; }
+  };
+
+  const finish = (data, change) => {
+    resetForm();
+    setPendingChange(null);
+    onEditEnd();
+    onModified({
+      reservationId: booking.reservationId,
+      confirmationNumber: data.confirmationNumber || booking.confirmationNumber,
+      tripType: booking.tripType,
+      changes: change.changes,
+      bagsAdded: change.bagsAdded,
+      amountPaid: change.amount,
+      paymentReference: data.paymentReference || null,
+      paidAt: data.paidAt || new Date().toISOString(),
+      totalBags: data.additionalCheckedBags ?? currentBags + change.bagsAdded,
+      newTotal: data.totalAmount ?? Number(booking.totalAmount || 0) + change.amount,
+    });
+  };
+
+  // Save: extra bags go to the payment page first; other changes save now.
   const handleModifySubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
-    setSuccessMsg('');
 
     if (state.isCancelled) {
       setErrorMsg('Cannot modify a cancelled booking.');
@@ -373,42 +532,55 @@ function BookingCard({
     }
 
     const body = {};
-    if (phone.trim()) body.phone = phone.trim().replace(/\D/g, '');
-    if (mealSelection.trim()) body.mealSelection = mealSelection.trim();
-    if (additionalCheckedBags !== '') {
-      const bags = parseInt(additionalCheckedBags, 10);
-      if (isNaN(bags) || bags < 0 || bags > 5) {
-        setErrorMsg('Extra checked bags must be between 0 and 5.');
+    const changes = [];
+    const digits = phone.replace(/\D/g, '');
+    if (digits) {
+      if (digits.length !== 10) {
+        setErrorMsg('Phone number must have 10 digits.');
         return;
       }
-      body.additionalCheckedBags = bags;
+      body.phone = digits;
+      changes.push({ label: 'Phone', value: phone });
+    }
+    if (mealSelection) {
+      body.mealSelection = mealSelection;
+      changes.push({ label: 'Meal choice', value: mealSelection });
+    }
+    if (bagsToAdd > 0) {
+      body.additionalCheckedBags = currentBags + bagsToAdd;
+      changes.push({
+        label: 'Extra checked bags',
+        value: `+${bagsToAdd} (${currentBags + bagsToAdd} total)`,
+        amount: bagCost,
+      });
     }
 
-    if (Object.keys(body).length === 0) {
-      setErrorMsg('Please enter at least one field to update.');
+    if (changes.length === 0) {
+      setErrorMsg('Please change at least one thing to update.');
+      return;
+    }
+
+    const change = { body, changes, bagsAdded: bagsToAdd, amount: bagCost };
+    if (bagCost > 0) {
+      setPendingChange(change);
       return;
     }
 
     setLoadingModify(true);
     try {
-      const res = await fetch(`${API_URL}/api/reservations/${booking.reservationId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(body),
-      });
-      const text = await res.text();
-      if (!res.ok) {
-        setErrorMsg(text || 'Could not modify reservation.');
-        return;
-      }
-      setSuccessMsg('Booking modified successfully.');
-      onEditEnd();
-      onRefresh();
-    } catch {
-      setErrorMsg('Unable to connect to server.');
+      const data = await sendModification(body);
+      finish(data, change);
+    } catch (err) {
+      setErrorMsg(err.message);
     } finally {
       setLoadingModify(false);
     }
+  };
+
+  // Called by the payment page once the card details are valid.
+  const payForChange = async () => {
+    const data = await sendModification(pendingChange.body);
+    finish(data, pendingChange);
   };
 
   const handlePhoneChange = (e) => {
@@ -441,6 +613,7 @@ function BookingCard({
 
   return (
     <div
+      ref={cardRef}
       className={`bg-white rounded-3xl shadow-[0_4px_20px_rgb(0,0,0,0.05)] border border-gray-200 overflow-hidden flex flex-col hover:shadow-[0_8px_30px_rgb(0,0,0,0.10)] transition-shadow duration-300 ${
         state.isCancelled && !state.isRefunded ? 'opacity-70' : ''
       }`}
@@ -529,6 +702,13 @@ function BookingCard({
               label="Tickets"
               count={ticketCount}
             />
+            <ToggleChip
+              open={receiptsOpen}
+              onClick={toggleReceipts}
+              icon={<ReceiptIcon />}
+              label="Receipts"
+              count={receipts ? receipts.length : null}
+            />
           </div>
 
           <Collapse open={legsOpen}>
@@ -537,13 +717,17 @@ function BookingCard({
           <Collapse open={ticketOpen}>
             {ticket ? <TicketsPanel ticket={ticket} /> : <PanelLoading label="Loading tickets…" />}
           </Collapse>
+          <Collapse open={receiptsOpen}>
+            {receipts ? (
+              <ReceiptsPanel receipts={receipts} booking={booking} />
+            ) : (
+              <PanelLoading label="Loading receipts…" />
+            )}
+          </Collapse>
         </div>
 
         {errorMsg && (
           <p className="bg-red-50 border border-red-200 text-red-700 font-semibold rounded-2xl px-4 py-2.5 text-sm">{errorMsg}</p>
-        )}
-        {successMsg && (
-          <p className="bg-green-50 border border-green-200 text-green-800 font-semibold rounded-2xl px-4 py-2.5 text-sm">{successMsg}</p>
         )}
 
         {/* Actions */}
@@ -553,8 +737,7 @@ function BookingCard({
               onClick={() => {
                 if (isEditing) onEditEnd();
                 else onEditStart();
-                setErrorMsg('');
-                setSuccessMsg('');
+                resetForm();
               }}
               className={`${ACTION} border-gray-300 text-gray-700 hover:bg-gray-100`}
             >
@@ -576,64 +759,125 @@ function BookingCard({
         )}
 
         {showModify && (
-          <form onSubmit={handleModifySubmit} className="bg-gray-50 border border-gray-200 rounded-2xl p-4 flex flex-col gap-3">
-            <h4 className="text-sm font-bold text-gray-900">Modify Reservation {booking.confirmationNumber}</h4>
+          <form onSubmit={handleModifySubmit} className="bg-gray-50 border border-gray-200 rounded-2xl p-5 flex flex-col gap-4">
+            <div>
+              <h4 className="text-sm font-bold text-gray-900">Modify Reservation {booking.confirmationNumber}</h4>
+              <p className="text-xs text-gray-500 mt-0.5">Change only what you need. Leave a field empty to keep it.</p>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-semibold text-gray-600 mb-1 block">Phone</label>
                 <input
                   type="text"
+                  inputMode="numeric"
                   placeholder="(713) 555-0199"
                   value={phone}
                   onChange={handlePhoneChange}
-                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500"
+                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500"
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold text-gray-600 mb-1 block">Meal Choice</label>
+                <label className="text-xs font-semibold text-gray-600 mb-1 block">
+                  Meal Choice{booking.mealSelection ? ` (now ${booking.mealSelection})` : ''}
+                </label>
                 <select
                   value={mealSelection}
                   onChange={(e) => setMealSelection(e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 cursor-pointer"
+                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-blue-500 cursor-pointer"
                 >
-                  <option value="">— Select —</option>
+                  <option value="">— Keep current —</option>
                   {MEAL_OPTIONS.map((m) => (
                     <option key={m} value={m}>{m}</option>
                   ))}
                 </select>
               </div>
-              <div className="sm:col-span-2">
-                <label className="text-xs font-semibold text-gray-600 mb-1 block">Extra Checked Bags (0–5, $30 each)</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="5"
-                  placeholder="e.g. 3"
-                  value={additionalCheckedBags}
-                  onChange={(e) => setAdditionalCheckedBags(e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500"
-                />
-                <p className="text-[11px] text-gray-500 mt-1">You will be charged $30 per additional bag.</p>
+            </div>
+
+            {/* Extra bags: a stepper, so only whole numbers 0..max can be picked */}
+            <div className="bg-white border border-gray-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-bold text-gray-900">Add extra checked bags</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {money(BAG_FEE)} each · You have {currentBags} extra {currentBags === 1 ? 'bag' : 'bags'}
+                  {maxAdd === 0 ? ' (maximum reached)' : ` · up to ${maxAdd} more`}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  aria-label="Remove a bag"
+                  onClick={() => setBagsToAdd((n) => Math.max(0, n - 1))}
+                  disabled={bagsToAdd === 0}
+                  className="w-10 h-10 rounded-full border border-gray-300 text-gray-700 text-xl font-bold flex items-center justify-center hover:bg-gray-100 disabled:opacity-30 cursor-pointer disabled:cursor-default"
+                >
+                  −
+                </button>
+                <span className="w-8 text-center text-2xl font-extrabold text-gray-900" aria-live="polite">{bagsToAdd}</span>
+                <button
+                  type="button"
+                  aria-label="Add a bag"
+                  onClick={() => setBagsToAdd((n) => Math.min(maxAdd, n + 1))}
+                  disabled={bagsToAdd >= maxAdd}
+                  className="w-10 h-10 rounded-full bg-[#0066ff] text-white text-xl font-bold flex items-center justify-center hover:bg-blue-700 disabled:opacity-30 cursor-pointer disabled:cursor-default"
+                >
+                  +
+                </button>
               </div>
             </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={onEditEnd}
-                className="px-4 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loadingModify}
-                className="bg-[#0066ff] hover:bg-blue-700 text-white font-semibold px-4 py-1.5 text-xs rounded-lg shadow-sm transition-colors disabled:opacity-50"
-              >
-                {loadingModify ? 'Saving...' : 'Save Changes'}
-              </button>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+              <p className="text-sm text-gray-600">
+                {bagCost > 0 ? (
+                  <>Due now <span className="font-extrabold text-gray-900">{money(bagCost)}</span></>
+                ) : (
+                  'No charge for these changes'
+                )}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { resetForm(); onEditEnd(); }}
+                  className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-200 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loadingModify}
+                  className="bg-[#0066ff] hover:bg-blue-700 text-white font-semibold px-5 py-2 text-xs rounded-xl shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {loadingModify ? 'Saving...' : bagCost > 0 ? `Continue to Payment · ${money(bagCost)}` : 'Save Changes'}
+                </button>
+              </div>
             </div>
           </form>
         )}
+
+        {/* Payment page for extra bags. Nothing is charged or saved until Pay. */}
+        <CheckoutModal
+          variant="page"
+          show={Boolean(pendingChange)}
+          onHide={() => setPendingChange(null)}
+          onBack={() => setPendingChange(null)}
+          backLabel="Back to trip"
+          navProps={navProps}
+          title="Pay for trip changes"
+          trip={[
+            {
+              label: 'Booking',
+              flightNumber: booking.confirmationNumber,
+              route: `${pendingChange?.bagsAdded || 0} extra checked ${pendingChange?.bagsAdded === 1 ? 'bag' : 'bags'}`,
+              when: `${booking.tripType || 'Trip'} · added to this booking`,
+              cabin: (pendingChange?.changes || []).filter((c) => !c.amount).map((c) => `${c.label}: ${c.value}`).join(' · '),
+            },
+          ]}
+          priceLines={[
+            { label: `Extra bags × ${pendingChange?.bagsAdded || 0} (${money(BAG_FEE)} each)`, amount: pendingChange?.amount || 0 },
+          ]}
+          totalPrice={pendingChange?.amount || 0}
+          onPay={payForChange}
+        />
       </div>
 
       <div className="px-6 py-4 flex justify-between items-center border-t border-gray-100 bg-gray-50/60">
@@ -655,11 +899,19 @@ const EMPTY_TEXT = {
 };
 
 export default function MyTripsPage({ 
-  token, email, onBackToHome, onSignIn, onToggleSidebar, onRefundSuccess, auth, onViewTicket, onAbout 
+  token, email, onBackToHome, onSignIn, onToggleSidebar, onRefundSuccess, auth, onViewTicket, onAbout,
+  // A modification went through: App shows its confirmation page.
+  onModified,
+  // "View trip" from that page: open this booking's Receipts.
+  focusReservationId, onFocusHandled,
 }) {
   const [bookings, setBookings] = useState(null);
   const [segmentsById, setSegmentsById] = useState({});
   const [ticketById, setTicketById] = useState({});
+  const [receiptsById, setReceiptsById] = useState({});
+  const receiptsLoaded = useRef(new Set());
+  // Kept here so the card still opens after bookings finish loading.
+  const [focusId] = useState(focusReservationId ?? null);
   const [loadError, setLoadError] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [activeTab, setActiveTab] = useState('confirmations');
@@ -667,6 +919,21 @@ export default function MyTripsPage({
   const [cancelBooking, setCancelBooking] = useState(null); // Cancel / Refund popup
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
+  useEffect(() => {
+    if (focusReservationId != null && onFocusHandled) onFocusHandled();
+  }, [focusReservationId, onFocusHandled]);
+
+  // Site header for the payment page (same tabs as this page).
+  const navProps = {
+    auth: { token, email },
+    activeTab: 'trips',
+    onFlights: () => onBackToHome('flights'),
+    onDeals: () => onBackToHome('deals'),
+    onMyTrips: () => {},
+    onAbout,
+    onSignIn,
+    onToggleSidebar,
+  };
 
   const fetchBookings = useCallback(async () => {
     if (!token) return;
@@ -763,6 +1030,21 @@ export default function MyTripsPage({
       setTicketById((prev) => ({ ...prev, [id]: { ticketNumber: null } }));
     }
   };
+
+  // Receipts for paid modifications. force = reload (a new one was just added).
+  const loadReceipts = useCallback(async (id, force = false) => {
+    if (!force && receiptsLoaded.current.has(id)) return;
+    receiptsLoaded.current.add(id);
+    try {
+      const res = await fetch(`${API_URL}/api/reservations/${id}/modifications`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = res.ok ? await res.json() : [];
+      setReceiptsById((prev) => ({ ...prev, [id]: Array.isArray(data) ? data : [] }));
+    } catch {
+      setReceiptsById((prev) => ({ ...prev, [id]: [] }));
+    }
+  }, [token]);
 
   // Each booking's tab + flags, newest booking first.
   const trips = useMemo(
@@ -864,7 +1146,6 @@ export default function MyTripsPage({
                     booking={b}
                     state={state}
                     token={token}
-                    onRefresh={fetchBookings}
                     segments={segmentsById[b.reservationId]}
                     onLoadSegments={loadSegments}
                     ticket={ticketById[b.reservationId]}
@@ -874,6 +1155,11 @@ export default function MyTripsPage({
                     onEditStart={() => setEditingId(b.reservationId)}
                     onEditEnd={() => setEditingId(null)}
                     onViewTicket={onViewTicket}
+                    receipts={receiptsById[b.reservationId]}
+                    onLoadReceipts={loadReceipts}
+                    autoOpenReceipts={focusId === b.reservationId}
+                    onModified={onModified}
+                    navProps={navProps}
                   />
                 ))}
               </div>

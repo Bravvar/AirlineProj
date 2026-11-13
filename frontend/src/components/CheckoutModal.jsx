@@ -49,7 +49,7 @@ function LockIcon() {
  *  title, summary       heading + one-line trip summary (modal)
  *  variant              'modal' (default) | 'page'
  *  navProps             page only: the site header's props
- *  onBack               page only: "Back to seats"
+ *  onBack               page only: back button (label: backLabel, default "Back to seats")
  *  trip                 page only: [{ label, flightNumber, route, when, cabin, fareClass, seats }]
  *  priceLines           page only: [{ label, amount }] shown above the total
  */
@@ -73,6 +73,7 @@ export default function CheckoutModal({
   variant = 'modal',
   navProps,
   onBack,
+  backLabel = 'Back to seats',
   trip = [],
   priceLines = [],
 }) {
@@ -385,7 +386,7 @@ export default function CheckoutModal({
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" />
                 </svg>
-                Back to seats
+                {backLabel}
               </button>
             )}
             <div>
@@ -465,7 +466,7 @@ export default function CheckoutModal({
                 </div>
                 {payButton}
                 <p className="text-[11px] text-gray-400 text-center mt-3">
-                  Leaving this page cancels nothing — your booking is only made when payment goes through.
+                  Leaving this page cancels nothing — nothing is saved or charged until payment goes through.
                 </p>
               </section>
             </aside>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { API_URL } from './config';
 import HeroSearch from './components/HeroSearch';
 import DealsSection from './components/DealsSection';
@@ -12,6 +12,7 @@ import SideBar from './components/SideBar';
 import MyLoyaltyPage from './components/MyLoyaltyPage';
 import RefundConfirmationPage from './components/RefundConfirmationPage';
 import PaymentConfirmationPage from './components/PaymentConfirmationPage';
+import ModificationConfirmationPage from './components/ModificationConfirmationPage';
 import ProfilePage from './components/ProfilePage';
 import AboutPage from './components/AboutPage';
 import CustomerNav from './components/CustomerNav';
@@ -131,6 +132,10 @@ export default function App() {
 
   const [refundDetails, setRefundDetails] = useState(null);
   const [paymentDetails, setPaymentDetails] = useState(null);
+  // Trip modification (extra bags etc.): its confirmation, then which trip
+  // My Trips should open with Receipts showing.
+  const [modifyDetails, setModifyDetails] = useState(null);
+  const [focusTripId, setFocusTripId] = useState(null);
 
   const [auth, setAuth] = useState(() => ({
     token: sessionStorage.getItem('token'),
@@ -231,6 +236,8 @@ export default function App() {
       />
     </>
   );
+
+  const clearFocusTrip = useCallback(() => setFocusTripId(null), []);
 
   const handleBooked = (details) => {
     setPaymentDetails(details);
@@ -339,6 +346,12 @@ export default function App() {
             setPaymentDetails(await loadTripDetails(booking, segments, auth));
             setCurrentPage('payment-success');
           }}
+          onModified={(details) => {
+            setModifyDetails(details);
+            setCurrentPage('modify-success');
+          }}
+          focusReservationId={focusTripId}
+          onFocusHandled={clearFocusTrip}
         />
         {modal}
         {sidebar}
@@ -352,6 +365,25 @@ export default function App() {
         details={refundDetails}
         onBackToTrips={() => setCurrentPage('trips')}
       />
+    );
+  }
+
+  if (currentPage === 'modify-success' && modifyDetails) {
+    return (
+      <>
+        <ModificationConfirmationPage
+          details={modifyDetails}
+          auth={auth}
+          onNavigate={handleNavigate}
+          onToggleSidebar={() => setShowSidebar(true)}
+          onViewTrip={() => {
+            setFocusTripId(modifyDetails.reservationId);
+            setCurrentPage('trips');
+          }}
+        />
+        {modal}
+        {sidebar}
+      </>
     );
   }
 
