@@ -6,6 +6,8 @@ const REPORT_DEFINITIONS = [
   {
     key: 'report1',
     title: 'Revenue by Flight',
+    description: 'How much money each flight earned and how many tickets it sold. Use it to see which routes and flights bring in the most revenue.',
+    source: 'Live query on Flight, ReservationSegment, and Ticket — tickets counted and total_fare_paid summed per flight, straight from the database.',
     filters: ['origin', 'destination', 'startDate', 'endDate', 'flightStatus', 'minTickets', 'minRevenue', 'maxRevenue'],
     columns: [
       { key: 'flightNumber', label: 'Flight Number' },
@@ -23,6 +25,8 @@ const REPORT_DEFINITIONS = [
   {
     key: 'report2',
     title: 'Membership tier summary',
+    description: 'Every member, their loyalty points balance, membership status, and tier (Gold, Silver, Bronze, or Basic). Use it to see who your most loyal customers are.',
+    source: 'Live query on Passenger and MembershipAccount — points_balance read from the membership table, tier calculated from the balance.',
     filters: ['tier', 'membershipStatus', 'minPoints'],
     columns: [
       { key: 'passengerId', label: 'Passenger ID' },
@@ -41,6 +45,8 @@ const REPORT_DEFINITIONS = [
   {
     key: 'report3',
     title: 'Payment / refund audit',
+    description: 'Every payment and refund: the booking, the amount, whether it succeeded or was refunded, and which staff member processed it. Use it to audit money moving in and out.',
+    source: 'Live query on Payment, Reservation, and Employee — every row is a real payment record, joined to its booking and the staff member who processed it.',
     filters: ['transactionType', 'paymentStatus', 'minAmount', 'maxAmount', 'startDate', 'endDate', 'employeeRole'],
     columns: [
       { key: 'confirmationNumber', label: 'Confirmation Number' },
@@ -56,6 +62,8 @@ const REPORT_DEFINITIONS = [
   {
     key: 'report4',
     title: 'Flight load factor',
+    description: 'How full each flight is, by cabin: allocated seats, available seats, and percent full. Use it to see which flights are selling out and which have empty seats.',
+    source: 'Live query on FlightFare, Flight, and CabinClass — percent full is calculated from allocated_capacity minus available_inventory, per fare.',
     filters: ['origin', 'destination', 'startDate', 'endDate', 'flightStatus', 'cabinName', 'minPctFull', 'maxPctFull'],
     columns: [
       { key: 'flightNumber', label: 'Flight Number' },
@@ -78,6 +86,8 @@ const REPORT_DEFINITIONS = [
   {
     key: 'report7',
     title: 'Revenue by Airport',
+    description: 'How much money and how many tickets each airport generated. Use it to compare which airports are the most profitable for the airline.',
+    source: 'Live query on Flight, ReservationSegment, and Ticket — revenue summed per origin airport, straight from the database.',
     filters: ['airport', 'startDate', 'endDate', 'minRevenue', 'minTickets'],
     columns: [
       { key: 'airport', label: 'Airport' },
@@ -292,6 +302,12 @@ function ReportTable({ def, rows, search, hiddenColumns, toggleColumn, loading }
       <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/60 flex flex-wrap justify-between items-center gap-4 rounded-t-3xl">
         <div>
           <h2 className="text-lg font-bold text-gray-900">{def.title}</h2>
+          {def.description && (
+            <p className="text-sm text-gray-600 mt-1 max-w-2xl">{def.description}</p>
+          )}
+          {def.source && (
+            <p className="text-xs text-gray-500 mt-1 max-w-2xl"><span className="font-semibold text-gray-600">Data source: </span>{def.source}</p>
+          )}
           <p className="text-xs text-gray-500 mt-0.5">{filteredRows.length} {filteredRows.length === 1 ? 'record' : 'records'}{(search || (filterCol && filterVal)) ? ' (filtered)' : ''}</p>
         </div>
 
@@ -396,6 +412,242 @@ function ReportTable({ def, rows, search, hiddenColumns, toggleColumn, loading }
                 </tr>
               ))
             )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function Report1DetailsTable({ rows, search, loading }) {
+  const query = (search || '').trim().toLowerCase();
+  const visibleRows = query
+    ? rows.filter((row) => [
+        row.ticketNumber, row.flightNumber, row.origin, row.destination,
+        row.passenger, row.purchasedBy, row.purchaseDateTime,
+        row.ticketStatus, row.ticketRevenue,
+      ].some((value) => String(value ?? '').toLowerCase().includes(query)))
+    : rows;
+
+  const formatPurchaseDate = (value) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+  };
+
+  return (
+    <div className="bg-white rounded-3xl shadow border border-gray-200 overflow-hidden mt-5">
+      <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/60">
+        <h2 className="text-lg font-bold text-gray-900">Ticket Purchase Details</h2>
+        <p className="text-xs text-gray-500 mt-1">
+          Individual ticket-and-flight-segment records contributing to the Revenue by Flight totals.
+        </p>
+        <p className="text-xs text-gray-500 mt-2">
+          {visibleRows.length} {visibleRows.length === 1 ? 'record' : 'records'}{query ? ' (search filtered)' : ''}
+        </p>
+      </div>
+
+      <div className="overflow-x-auto overflow-y-auto max-h-[480px]">
+        <table className="w-full text-left border-collapse text-sm">
+          <thead className="sticky top-0 z-10 bg-gray-50 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            <tr className="border-b border-gray-200">
+              {['Ticket Number', 'Flight', 'Origin', 'Destination', 'Passenger', 'Purchased By', 'Purchase Date & Time', 'Status', 'Revenue Used'].map((label) => (
+                <th key={label} className="px-5 py-3.5 whitespace-nowrap">{label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {visibleRows.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="px-6 py-8 text-center text-gray-400 text-sm">
+                  {loading ? 'Loading ticket details...' : query ? 'No matching ticket details.' : 'No ticket details for the selected filters.'}
+                </td>
+              </tr>
+            ) : visibleRows.map((row, index) => (
+              <tr key={`${row.ticketId}-${row.flightNumber}-${index}`} className="hover:bg-blue-50/30">
+                <td className="px-5 py-3 whitespace-nowrap font-medium">{row.ticketNumber || '—'}</td>
+                <td className="px-5 py-3 whitespace-nowrap">{row.flightNumber || '—'}</td>
+                <td className="px-5 py-3 whitespace-nowrap">{row.origin || '—'}</td>
+                <td className="px-5 py-3 whitespace-nowrap">{row.destination || '—'}</td>
+                <td className="px-5 py-3 whitespace-nowrap">{row.passenger || '—'}</td>
+                <td className="px-5 py-3 whitespace-nowrap">{row.purchasedBy || 'Unknown'}</td>
+                <td className="px-5 py-3 whitespace-nowrap">{formatPurchaseDate(row.purchaseDateTime)}</td>
+                <td className="px-5 py-3 whitespace-nowrap">{row.ticketStatus || '—'}</td>
+                <td className="px-5 py-3 whitespace-nowrap">${Number(row.ticketRevenue || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function Report3DetailsTable({ rows, search, loading }) {
+  const query = (search || '').trim().toLowerCase();
+  const visibleRows = query
+    ? rows.filter((row) => [
+        row.customerName, row.transactionReference, row.transactionType,
+        row.amount, row.requestDateTime,
+      ].some((value) => String(value ?? '').toLowerCase().includes(query)))
+    : rows;
+
+  const formatRequestDate = (value) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+  };
+
+  return (
+    <div className="bg-white rounded-3xl shadow border border-gray-200 overflow-hidden mt-5">
+      <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/60">
+        <h2 className="text-lg font-bold text-gray-900">Payment / Refund Details</h2>
+        <p className="text-xs text-gray-500 mt-1">
+          Individual payment and refund transactions included in the Payment / refund audit above.
+        </p>
+        <p className="text-xs text-gray-500 mt-2">
+          {visibleRows.length} {visibleRows.length === 1 ? 'transaction' : 'transactions'}{query ? ' (search filtered)' : ''}
+        </p>
+      </div>
+
+      <div className="overflow-x-auto overflow-y-auto max-h-[480px]">
+        <table className="w-full text-left border-collapse text-sm">
+          <thead className="sticky top-0 z-10 bg-gray-50 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            <tr className="border-b border-gray-200">
+              {['Customer Name', 'Transaction Reference', 'Transaction Type', 'Amount Paid / Refunded', 'Request Date & Time'].map((label) => (
+                <th key={label} className="px-5 py-3.5 whitespace-nowrap">{label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {visibleRows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-8 text-center text-gray-400 text-sm">
+                  {loading ? 'Loading payment details...' : query ? 'No matching payment details.' : 'No payment or refund details for the selected filters.'}
+                </td>
+              </tr>
+            ) : visibleRows.map((row) => (
+              <tr key={row.paymentId || row.transactionReference} className="hover:bg-blue-50/30">
+                <td className="px-5 py-3 whitespace-nowrap font-medium">{row.customerName || 'Unknown'}</td>
+                <td className="px-5 py-3 whitespace-nowrap">{row.transactionReference || '—'}</td>
+                <td className="px-5 py-3 whitespace-nowrap">{row.transactionType || '—'}</td>
+                <td className="px-5 py-3 whitespace-nowrap">${Number(row.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td className="px-5 py-3 whitespace-nowrap">{formatRequestDate(row.requestDateTime)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function Report4PassengerDetailsTable({ rows, search, loading }) {
+  const query = (search || '').trim().toLowerCase();
+  const visibleRows = query
+    ? rows.filter((row) => [
+        row.flightNumber, row.passengerName, row.ticketNumber,
+        row.seatNumber, row.cabinClass,
+      ].some((value) => String(value ?? '').toLowerCase().includes(query)))
+    : rows;
+
+  return (
+    <div className="bg-white rounded-3xl shadow border border-gray-200 overflow-hidden mt-5">
+      <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/60">
+        <h2 className="text-lg font-bold text-gray-900">Flight Passenger & Seat Details</h2>
+        <p className="text-xs text-gray-500 mt-1">
+          Passengers and active seat assignments for the flights and cabin classes included in the Flight Load Factor report.
+        </p>
+        <p className="text-xs text-gray-500 mt-2">
+          {visibleRows.length} {visibleRows.length === 1 ? 'passenger' : 'passengers'}{query ? ' (search filtered)' : ''}
+        </p>
+      </div>
+
+      <div className="overflow-x-auto overflow-y-auto max-h-[480px]">
+        <table className="w-full text-left border-collapse text-sm">
+          <thead className="sticky top-0 z-10 bg-gray-50 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            <tr className="border-b border-gray-200">
+              {['Flight Number', 'Passenger Name', 'Ticket Number', 'Seat Number', 'Cabin Class'].map((label) => (
+                <th key={label} className="px-5 py-3.5 whitespace-nowrap">{label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {visibleRows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-6 py-8 text-center text-gray-400 text-sm">
+                  {loading ? 'Loading passenger details...' : query ? 'No matching passenger details.' : 'No passenger details for the selected filters.'}
+                </td>
+              </tr>
+            ) : visibleRows.map((row, idx) => (
+              <tr key={`${row.ticketNumber || 'ticket'}-${row.flightNumber || 'flight'}-${idx}`} className="hover:bg-blue-50/30">
+                <td className="px-5 py-3 whitespace-nowrap font-medium">{row.flightNumber || '—'}</td>
+                <td className="px-5 py-3 whitespace-nowrap">{row.passengerName || 'Unknown'}</td>
+                <td className="px-5 py-3 whitespace-nowrap">{row.ticketNumber || '—'}</td>
+                <td className="px-5 py-3 whitespace-nowrap">{row.seatNumber || 'Not assigned'}</td>
+                <td className="px-5 py-3 whitespace-nowrap">{row.cabinClass || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function Report7DetailsTable({ rows, search, loading }) {
+  const query = (search || '').trim().toLowerCase();
+  const visibleRows = query
+    ? rows.filter((row) => [
+        row.customerName, row.airport, row.ticketId, row.ticketNumber,
+        row.amountPaid, row.purchaseDateTime,
+      ].some((value) => String(value ?? '').toLowerCase().includes(query)))
+    : rows;
+
+  const formatPurchaseDate = (value) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+  };
+
+  return (
+    <div className="bg-white rounded-3xl shadow border border-gray-200 overflow-hidden mt-5">
+      <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/60">
+        <h2 className="text-lg font-bold text-gray-900">Ticket Revenue Details by Airport</h2>
+        <p className="text-xs text-gray-500 mt-1">
+          Ticket-level revenue attributed to each ticket's flight origin airport. Amounts use the segment fare included in the airport summary.
+        </p>
+        <p className="text-xs text-gray-500 mt-2">
+          {visibleRows.length} {visibleRows.length === 1 ? 'record' : 'records'}{query ? ' (search filtered)' : ''}
+        </p>
+      </div>
+
+      <div className="overflow-x-auto overflow-y-auto max-h-[480px]">
+        <table className="w-full text-left border-collapse text-sm">
+          <thead className="sticky top-0 z-10 bg-gray-50 text-xs font-semibold text-gray-600 uppercase tracking-wider">
+            <tr className="border-b border-gray-200">
+              {['Customer Name', 'Origin Airport', 'Ticket ID', 'Ticket Number', 'Amount Paid', 'Purchase Date & Time'].map((label) => (
+                <th key={label} className="px-5 py-3.5 whitespace-nowrap">{label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {visibleRows.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-6 py-8 text-center text-gray-400 text-sm">
+                  {loading ? 'Loading ticket details...' : query ? 'No matching ticket details.' : 'No ticket details for the selected filters.'}
+                </td>
+              </tr>
+            ) : visibleRows.map((row, index) => (
+              <tr key={`${row.ticketId}-${row.airport}-${index}`} className="hover:bg-blue-50/30">
+                <td className="px-5 py-3 whitespace-nowrap font-medium">{row.customerName || 'Unknown'}</td>
+                <td className="px-5 py-3 whitespace-nowrap">{row.airport || '—'}</td>
+                <td className="px-5 py-3 whitespace-nowrap">{row.ticketId ?? '—'}</td>
+                <td className="px-5 py-3 whitespace-nowrap">{row.ticketNumber || '—'}</td>
+                <td className="px-5 py-3 whitespace-nowrap">${Number(row.amountPaid || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                <td className="px-5 py-3 whitespace-nowrap">{formatPurchaseDate(row.purchaseDateTime)}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -638,6 +890,34 @@ export default function ReportsPage({ token, email, role, onBackToHome, onSignIn
                       toggleColumn={toggleColumn}
                       loading={loading}
                     />
+                    {def.key === 'report1' && (
+                      <Report1DetailsTable
+                        rows={Array.isArray(reportsData?.report1Details) ? reportsData.report1Details : []}
+                        search={search}
+                        loading={loading}
+                      />
+                    )}
+                    {def.key === 'report3' && (
+                      <Report3DetailsTable
+                        rows={Array.isArray(reportsData?.report3Details) ? reportsData.report3Details : []}
+                        search={search}
+                        loading={loading}
+                      />
+                    )}
+                    {def.key === 'report4' && (
+                      <Report4PassengerDetailsTable
+                        rows={Array.isArray(reportsData?.report4Details) ? reportsData.report4Details : []}
+                        search={search}
+                        loading={loading}
+                      />
+                    )}
+                    {def.key === 'report7' && (
+                      <Report7DetailsTable
+                        rows={Array.isArray(reportsData?.report7Details) ? reportsData.report7Details : []}
+                        search={search}
+                        loading={loading}
+                      />
+                    )}
                   </div>
                 );
               })}
