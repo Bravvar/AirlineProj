@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import CustomerNav from './CustomerNav';
 import { API_URL } from '../config';
-import SeatSelectionModal from './SeatSelectionModal';
-import CheckoutModal from './CheckoutModal';
 import CancelRefundModal from './CancelRefundModal';
 import TabToggle from './TabToggle';
 
@@ -339,7 +337,7 @@ const ACTION =
  */
 function BookingCard({
   booking, state, token, onRefresh, segments, onLoadSegments, ticket, onLoadTicket,
-  onRequestCancel, isEditing, onEditStart, onEditEnd, onChangeSeat, onViewTicket,
+  onRequestCancel, isEditing, onEditStart, onEditEnd, onViewTicket,
 }) {
   const [legsOpen, setLegsOpen] = useState(false);
   const [ticketOpen, setTicketOpen] = useState(false);
@@ -565,9 +563,6 @@ function BookingCard({
             <button onClick={viewConfirmation} className={`${ACTION} border-green-300 text-green-700 hover:bg-green-50`}>
               View Confirmation
             </button>
-            <button onClick={onChangeSeat} className={`${ACTION} border-blue-300 text-blue-700 hover:bg-blue-50`}>
-              Change Seat
-            </button>
             <button
               onClick={() => { onEditEnd(); onRequestCancel(booking); }}
               className={`${ACTION} border-red-300 text-red-600 hover:bg-red-50`}
@@ -669,12 +664,6 @@ export default function MyTripsPage({
   const [editingId, setEditingId] = useState(null);
   const [activeTab, setActiveTab] = useState('confirmations');
 
-  const [seatBooking, setSeatBooking] = useState(null);
-  const [seatFlightId, setSeatFlightId] = useState(null);
-  const [seatModalOpen, setSeatModalOpen] = useState(false);
-  const [seatError, setSeatError] = useState('');
-  const [seatSuccess, setSeatSuccess] = useState('');
-  const [pendingSeat, setPendingSeat] = useState(null); // seat waiting on payment
   const [cancelBooking, setCancelBooking] = useState(null); // Cancel / Refund popup
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
@@ -739,18 +728,6 @@ export default function MyTripsPage({
     return () => { ignore = true; };
   }, [token]);
 
-  const refreshSegments = async (id) => {
-    try {
-      const res = await fetch(`${API_URL}/api/reservations/${id}/segments`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const text = await res.text();
-      if (!res.ok) return;
-      const data = JSON.parse(text);
-      setSegmentsById((prev) => ({ ...prev, [id]: Array.isArray(data) ? data : [] }));
-    } catch { /* keep the old segments on failure */ }
-  };
-
   const loadSegments = async (id) => {
     if (segmentsById[id]) return;
     try {
@@ -785,73 +762,6 @@ export default function MyTripsPage({
     } catch {
       setTicketById((prev) => ({ ...prev, [id]: { ticketNumber: null } }));
     }
-  };
-
-  const openSeatModal = async (booking) => {
-    setSeatError('');
-    setSeatSuccess('');
-    try {
-      const res = await fetch(`${API_URL}/api/reservations/${booking.reservationId}/segments`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      const segs = Array.isArray(data) ? data : [];
-      const active = segs.find((s) => s.segmentStatus === 'Booked') || segs[0];
-      if (!active) {
-        setSeatError('This booking has no active segment to seat.');
-        return;
-      }
-      setSeatBooking(booking);
-      setSeatFlightId(active.flightId);
-      setSeatModalOpen(true);
-    } catch {
-      setSeatError('Could not load booking segments.');
-    }
-  };
-
-  // "Save & Pay" in the seat map: hold the choice and open the payment UI.
-  const handleSeatProceed = (seatIds, _total, info = {}) => {
-    if (!seatBooking || seatIds.length === 0) return;
-    setPendingSeat({
-      seatId: seatIds[0],
-      seatNumber: info.seatNumber,
-      cabinName: info.cabinName,
-      fee: Number(info.seatFee || 0),
-    });
-  };
-
-  // Called by the payment modal once the card details are valid.
-  const paySeatChange = async () => {
-    if (!seatBooking || !pendingSeat) throw new Error('No seat selected.');
-    let res;
-    try {
-      res = await fetch(`${API_URL}/api/reservations/${seatBooking.reservationId}/seats`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ seatId: pendingSeat.seatId }),
-      });
-    } catch {
-      throw new Error('Unable to connect to server.');
-    }
-    const text = await res.text();
-    if (!res.ok) {
-      let msg = text || 'Could not save seat.';
-      try { const p = JSON.parse(text); msg = p.message || msg; } catch { /* raw */ }
-      throw new Error(msg);
-    }
-    const data = JSON.parse(text);
-    setPendingSeat(null);
-    setSeatModalOpen(false);
-    setSeatBooking(null);
-    setSeatError('');
-    setSeatSuccess(
-      `Seat ${data.seatNumber} saved. Paid $${Number(data.seatFee).toFixed(2)} — booking total now $${Number(data.totalAmount).toFixed(2)}.`
-    );
-    fetchBookings();
-    refreshSegments(seatBooking.reservationId);
   };
 
   // Each booking's tab + flags, newest booking first.
@@ -902,12 +812,6 @@ export default function MyTripsPage({
             </div>
 
             {loadError && <p className="text-sm text-red-600 font-medium mb-4">{loadError}</p>}
-            {seatError && <p className="text-sm text-red-600 font-medium mb-4">{seatError}</p>}
-            {seatSuccess && (
-              <p className="text-sm font-semibold text-green-700 bg-green-50 border border-green-200 rounded-2xl px-4 py-3 mb-4">
-                {seatSuccess}
-              </p>
-            )}
 
             {/* Alert: a flight was cancelled. The member must see this
                 without having to tick "Show cancelled & refunded" first.
@@ -969,7 +873,6 @@ export default function MyTripsPage({
                     isEditing={editingId === b.reservationId}
                     onEditStart={() => setEditingId(b.reservationId)}
                     onEditEnd={() => setEditingId(null)}
-                    onChangeSeat={() => openSeatModal(b)}
                     onViewTicket={onViewTicket}
                   />
                 ))}
@@ -978,30 +881,6 @@ export default function MyTripsPage({
           </>
         )}
       </div>
-
-      {seatBooking && seatFlightId && (
-        <SeatSelectionModal
-          show={seatModalOpen}
-          onHide={() => { setSeatModalOpen(false); setSeatBooking(null); setPendingSeat(null); }}
-          flightId={seatFlightId}
-          farePrice={0}
-          mode="change"
-          onProceed={handleSeatProceed}
-        />
-      )}
-
-      <CheckoutModal
-        show={Boolean(pendingSeat)}
-        onHide={() => setPendingSeat(null)}
-        title="Pay Seat Fee"
-        summary={
-          pendingSeat
-            ? `Seat ${pendingSeat.seatNumber}${pendingSeat.cabinName ? ` · ${pendingSeat.cabinName}` : ''}`
-            : ''
-        }
-        totalPrice={pendingSeat?.fee || 0}
-        onPay={paySeatChange}
-      />
 
       {cancelBooking && (
         <CancelRefundModal
