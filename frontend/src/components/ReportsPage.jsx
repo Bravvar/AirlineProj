@@ -81,8 +81,14 @@ const REPORT_DEFINITIONS = [
     filters: ['airport', 'startDate', 'endDate', 'minRevenue', 'minTickets'],
     columns: [
       { key: 'airport', label: 'Airport' },
+      { key: 'airportName', label: 'Airport Name' },
+      { key: 'city', label: 'City' },
+      { key: 'country', label: 'Country' },
+      { key: 'flights', label: 'Departing Flights' },
       { key: 'ticketsSold', label: 'Tickets Sold' },
       { key: 'revenue', label: 'Revenue' },
+      { key: 'avgFare', label: 'Avg. Fare' },
+      { key: 'revenueShare', label: '% of Revenue' },
     ],
   },
 ];
@@ -203,7 +209,7 @@ function formatCell(row, key) {
     const num = Number(val);
     if (!isNaN(num)) return `$${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
-  if (key === 'pctFull' || key === 'loadFactor') {
+  if (key === 'pctFull' || key === 'loadFactor' || key === 'revenueShare') {
     const num = Number(val);
     if (!isNaN(num)) return `${num}%`;
   }

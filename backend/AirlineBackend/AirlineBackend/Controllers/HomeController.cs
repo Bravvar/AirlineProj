@@ -1538,7 +1538,22 @@ public class HomeController : ControllerBase
              AND rs.segment_status <> 'Cancelled'
             THEN rs.fare_price_at_booking
             ELSE 0
-        END), 0.00) AS Revenue
+        END), 0.00) AS Revenue,
+        ap.airport_name AS AirportName,
+        ap.city AS City,
+        ap.country AS Country,
+        COUNT(DISTINCT f.flight_id) AS Flights,
+        ROUND(COALESCE(SUM(CASE
+            WHEN t.ticket_id IS NOT NULL
+             AND rs.segment_status <> 'Cancelled'
+            THEN rs.fare_price_at_booking
+            ELSE 0
+        END), 0) / NULLIF(COUNT(DISTINCT CASE
+            WHEN t.ticket_id IS NOT NULL
+             AND rs.segment_status <> 'Cancelled'
+            THEN t.ticket_id
+        END), 0), 2) AS AvgFare,
+        CAST(NULL AS DECIMAL(5,1)) AS RevenueShare
     FROM Flight f
     LEFT JOIN ReservationSegment rs
         ON rs.flight_id = f.flight_id
@@ -1547,11 +1562,18 @@ public class HomeController : ControllerBase
     LEFT JOIN Ticket t
         ON t.ticket_id = ts.ticket_id
         AND t.ticket_status <> 'Cancelled'
+    LEFT JOIN Airport ap
+        ON ap.airport_code = f.origin_airport_code
     " + aWhereSql + @"
-    GROUP BY f.origin_airport_code
+    GROUP BY f.origin_airport_code, ap.airport_name, ap.city, ap.country
     " + aHavingSql + @"
     ORDER BY Revenue DESC
 ", aArgs.ToArray()).ToList();
+
+        // Share of total revenue across the airports shown.
+        decimal report7Total = report7.Sum(r => r.Revenue);
+        foreach (var r in report7)
+            r.RevenueShare = report7Total > 0 ? Math.Round(100m * r.Revenue / report7Total, 1) : null;
 
         return Ok(new { report1, report2, report3, report4, report7 });
     }
@@ -1867,7 +1889,7 @@ public class Report3Row { public string ConfirmationNumber { get; set; } public 
 public class Report4Row { public string FlightNumber { get; set; } public string FlightStatus { get; set; } public string CabinName { get; set; } public int FareClassId { get; set; } public int AvailableInventory { get; set; } public int AllocatedCapacity { get; set; } public decimal PctFull { get; set; } public string? Departure { get; set; } public string Origin { get; set; } public string Destination { get; set; } public string FareClassName { get; set; } public int SeatsSold { get; set; } public decimal BasePrice { get; set; } public decimal CurrentPrice { get; set; } public decimal Revenue { get; set; } }
 public class Report5Row { public string Passenger { get; set; } public string ConfirmationNumber { get; set; } public string ReservationStatus { get; set; } public string TripType { get; set; } public decimal TotalAmount { get; set; } public long Tickets { get; set; } }
 public class Report6Row { public string ConfirmationNumber { get; set; } public string TransactionReference { get; set; } public decimal Amount { get; set; } public string ApprovedBy { get; set; } public string EmployeeRole { get; set; } public DateTime PaymentDateTime { get; set; } }
-public class Report7Row { public string Airport { get; set; } public long TicketsSold { get; set; } public decimal Revenue { get; set; } }
+public class Report7Row { public string Airport { get; set; } public long TicketsSold { get; set; } public decimal Revenue { get; set; } public string? AirportName { get; set; } public string? City { get; set; } public string? Country { get; set; } public long Flights { get; set; } public decimal? AvgFare { get; set; } public decimal? RevenueShare { get; set; } }
 public class RouteRow { public string Origin { get; set; } public string Destination { get; set; } }
 public class AirportRow { public string AirportCode { get; set; } public string AirportName { get; set; } public string City { get; set; } public string? StateProvince { get; set; } public string Country { get; set; } }
 public class DealRow { public int FlightId { get; set; } public string FlightNumber { get; set; } public string Origin { get; set; } public string Destination { get; set; } public DateTime DepartureDate { get; set; } public TimeSpan DepartureTime { get; set; } public DateTime ArrivalDate { get; set; } public TimeSpan ArrivalTime { get; set; } public string FlightStatus { get; set; } public string CabinName { get; set; } public string FareClassName { get; set; } public int FlightFareId { get; set; } public decimal CurrentPrice { get; set; } public int AvailableInventory { get; set; } }
