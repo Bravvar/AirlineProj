@@ -1419,6 +1419,7 @@ public class HomeController : ControllerBase
 
         var report1 = _context.Database.SqlQueryRaw<Report1Row>(@"
     SELECT
+        f.flight_id AS FlightId,
         f.flight_number AS FlightNumber,
         f.origin_airport_code AS Origin,
         f.destination_airport_code AS Destination,
@@ -1476,6 +1477,71 @@ public class HomeController : ControllerBase
     ORDER BY Revenue DESC",
       r1Args.ToArray()).ToList();
 
+        // Detail rows behind Report 1: the individual tickets that make up
+        // each flight's revenue (Ed's detailed-report work, merged onto HEAD).
+        var report1Details = new List<Report1DetailRow>();
+        var report1FlightIds = report1.Select(row => row.FlightId).Distinct().ToList();
+        if (report1FlightIds.Count > 0)
+        {
+            var detailArgs = new List<object>(r1Args);
+            var flightIdPlaceholders = new List<string>();
+            foreach (var flightId in report1FlightIds)
+            {
+                flightIdPlaceholders.Add($"{{{detailArgs.Count}}}");
+                detailArgs.Add(flightId);
+            }
+
+            string detailWhereSql = r1WhereSql
+                + (r1WhereSql.Length == 0 ? " WHERE " : " AND ")
+                + $"f.flight_id IN ({string.Join(",", flightIdPlaceholders)})";
+
+            report1Details = _context.Database.SqlQueryRaw<Report1DetailRow>(@"
+    SELECT
+        t.ticket_id AS TicketId,
+        t.ticket_number AS TicketNumber,
+        f.flight_number AS FlightNumber,
+        f.origin_airport_code AS Origin,
+        f.destination_airport_code AS Destination,
+        CONCAT(traveler.first_name, ' ', traveler.last_name) AS Passenger,
+        COALESCE(
+            NULLIF(CONCAT(purchaser.first_name, ' ', purchaser.last_name), ' '),
+            purchaserAccount.email,
+            NULLIF(CONCAT(issuer.first_name, ' ', issuer.last_name), ' '),
+            'Unknown'
+        ) AS PurchasedBy,
+        t.issue_date_time AS PurchaseDateTime,
+        t.ticket_status AS TicketStatus,
+        rs.fare_price_at_booking AS TicketRevenue
+    FROM Flight f
+    JOIN ReservationSegment rs
+        ON rs.flight_id = f.flight_id
+       AND rs.segment_status <> 'Cancelled'
+    JOIN TicketSegment ts
+        ON ts.reservation_segment_id = rs.reservation_segment_id
+    JOIN Ticket t
+        ON t.ticket_id = ts.ticket_id
+       AND t.ticket_status <> 'Cancelled'
+    JOIN Reservation r
+        ON r.reservation_id = t.reservation_id
+    JOIN Passenger traveler
+        ON traveler.passenger_id = t.passenger_id
+    LEFT JOIN UserAccount purchaserAccount
+        ON purchaserAccount.passenger_id = (
+            SELECT rp0.passenger_id
+            FROM ReservationPassenger rp0
+            WHERE rp0.reservation_id = r.reservation_id
+            ORDER BY rp0.reservation_passenger_id
+            LIMIT 1
+        )
+    LEFT JOIN Passenger purchaser
+        ON purchaser.passenger_id = purchaserAccount.passenger_id
+    LEFT JOIN Employee issuer
+        ON issuer.employee_id = t.employee_id
+    " + detailWhereSql + @"
+    ORDER BY t.issue_date_time DESC, f.flight_number, t.ticket_number",
+                detailArgs.ToArray()).ToList();
+        }
+
         var mWhere = new List<string>();
         var mArgs = new List<object>();
         int mi = 0;
@@ -1498,6 +1564,34 @@ public class HomeController : ControllerBase
         string pWhereSql = pWhere.Count > 0 ? " WHERE " + string.Join(" AND ", pWhere) : "";
         var report3 = _context.Database.SqlQueryRaw<Report3Row>(@"SELECT r.confirmation_number AS ConfirmationNumber, p.transaction_reference AS TransactionReference, p.transaction_type AS TransactionType, p.amount AS Amount, p.payment_status AS PaymentStatus, CONCAT(COALESCE(e.first_name,'-'),' ',COALESCE(e.last_name,'')) AS ProcessedBy, e.employee_role AS EmployeeRole, p.payment_date_time AS PaymentDateTime FROM Payment p JOIN Reservation r ON r.reservation_id = p.reservation_id LEFT JOIN Employee e ON e.employee_id = p.employee_id" + pWhereSql + @" ORDER BY p.payment_date_time", pArgs.ToArray()).ToList();
 
+        // Detail rows behind Report 3: the individual payment/refund records
+        // (Ed's detailed-report work, merged onto HEAD).
+        var report3Details = _context.Database.SqlQueryRaw<Report3DetailRow>(@"
+            SELECT
+                p.payment_id AS PaymentId,
+                COALESCE(NULLIF(TRIM(CONCAT(COALESCE(customer.first_name, ''), ' ', COALESCE(customer.last_name, ''))), ''), customer.email, 'Unknown') AS CustomerName,
+                p.transaction_reference AS TransactionReference,
+                p.transaction_type AS TransactionType,
+                p.amount AS Amount,
+                CASE
+                    WHEN p.transaction_type = 'Refund' THEN COALESCE(frr.created_at, p.payment_date_time)
+                    ELSE p.payment_date_time
+                END AS RequestDateTime
+            FROM Payment p
+            JOIN Reservation r ON r.reservation_id = p.reservation_id
+            LEFT JOIN Passenger customer ON customer.passenger_id = (
+                SELECT rp.passenger_id
+                FROM ReservationPassenger rp
+                WHERE rp.reservation_id = r.reservation_id
+                ORDER BY rp.reservation_passenger_id
+                LIMIT 1
+            )
+            LEFT JOIN FlightRefundReview frr ON frr.review_id = p.refund_review_id
+            LEFT JOIN Employee e ON e.employee_id = p.employee_id
+            " + pWhereSql + @"
+            ORDER BY RequestDateTime DESC, p.payment_id DESC",
+            pArgs.ToArray()).ToList();
+
         var lfWhere = new List<string>();
         var lfArgs = new List<object>();
         int li = 0;
@@ -1513,6 +1607,36 @@ public class HomeController : ControllerBase
         if (report4_maxPctFull.HasValue) lfHaving.Add($"PctFull <= {report4_maxPctFull.Value.ToString(inv)}");
         string lfHavingSql = lfHaving.Count > 0 ? " HAVING " + string.Join(" AND ", lfHaving) : "";
         var report4 = _context.Database.SqlQueryRaw<Report4Row>(@"SELECT f.flight_number AS FlightNumber, f.flight_status AS FlightStatus, cc.cabin_name AS CabinName, ff.fare_class_id AS FareClassId, ff.available_inventory AS AvailableInventory, ff.allocated_capacity AS AllocatedCapacity, ROUND(100.0 * (ff.allocated_capacity - ff.available_inventory) / ff.allocated_capacity, 1) AS PctFull, CONCAT(DATE_FORMAT(f.departure_date, '%Y-%m-%d'), ' ', TIME_FORMAT(f.departure_time, '%H:%i')) AS Departure, f.origin_airport_code AS Origin, f.destination_airport_code AS Destination, fc.fare_class_name AS FareClassName, (ff.allocated_capacity - ff.available_inventory) AS SeatsSold, ff.base_price AS BasePrice, ff.current_price AS CurrentPrice, (SELECT COALESCE(SUM(rs.fare_price_at_booking), 0.00) FROM ReservationSegment rs JOIN TicketSegment ts ON ts.reservation_segment_id = rs.reservation_segment_id JOIN Ticket t ON t.ticket_id = ts.ticket_id AND t.ticket_status <> 'Cancelled' WHERE rs.flight_fare_id = ff.flight_fare_id AND rs.segment_status <> 'Cancelled') AS Revenue FROM FlightFare ff JOIN Flight f ON f.flight_id = ff.flight_id JOIN CabinClass cc ON cc.cabin_class_id = ff.cabin_class_id JOIN FareClass fc ON fc.fare_class_id = ff.fare_class_id" + lfWhereSql + lfHavingSql + @" ORDER BY f.flight_number, f.departure_date, f.departure_time, ff.fare_class_id", lfArgs.ToArray()).ToList();
+
+        // Detail rows behind Report 4: the individual passengers and seats
+        // that fill each flight/cabin (Ed's detailed-report work, merged onto HEAD).
+        var lfDetailHaving = new List<string>();
+        if (report4_minPctFull.HasValue) lfDetailHaving.Add($"ROUND(100.0 * (ff.allocated_capacity - ff.available_inventory) / ff.allocated_capacity, 1) >= {report4_minPctFull.Value.ToString(inv)}");
+        if (report4_maxPctFull.HasValue) lfDetailHaving.Add($"ROUND(100.0 * (ff.allocated_capacity - ff.available_inventory) / ff.allocated_capacity, 1) <= {report4_maxPctFull.Value.ToString(inv)}");
+        string lfDetailHavingSql = lfDetailHaving.Count > 0 ? " AND " + string.Join(" AND ", lfDetailHaving) : "";
+        var lfDetailWhere = new List<string>(lfWhere);
+        lfDetailWhere.Add("rs.segment_status <> 'Cancelled'");
+        string lfDetailWhereSql = " WHERE " + string.Join(" AND ", lfDetailWhere);
+        var report4Details = _context.Database.SqlQueryRaw<Report4DetailRow>(@"
+            SELECT f.flight_number AS FlightNumber,
+                   CONCAT(p.first_name, ' ', p.last_name) AS PassengerName,
+                   t.ticket_number AS TicketNumber,
+                   s.seat_number AS SeatNumber,
+                   cc.cabin_name AS CabinClass
+            FROM FlightFare ff
+            JOIN Flight f ON f.flight_id = ff.flight_id
+            JOIN CabinClass cc ON cc.cabin_class_id = ff.cabin_class_id
+            JOIN ReservationSegment rs ON rs.flight_fare_id = ff.flight_fare_id
+            JOIN TicketSegment ts ON ts.reservation_segment_id = rs.reservation_segment_id
+            JOIN Ticket t ON t.ticket_id = ts.ticket_id AND t.ticket_status <> 'Cancelled'
+            JOIN ReservationPassenger rp ON rp.reservation_id = rs.reservation_id AND rp.passenger_id = t.passenger_id
+            JOIN Passenger p ON p.passenger_id = rp.passenger_id
+            LEFT JOIN SeatAssignment sa ON sa.reservation_segment_id = rs.reservation_segment_id
+                AND sa.reservation_passenger_id = rp.reservation_passenger_id AND sa.active_seat = 1
+            LEFT JOIN Seat s ON s.seat_id = sa.seat_id
+            " + lfDetailWhereSql + lfDetailHavingSql + @"
+            ORDER BY f.flight_number, cc.cabin_name, s.seat_number, p.last_name, p.first_name",
+            lfArgs.ToArray()).ToList();
 
         var aWhere = new List<string>();
         var aArgs = new List<object>();
@@ -1575,7 +1699,62 @@ public class HomeController : ControllerBase
         foreach (var r in report7)
             r.RevenueShare = report7Total > 0 ? Math.Round(100m * r.Revenue / report7Total, 1) : null;
 
-        return Ok(new { report1, report2, report3, report4, report7 });
+        // Detail rows behind Report 7: the individual tickets that make up
+        // each airport's revenue (Ed's detailed-report work, merged onto HEAD).
+        var report7Details = new List<Report7DetailRow>();
+        if (report7.Count > 0)
+        {
+            var report7DetailArgs = new List<object>(aArgs);
+            var airportPlaceholders = new List<string>();
+            foreach (var airportRow in report7)
+            {
+                airportPlaceholders.Add($"{{{report7DetailArgs.Count}}}");
+                report7DetailArgs.Add(airportRow.Airport);
+            }
+
+            string report7DetailWhereSql = aWhereSql
+                + (aWhereSql.Length == 0 ? " WHERE " : " AND ")
+                + $"f.origin_airport_code IN ({string.Join(",", airportPlaceholders)})";
+
+            report7Details = _context.Database.SqlQueryRaw<Report7DetailRow>(@"
+                SELECT
+                    COALESCE(
+                        NULLIF(TRIM(CONCAT(COALESCE(customer.first_name, ''), ' ', COALESCE(customer.last_name, ''))), ''),
+                        NULLIF(TRIM(CONCAT(COALESCE(traveler.first_name, ''), ' ', COALESCE(traveler.last_name, ''))), ''),
+                        'Unknown'
+                    ) AS CustomerName,
+                    f.origin_airport_code AS Airport,
+                    t.ticket_id AS TicketId,
+                    t.ticket_number AS TicketNumber,
+                    rs.fare_price_at_booking AS AmountPaid,
+                    t.issue_date_time AS PurchaseDateTime
+                FROM Flight f
+                JOIN ReservationSegment rs
+                    ON rs.flight_id = f.flight_id
+                   AND rs.segment_status <> 'Cancelled'
+                JOIN TicketSegment ts
+                    ON ts.reservation_segment_id = rs.reservation_segment_id
+                JOIN Ticket t
+                    ON t.ticket_id = ts.ticket_id
+                   AND t.ticket_status <> 'Cancelled'
+                JOIN Reservation r
+                    ON r.reservation_id = t.reservation_id
+                JOIN Passenger traveler
+                    ON traveler.passenger_id = t.passenger_id
+                LEFT JOIN Passenger customer
+                    ON customer.passenger_id = (
+                        SELECT rp0.passenger_id
+                        FROM ReservationPassenger rp0
+                        WHERE rp0.reservation_id = r.reservation_id
+                        ORDER BY rp0.reservation_passenger_id
+                        LIMIT 1
+                    )
+                " + report7DetailWhereSql + @"
+                ORDER BY t.issue_date_time DESC, f.origin_airport_code, t.ticket_number
+            ", report7DetailArgs.ToArray()).ToList();
+        }
+
+        return Ok(new { report1, report1Details, report2, report3, report3Details, report4, report4Details, report7, report7Details });
     }
 
     // -----------------------------------------------------------------
@@ -1883,13 +2062,17 @@ public record AddFlightPayload(string flightNumber, string origin, string destin
 public record AddFarePayload(int cabinClassId, int fareClassId, decimal price, int allocatedCapacity);
 
 
-public class Report1Row { public string FlightNumber { get; set; } public string Origin { get; set; } public string Destination { get; set; } public string FlightStatus { get; set; } public string? Departure { get; set; } public long TicketsSold { get; set; } public decimal Revenue { get; set; } public long Capacity { get; set; } public decimal? LoadFactor { get; set; } public decimal? AvgFare { get; set; } }
+public class Report1Row { public int FlightId { get; set; } public string FlightNumber { get; set; } public string Origin { get; set; } public string Destination { get; set; } public string FlightStatus { get; set; } public string? Departure { get; set; } public long TicketsSold { get; set; } public decimal Revenue { get; set; } public long Capacity { get; set; } public decimal? LoadFactor { get; set; } public decimal? AvgFare { get; set; } }
+public class Report1DetailRow { public int TicketId { get; set; } public string TicketNumber { get; set; } = ""; public string FlightNumber { get; set; } = ""; public string Origin { get; set; } = ""; public string Destination { get; set; } = ""; public string Passenger { get; set; } = ""; public string PurchasedBy { get; set; } = ""; public DateTime PurchaseDateTime { get; set; } public string TicketStatus { get; set; } = ""; public decimal TicketRevenue { get; set; } }
 public class Report2Row { public int PassengerId { get; set; } public string Passenger { get; set; } public string Email { get; set; } public string? MembershipNumber { get; set; } public int? PointsBalance { get; set; } public string? MembershipStatus { get; set; } public string Tier { get; set; } public string? MemberSince { get; set; } public int? PointsToNextTier { get; set; } public long? PointsEarnedInApp { get; set; } public long? PointsReversed { get; set; } }
 public class Report3Row { public string ConfirmationNumber { get; set; } public string TransactionReference { get; set; } public string TransactionType { get; set; } public decimal Amount { get; set; } public string PaymentStatus { get; set; } public string ProcessedBy { get; set; } public string? EmployeeRole { get; set; } public DateTime PaymentDateTime { get; set; } }
+public class Report3DetailRow { public int PaymentId { get; set; } public string CustomerName { get; set; } = "Unknown"; public string TransactionReference { get; set; } = ""; public string TransactionType { get; set; } = ""; public decimal Amount { get; set; } public DateTime RequestDateTime { get; set; } }
 public class Report4Row { public string FlightNumber { get; set; } public string FlightStatus { get; set; } public string CabinName { get; set; } public int FareClassId { get; set; } public int AvailableInventory { get; set; } public int AllocatedCapacity { get; set; } public decimal PctFull { get; set; } public string? Departure { get; set; } public string Origin { get; set; } public string Destination { get; set; } public string FareClassName { get; set; } public int SeatsSold { get; set; } public decimal BasePrice { get; set; } public decimal CurrentPrice { get; set; } public decimal Revenue { get; set; } }
+public class Report4DetailRow { public string FlightNumber { get; set; } public string PassengerName { get; set; } public string TicketNumber { get; set; } public string? SeatNumber { get; set; } public string CabinClass { get; set; } }
 public class Report5Row { public string Passenger { get; set; } public string ConfirmationNumber { get; set; } public string ReservationStatus { get; set; } public string TripType { get; set; } public decimal TotalAmount { get; set; } public long Tickets { get; set; } }
 public class Report6Row { public string ConfirmationNumber { get; set; } public string TransactionReference { get; set; } public decimal Amount { get; set; } public string ApprovedBy { get; set; } public string EmployeeRole { get; set; } public DateTime PaymentDateTime { get; set; } }
 public class Report7Row { public string Airport { get; set; } public long TicketsSold { get; set; } public decimal Revenue { get; set; } public string? AirportName { get; set; } public string? City { get; set; } public string? Country { get; set; } public long Flights { get; set; } public decimal? AvgFare { get; set; } public decimal? RevenueShare { get; set; } }
+public class Report7DetailRow { public string CustomerName { get; set; } = "Unknown"; public string Airport { get; set; } = ""; public int TicketId { get; set; } public string TicketNumber { get; set; } = ""; public decimal AmountPaid { get; set; } public DateTime PurchaseDateTime { get; set; } }
 public class RouteRow { public string Origin { get; set; } public string Destination { get; set; } }
 public class AirportRow { public string AirportCode { get; set; } public string AirportName { get; set; } public string City { get; set; } public string? StateProvince { get; set; } public string Country { get; set; } }
 public class DealRow { public int FlightId { get; set; } public string FlightNumber { get; set; } public string Origin { get; set; } public string Destination { get; set; } public DateTime DepartureDate { get; set; } public TimeSpan DepartureTime { get; set; } public DateTime ArrivalDate { get; set; } public TimeSpan ArrivalTime { get; set; } public string FlightStatus { get; set; } public string CabinName { get; set; } public string FareClassName { get; set; } public int FlightFareId { get; set; } public decimal CurrentPrice { get; set; } public int AvailableInventory { get; set; } }
