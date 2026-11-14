@@ -3,6 +3,7 @@ import Logo from './Logo';
 import { API_URL } from '../config';
 import StaffFlightManagement from './StaffFlightManagement';
 import RefundManagement from './RefundManagement';
+import AircraftManagement from './AircraftManagement';
 
 export default function AdminPage({ token, email, onBackToHome, onToggleSidebar }) {
   const [tab, setTab] = useState('overview');
@@ -14,8 +15,44 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
   const [flightSearch, setFlightSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [pendingCancellations, setPendingCancellations] = useState(null);
+  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
+
+  const loadNotifications = async () => {
+    if (!token) return;
+    try {
+      const r = await fetch(`${API_URL}/api/admin/notifications`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await r.json();
+      if (Array.isArray(data)) setNotifications(data);
+    } catch {}
+  };
+
+  const markNotificationRead = async (id) => {
+    try {
+      await fetch(`${API_URL}/api/admin/notifications/${id}/read`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setNotifications((prev) => prev.filter((n) => n.notificationId !== id));
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (!token) return;
+    fetch(`${API_URL}/api/admin/cancellation-requests?status=Pending`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) setPendingCancellations(data.length);
+      })
+      .catch(() => {});
+    loadNotifications();
+  }, [token]);
 
   useEffect(() => {
     if (!token) return;
@@ -75,6 +112,7 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
             { id: 'overview', label: 'Dashboard' },
             { id: 'flights', label: 'Fleet & Fares' },
             { id: 'management', label: 'Add & Cancel Flights' },
+            { id: 'aircraft', label: 'Aircraft' },
             { id: 'users', label: 'Users & Roles' },
             { id: 'refunds', label: 'Refund Management' },
           ].map(item => (
@@ -94,24 +132,72 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
 
         {error && <p className="text-sm text-red-600 font-medium mb-4">{error}</p>}
 
-        {tab === 'overview' && overview && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              { label: 'Total Users', value: overview.totalUsers, color: 'text-blue-600' },
-              { label: 'Total Revenue', value: overview.totalRevenue != null ? `${overview.totalRevenue.toLocaleString()}` : '$0', color: 'text-green-600' },
-              { label: 'Total Flights', value: overview.totalFlights, color: 'text-gray-900' },
-              { label: 'Reservations', value: overview.reservations, color: 'text-gray-900' },
-              { label: 'Confirmed Trips', value: overview.confirmedReservations, color: 'text-gray-900' },
-              { label: 'Delayed Flights', value: overview.delayedFlights, color: 'text-amber-500' },
-              { label: 'Cancelled Flights', value: overview.cancelledFlights, color: 'text-red-500' },
-              { label: 'Inventory Issues', value: overview.inventoryIssues, color: 'text-red-500' },
-            ].map((stat, i) => (
-              <div key={i} className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
-                <p className="text-sm text-gray-500 font-semibold mb-2">{stat.label}</p>
-                <p className={`text-3xl font-bold ${stat.color}`}>{stat.value}</p>
-              </div>
-            ))}
+        {pendingCancellations !== null && pendingCancellations > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 mb-6 flex items-center justify-between gap-4 shadow-sm">
+            <p className="text-sm font-semibold text-amber-800">
+              {pendingCancellations} cancellation request{pendingCancellations === 1 ? '' : 's'} awaiting review
+            </p>
+            <button
+              onClick={() => setTab('refunds')}
+              className="px-4 py-2 rounded-full text-xs font-bold bg-amber-500 text-white hover:bg-amber-600 cursor-pointer shrink-0"
+            >
+              Review
+            </button>
           </div>
+        )}
+
+        {tab === 'overview' && overview && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[
+                { label: 'Total Users', value: overview.totalUsers, color: 'text-blue-600' },
+                { label: 'Total Revenue', value: overview.totalRevenue != null ? `${overview.totalRevenue.toLocaleString()}` : '$0', color: 'text-green-600' },
+                { label: 'Total Flights', value: overview.totalFlights, color: 'text-gray-900' },
+                { label: 'Reservations', value: overview.reservations, color: 'text-gray-900' },
+                { label: 'Confirmed Trips', value: overview.confirmedReservations, color: 'text-gray-900' },
+                { label: 'Delayed Flights', value: overview.delayedFlights, color: 'text-amber-500' },
+                { label: 'Cancelled Flights', value: overview.cancelledFlights, color: 'text-red-500' },
+                { label: 'Inventory Issues', value: overview.inventoryIssues, color: 'text-red-500' },
+              ].map((stat, i) => (
+                <div key={i} className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
+                  <p className="text-sm text-gray-500 font-semibold mb-2">{stat.label}</p>
+                  <p className={`text-3xl font-bold ${stat.color}`}>{stat.value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm mt-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-1">Notifications</h2>
+              <p className="text-sm text-gray-500 mb-4">Cancellation requests and other items needing your review.</p>
+              {notifications.length === 0 ? (
+                <p className="text-sm text-gray-400">No new notifications.</p>
+              ) : (
+                <ul className="divide-y divide-gray-100">
+                  {notifications.map((n) => (
+                    <li key={n.notificationId} className="py-3 flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{n.message}</p>
+                        <p className="text-xs text-gray-400 mt-1">{new Date(n.createdAt).toLocaleString()}</p>
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          onClick={() => setTab('refunds')}
+                          className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 hover:bg-amber-100 cursor-pointer"
+                        >
+                          Review
+                        </button>
+                        <button
+                          onClick={() => markNotificationRead(n.notificationId)}
+                          className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 hover:bg-gray-200 cursor-pointer"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </>
         )}
 
         {tab === 'flights' && loading && flights.length === 0 && (
@@ -156,6 +242,9 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
 
         {tab === 'management' && (
           <StaffFlightManagement token={token} />
+        )}
+        {tab === 'aircraft' && (
+          <AircraftManagement token={token} />
         )}
         {tab === 'refunds' && (
           <RefundManagement token={token} />

@@ -1,12 +1,6 @@
 import { useState, useEffect } from 'react';
 import { API_URL } from '../config';
 
-const AIRCRAFT_OPTIONS = [
-  { id: 1, label: 'Aircraft 1 (Active)' },
-  { id: 2, label: 'Aircraft 2 (Active)' },
-  { id: 4, label: 'Aircraft 4 (Active)' },
-];
-
 const CABIN_OPTIONS = [
   { id: 1, label: '1 — Economy' },
   { id: 2, label: '2 — Premium Economy' },
@@ -39,6 +33,28 @@ const CABIN_MAX_PRICE = {
 export default function StaffFlightManagement({ token, onFlightUpdated }) {
   const [airports, setAirports] = useState([]);
   const [flights, setFlights] = useState([]);
+  const [aircraft, setAircraft] = useState([]);
+
+  const loadAircraft = async () => {
+    if (!token) return;
+    try {
+      const r = await fetch(`${API_URL}/api/aircraft`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await r.json();
+      if (Array.isArray(data)) {
+        const active = data.filter((a) => a.aircraftStatus === 'Active');
+        setAircraft(active);
+        if (active.length > 0) {
+          setAircraftId(String(active[0].aircraftId));
+        }
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    loadAircraft();
+  }, [token]);
 
   const loadFlights = async () => {
     if (!token) return;
@@ -342,8 +358,10 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
                   onChange={(e) => setAircraftId(e.target.value)}
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 outline-none focus:border-blue-500 cursor-pointer"
                 >
-                  {AIRCRAFT_OPTIONS.map((opt) => (
-                    <option key={opt.id} value={opt.id}>{opt.label}</option>
+                  {aircraft.map((a) => (
+                    <option key={a.aircraftId} value={a.aircraftId}>
+                      Aircraft {a.aircraftId} — {a.aircraftModel} ({a.registrationNumber})
+                    </option>
                   ))}
                 </select>
               </div>

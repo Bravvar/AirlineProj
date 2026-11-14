@@ -835,7 +835,7 @@ public class HomeController : ControllerBase
                     FirstName = passengerNames[i].firstName.Trim(),
                     LastName = passengerNames[i].lastName.Trim(),
                     DateOfBirth = new DateTime(1990, 1, 1),
-                    Email = $"{passengerNames[i].firstName.Trim().ToLowerInvariant().Replace(" ", "").Replace("'", "")}.{passengerNames[i].lastName.Trim().ToLowerInvariant().Replace(" ", "").Replace("'", "")}@guest.local",
+                    Email = $"{passengerNames[i].firstName.Trim().ToLowerInvariant().Replace(" ", "").Replace("'", "")}.{passengerNames[i].lastName.Trim().ToLowerInvariant().Replace(" ", "").Replace("'", "")}.{Guid.NewGuid().ToString("N").Substring(0, 8)}@guest.local",
                     Phone = null,
                     Address = null
                 };
