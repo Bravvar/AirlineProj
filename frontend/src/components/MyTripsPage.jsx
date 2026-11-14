@@ -5,15 +5,8 @@ import CancelRefundModal from './CancelRefundModal';
 import CheckoutModal from './CheckoutModal';
 import TabToggle from './TabToggle';
 
-// ---------------------------------------------------------------------
-// My Trips: bookings split into Confirmations / Pending Refunds / Refunds
-// (bubble tabs at the top), newest booking first in every tab.
-// ---------------------------------------------------------------------
 
 
-// =====================================================================
-// Helpers: status → tab, newest-first sorting, formatting
-// =====================================================================
 
 const TABS = [
   { id: 'confirmations', label: 'Confirmations', short: 'Confirmed' },
@@ -21,11 +14,6 @@ const TABS = [
   { id: 'refunds', label: 'Refunds', short: 'Refunds' },
 ];
 
-// Everything the card and the tabs need to know about one booking.
-//   confirmations  active bookings (incl. ones whose cancel request was rejected)
-//   pending        cancel request under review, or airline-cancelled flight
-//                  whose refund hasn't gone through yet
-//   refunds        refunded or cancelled bookings
 function tripState(booking) {
   const isCancelled = String(booking.reservationStatus || '').toLowerCase() === 'cancelled';
   const request = booking.cancellationRequest || null;
@@ -54,7 +42,6 @@ function tripState(booking) {
   };
 }
 
-// Booking date + time as one timestamp (0 when missing).
 function bookedAt(booking) {
   const day = String(booking.bookingDate || '').slice(0, 10);
   if (!day) return 0;
@@ -63,27 +50,23 @@ function bookedAt(booking) {
   return Number.isNaN(t) ? 0 : t;
 }
 
-// Newest booking first; same moment → higher reservation id first.
 function newestFirst(a, b) {
   return bookedAt(b) - bookedAt(a) || (b.reservationId || 0) - (a.reservationId || 0);
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-// "2026-10-17T00:00:00" → "Oct 17, 2026"
 function prettyDate(value) {
   const m = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return '';
   return `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}, ${m[1]}`;
 }
 
-// "22:00:00" → "22:00"
 const hhmm = (value) => (value ? String(value).substring(0, 5) : '');
 
 const money = (n) =>
   `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-// Colours for a flight / segment status pill.
 function flightStatusTone(status) {
   const s = String(status || '').toLowerCase();
   if (s === 'cancelled') return 'bg-red-50 text-red-700 border-red-200';
@@ -92,7 +75,6 @@ function flightStatusTone(status) {
   return 'bg-green-50 text-green-700 border-green-200';
 }
 
-// Colours for the booking's status badge.
 function bookingTone(state) {
   if (state.isRefunded) return 'bg-green-50 text-green-700 border-green-200';
   if (state.tab === 'pending') return 'bg-amber-50 text-amber-700 border-amber-200';
@@ -100,7 +82,6 @@ function bookingTone(state) {
   return 'bg-blue-50 text-blue-700 border-blue-200';
 }
 
-// UTC timestamp → "Nov 13, 2026, 1:52 PM" in the viewer's time zone.
 function localDateTime(value) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '';
@@ -110,9 +91,6 @@ function localDateTime(value) {
 const initials = (first, last) =>
   `${String(first || '').charAt(0)}${String(last || '').charAt(0)}`.toUpperCase() || 'P';
 
-// =====================================================================
-// Open / close buttons, animated panel, icons
-// =====================================================================
 
 function ToggleChip({ open, onClick, icon, label, count }) {
   return (
@@ -144,7 +122,6 @@ function ToggleChip({ open, onClick, icon, label, count }) {
   );
 }
 
-// Grows / shrinks smoothly to fit its content.
 function Collapse({ open, children }) {
   return (
     <div
@@ -192,11 +169,7 @@ function ReceiptIcon({ className = 'w-4 h-4' }) {
   );
 }
 
-// =====================================================================
-// Flight legs panel
-// =====================================================================
 
-// "Flight legs" panel: one boarding-pass style card per leg.
 function LegsPanel({ segments }) {
   if (segments.length === 0) {
     return <p className="text-sm text-gray-400 bg-gray-50 rounded-2xl px-4 py-5">No flight legs recorded.</p>;
@@ -266,12 +239,7 @@ function LegsPanel({ segments }) {
   );
 }
 
-// =====================================================================
-// Tickets panel
-// =====================================================================
 
-// "Tickets" panel: one ticket stub per traveler.
-// ticket = response of GET /api/reservations/{id}/ticket
 function TicketsPanel({ ticket }) {
   const rows = Array.isArray(ticket?.tickets) && ticket.tickets.length > 0
     ? ticket.tickets
@@ -290,7 +258,6 @@ function TicketsPanel({ ticket }) {
         const issued = String(t.ticketStatus || '').toLowerCase() === 'issued';
         return (
           <div key={t.ticketNumber} className="relative flex rounded-2xl border border-blue-100 bg-blue-50/50 overflow-hidden">
-            {/* Stub notches */}
             <span className="absolute left-[4.5rem] -top-2 w-4 h-4 rounded-full bg-white border border-blue-100" />
             <span className="absolute left-[4.5rem] -bottom-2 w-4 h-4 rounded-full bg-white border border-blue-100" />
 
@@ -337,11 +304,7 @@ function TicketsPanel({ ticket }) {
   );
 }
 
-// =====================================================================
-// Receipts panel: one receipt per paid trip modification (extra bags)
-// =====================================================================
 
-// receipts = response of GET /api/reservations/{id}/modifications
 function ReceiptsPanel({ receipts, booking }) {
   const bags = Number(booking.additionalCheckedBags || 0);
   return (
@@ -410,26 +373,14 @@ function ReceiptsPanel({ receipts, booking }) {
   );
 }
 
-// =====================================================================
-// Booking card
-// =====================================================================
 
 const MEAL_OPTIONS = ['Standard', 'Vegetarian', 'Vegan', 'Kosher', 'Halal', 'Gluten Free'];
-const BAG_FEE = 30; // per extra checked bag (same as the backend)
+const BAG_FEE = 30;
 const MAX_EXTRA_BAGS = 5;
 
 const ACTION =
   'text-xs font-semibold px-4 py-2 rounded-xl border transition-colors cursor-pointer';
 
-/**
- * One booking on My Trips.
- *  state            tripState(booking) from tripUtils
- *  segments/ticket  loaded data (undefined until first opened)
- *  onLoadSegments / onLoadTicket(id)  fetch them (no-op when already loaded)
- *  receipts / onLoadReceipts(id, force)  paid modifications (extra bags)
- *  autoOpenReceipts open Receipts and scroll here (after a modification)
- *  onModified(details)  a modification went through: show its confirmation
- */
 function BookingCard({
   booking, state, token, segments, onLoadSegments, ticket, onLoadTicket,
   onRequestCancel, isEditing, onEditStart, onEditEnd, onViewTicket,
@@ -441,7 +392,7 @@ function BookingCard({
   const [phone, setPhone] = useState('');
   const [mealSelection, setMealSelection] = useState('');
   const [bagsToAdd, setBagsToAdd] = useState(0);
-  const [pendingChange, setPendingChange] = useState(null); // waiting on payment
+  const [pendingChange, setPendingChange] = useState(null);
   const [loadingModify, setLoadingModify] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -454,14 +405,12 @@ function BookingCard({
   const maxAdd = Math.max(0, MAX_EXTRA_BAGS - currentBags);
   const bagCost = bagsToAdd * BAG_FEE;
 
-  // Coming back from a modification: open Receipts and scroll to this trip.
   useEffect(() => {
     if (!autoOpenReceipts) return;
     onLoadReceipts(booking.reservationId, true);
     cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [autoOpenReceipts, booking.reservationId, onLoadReceipts]);
 
-  // Click to open (loads the first time), click again to close.
   const toggleLegs = () => {
     if (!legsOpen) onLoadSegments(booking.reservationId);
     setLegsOpen((o) => !o);
@@ -482,7 +431,6 @@ function BookingCard({
     setErrorMsg('');
   };
 
-  // PUT the change. Resolves with the server's response, or throws.
   const sendModification = async (body) => {
     let res;
     try {
@@ -497,7 +445,7 @@ function BookingCard({
     const text = await res.text();
     if (!res.ok) {
       let msg = text || 'Could not modify reservation.';
-      try { msg = JSON.parse(text).message || msg; } catch { /* plain text */ }
+      try { msg = JSON.parse(text).message || msg; } catch { }
       throw new Error(msg);
     }
     try { return JSON.parse(text); } catch { return {}; }
@@ -521,7 +469,6 @@ function BookingCard({
     });
   };
 
-  // Save: extra bags go to the payment page first; other changes save now.
   const handleModifySubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
@@ -577,7 +524,6 @@ function BookingCard({
     }
   };
 
-  // Called by the payment page once the card details are valid.
   const payForChange = async () => {
     const data = await sendModification(pendingChange.body);
     finish(data, pendingChange);
@@ -618,7 +564,6 @@ function BookingCard({
         state.isCancelled && !state.isRefunded ? 'opacity-70' : ''
       }`}
     >
-      {/* Header */}
       <div className="p-6 border-b border-gray-100 flex justify-between items-start gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Confirmation</p>
@@ -634,7 +579,6 @@ function BookingCard({
       </div>
 
       <div className="p-6 flex flex-col gap-4 flex-grow">
-        {/* Cancellation rejected: small red note, booking stays active */}
         {state.isRejected && (
           <div className="self-start flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
             <svg className="w-4 h-4 text-red-600 mt-px flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" aria-hidden="true">
@@ -685,7 +629,6 @@ function BookingCard({
           </div>
         )}
 
-        {/* Flight legs + tickets: click to open, click again to close */}
         <div>
           <div className="flex flex-wrap gap-2">
             <ToggleChip
@@ -730,7 +673,6 @@ function BookingCard({
           <p className="bg-red-50 border border-red-200 text-red-700 font-semibold rounded-2xl px-4 py-2.5 text-sm">{errorMsg}</p>
         )}
 
-        {/* Actions */}
         {state.canAct && (
           <div className="flex items-center gap-2 pt-1 flex-wrap">
             <button
@@ -794,7 +736,6 @@ function BookingCard({
               </div>
             </div>
 
-            {/* Extra bags: a stepper, so only whole numbers 0..max can be picked */}
             <div className="bg-white border border-gray-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="text-sm font-bold text-gray-900">Add extra checked bags</p>
@@ -854,7 +795,6 @@ function BookingCard({
           </form>
         )}
 
-        {/* Payment page for extra bags. Nothing is charged or saved until Pay. */}
         <CheckoutModal
           variant="page"
           show={Boolean(pendingChange)}
@@ -888,9 +828,6 @@ function BookingCard({
   );
 }
 
-// =====================================================================
-// Page
-// =====================================================================
 
 const EMPTY_TEXT = {
   confirmations: { title: 'No upcoming trips', body: 'Book a flight and it will show up here.' },
@@ -900,9 +837,7 @@ const EMPTY_TEXT = {
 
 export default function MyTripsPage({ 
   token, email, onBackToHome, onSignIn, onToggleSidebar, onRefundSuccess, auth, onViewTicket, onAbout,
-  // A modification went through: App shows its confirmation page.
   onModified,
-  // "View trip" from that page: open this booking's Receipts.
   focusReservationId, onFocusHandled,
 }) {
   const [bookings, setBookings] = useState(null);
@@ -910,20 +845,18 @@ export default function MyTripsPage({
   const [ticketById, setTicketById] = useState({});
   const [receiptsById, setReceiptsById] = useState({});
   const receiptsLoaded = useRef(new Set());
-  // Kept here so the card still opens after bookings finish loading.
   const [focusId] = useState(focusReservationId ?? null);
   const [loadError, setLoadError] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [activeTab, setActiveTab] = useState('confirmations');
 
-  const [cancelBooking, setCancelBooking] = useState(null); // Cancel / Refund popup
+  const [cancelBooking, setCancelBooking] = useState(null);
 
   useEffect(() => { window.scrollTo(0, 0); }, []);
   useEffect(() => {
     if (focusReservationId != null && onFocusHandled) onFocusHandled();
   }, [focusReservationId, onFocusHandled]);
 
-  // Site header for the payment page (same tabs as this page).
   const navProps = {
     auth: { token, email },
     activeTab: 'trips',
@@ -1031,7 +964,6 @@ export default function MyTripsPage({
     }
   };
 
-  // Receipts for paid modifications. force = reload (a new one was just added).
   const loadReceipts = useCallback(async (id, force = false) => {
     if (!force && receiptsLoaded.current.has(id)) return;
     receiptsLoaded.current.add(id);
@@ -1046,7 +978,6 @@ export default function MyTripsPage({
     }
   }, [token]);
 
-  // Each booking's tab + flags, newest booking first.
   const trips = useMemo(
     () => [...(bookings || [])].sort(newestFirst).map((b) => ({ booking: b, state: tripState(b) })),
     [bookings]
@@ -1055,8 +986,6 @@ export default function MyTripsPage({
   const visibleTrips = trips.filter((t) => t.state.tab === activeTab);
   const cancelledCount = (bookings || []).filter((b) => b.reservationStatus?.toLowerCase() === 'cancelled').length;
   const empty = EMPTY_TEXT[activeTab];
-  // Banner button: airline-cancelled trips still waiting on a refund sit in
-  // Pending Refunds; otherwise they're in Refunds.
   const cancelledTab = trips.some((t) => t.state.airlineRefundPending) ? 'pending' : 'refunds';
 
   return (
@@ -1095,9 +1024,6 @@ export default function MyTripsPage({
 
             {loadError && <p className="text-sm text-red-600 font-medium mb-4">{loadError}</p>}
 
-            {/* Alert: a flight was cancelled. The member must see this
-                without having to tick "Show cancelled & refunded" first.
-                (Restored: a teammate's UI cleanup deleted this banner.) */}
             {cancelledCount > 0 && (
               <div className="bg-red-50 border border-red-200 rounded-2xl px-5 py-4 mb-6">
                 <p className="font-bold text-red-800 text-sm">

@@ -1,19 +1,5 @@
 USE db75049;
 
--- =====================================================
--- Migration 18: Customer Cancellation / Refund Requests
--- =====================================================
--- A member asks to cancel a booking (with a reason).
--- The booking stays active until a Supervisor reviews it:
---   * Approved -> segments, tickets and reservation are
---                 cancelled and a Refund payment is recorded.
---                 My Trips shows the booking as "Refunded".
---   * Rejected -> booking is left untouched; the member sees
---                 the supervisor's note on My Trips.
---
--- Requires migrations 01-17 (Payment, Employee, triggers).
--- One-time migration: do not run twice.
--- =====================================================
 
 CREATE TABLE `CancellationRequest` (
   `request_id`               int           NOT NULL AUTO_INCREMENT,
@@ -28,8 +14,6 @@ CREATE TABLE `CancellationRequest` (
   `refund_amount`            decimal(10,2) DEFAULT NULL,
   `refund_payment_id`        int           DEFAULT NULL,
 
-  -- Only one open (Pending) request per reservation.
-  -- NULL for reviewed rows, so history is unlimited.
   `pending_reservation_id`   int GENERATED ALWAYS AS (
       CASE WHEN `request_status` = 'Pending'
            THEN `reservation_id` END
@@ -43,7 +27,6 @@ CREATE TABLE `CancellationRequest` (
 
   CONSTRAINT `fk_cancel_request_reservation`
       FOREIGN KEY (`reservation_id`) REFERENCES `Reservation` (`reservation_id`),
-      -- No CASCADE: MySQL forbids it on a base column of a stored generated column.
   CONSTRAINT `fk_cancel_request_user`
       FOREIGN KEY (`requested_by_user_id`) REFERENCES `UserAccount` (`user_account_id`),
   CONSTRAINT `fk_cancel_request_supervisor`
@@ -60,12 +43,6 @@ CREATE TABLE `CancellationRequest` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 
--- =====================================================
--- approve_cancellation_request
--- Cancels the booking and records the refund atomically.
--- p_amount NULL = refund the full remaining paid balance.
--- p_notes  optional supervisor note shown to the member.
--- =====================================================
 DELIMITER $$
 
 DROP PROCEDURE IF EXISTS `approve_cancellation_request`$$
@@ -107,7 +84,6 @@ BEGIN
         SET MESSAGE_TEXT = 'Cancellation request not found';
     END IF;
 
-    -- Lock reservation first (same order as the refund procedures).
     SELECT reservation_status
     INTO v_res_status
     FROM Reservation
@@ -144,7 +120,6 @@ BEGIN
         SET MESSAGE_TEXT = 'Cannot cancel a booking that has been flown';
     END IF;
 
-    -- Remaining refundable balance.
     SELECT COALESCE(SUM(amount), 0)
     INTO v_paid
     FROM Payment
@@ -167,8 +142,6 @@ BEGIN
         SET MESSAGE_TEXT = 'Refund exceeds remaining paid balance';
     END IF;
 
-    -- Cancel the booking. Existing inventory / seat
-    -- triggers fire on the segment update.
     UPDATE ReservationSegment
     SET segment_status = 'Cancelled',
         cancellation_date_time = NOW(),
@@ -187,7 +160,6 @@ BEGIN
         WHERE reservation_id = v_reservation_id;
     END IF;
 
-    -- Record the refund (loyalty reversal trigger fires here).
     IF v_amount > 0 THEN
         SELECT payment_method
         INTO v_method

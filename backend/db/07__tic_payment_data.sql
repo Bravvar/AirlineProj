@@ -20,7 +20,6 @@ INSERT INTO Payment (reservation_id, employee_id, payment_date_time, amount,
 ((SELECT reservation_id FROM Reservation WHERE confirmation_number='ARS1005'),
  NULL, '2026-08-12 11:10:47', 300.00, 'PayPal',      'Successful', 'TXN-20260812-0007', 'Payment');
 
--- Ticket: fare_amount + tax_amount must equal total_fare_paid (enforced by trigger)
 INSERT INTO Ticket (ticket_number, reservation_id, passenger_id, employee_id,
                     issue_date_time, ticket_status,
                     fare_amount, tax_amount, total_fare_paid, exchange_rate) VALUES
@@ -52,8 +51,6 @@ INSERT INTO Ticket (ticket_number, reservation_id, passenger_id, employee_id,
  (SELECT passenger_id   FROM Passenger   WHERE email='michael.brown@google.com'),
  NULL, '2026-08-12 11:11:00', 'Issued',   265.00,  35.00, 300.00, 1.0000);
 
--- NEW: TicketSegment — link each ticket to the segment(s) it covers
--- ARS1001: 1 passenger, 1 segment (AA100 seg 1)
 INSERT INTO TicketSegment (ticket_id, reservation_segment_id) VALUES
 ((SELECT ticket_id FROM Ticket WHERE ticket_number='TKT-0012026000001'),
  (SELECT rs.reservation_segment_id FROM ReservationSegment rs

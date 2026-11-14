@@ -3,16 +3,6 @@ import { createPortal } from 'react-dom';
 import { API_URL } from '../config';
 import CustomerNav from './CustomerNav';
 
-// ---------------------------------------------------------------------
-// Checkout: card form + passenger names, then POST /api/reservations.
-//
-// Two layouts, same behaviour:
-//   variant="page"   full page with the site header (flight search booking).
-//   variant="modal"  centered popup (Deals cards, My Trips seat fees).
-//
-// Nothing is booked or charged until Pay succeeds. Leaving the page (Back
-// to seats, a header tab, the logo) just closes it; no request is sent.
-// ---------------------------------------------------------------------
 
 const money = (n) => `$${Number(n || 0).toFixed(2)}`;
 
@@ -37,22 +27,6 @@ function LockIcon() {
   );
 }
 
-/**
- * Props
- *  show, onHide         open / close (close = leave without paying)
- *  fareId, returnFareId outbound + optional return fare
- *  seatIds, returnSeatIds  one seat per traveler on each leg
- *  totalPrice           amount shown and charged
- *  passengerCount       one name row per traveler
- *  onSuccess(...)       called with the booking response
- *  onPay                optional custom charge instead of a booking (seat fees)
- *  title, summary       heading + one-line trip summary (modal)
- *  variant              'modal' (default) | 'page'
- *  navProps             page only: the site header's props
- *  onBack               page only: back button (label: backLabel, default "Back to seats")
- *  trip                 page only: [{ label, flightNumber, route, when, cabin, fareClass, seats }]
- *  priceLines           page only: [{ label, amount }] shown above the total
- */
 export default function CheckoutModal({
   show,
   onHide,
@@ -61,14 +35,10 @@ export default function CheckoutModal({
   totalPrice,
   onSuccess,
   seatIds = [],
-  // Round trip: seats on the return flight (one per traveler, same order).
   returnSeatIds = [],
-  // Optional: run a custom charge (e.g. a seat change) instead of creating a
-  // booking. Should resolve on success, or throw an Error with a message.
   onPay,
   title = 'Secure Checkout',
   summary,
-  // Multi-passenger: how many travelers are flying. One name row per traveler.
   passengerCount = 1,
   variant = 'modal',
   navProps,
@@ -87,7 +57,6 @@ export default function CheckoutModal({
 
   const isPage = variant === 'page';
 
-  // Passenger names, one per traveler. Traveler 1 is the account holder.
   const isBooking = !onPay && fareId != null;
   const travelerCount = isBooking ? Math.max(1, Math.min(9, passengerCount || 1)) : 1;
   const defaultFirst = (sessionStorage.getItem('email') || '').split('@')[0].split('.')[0] || '';
@@ -108,7 +77,6 @@ export default function CheckoutModal({
     setPassengers((prev) => prev.map((p, idx) => (idx === i ? { ...p, [field]: value } : p)));
   };
 
-  // Escape closes the popup. The page has its own Back button instead.
   useEffect(() => {
     if (!show || isPage) return undefined;
     const handleKeyDown = (e) => {
@@ -118,7 +86,6 @@ export default function CheckoutModal({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [show, onHide, isPage]);
 
-  // The page scrolls itself; keep the page behind it from scrolling too.
   useEffect(() => {
     if (!show || !isPage) return undefined;
     const prev = document.body.style.overflow;
@@ -195,7 +162,6 @@ export default function CheckoutModal({
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
-      // seats here are integer Seat.seat_id values returned by the seat map.
       const body = {
         flightFareId: fareId,
         seats: Array.isArray(seatIds) ? seatIds.filter((n) => Number.isInteger(n) && n > 0) : [],
@@ -251,7 +217,6 @@ export default function CheckoutModal({
     }
   };
 
-  // ------------------------------------------------------------ shared parts
 
   const errorBox = error && (
     <p className="bg-red-50 border border-red-200 text-red-700 font-semibold rounded-2xl px-4 py-3 text-sm text-center">
@@ -349,10 +314,8 @@ export default function CheckoutModal({
     </button>
   );
 
-  // ------------------------------------------------------------ page layout
 
   if (isPage) {
-    // Leaving is blocked only while a payment is in flight.
     const leaveThen = (action) => () => {
       if (loading) return;
       onHide();
@@ -396,7 +359,6 @@ export default function CheckoutModal({
           </div>
 
           <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_24rem] items-start">
-            {/* Left: travelers + card */}
             <form id="checkout-form" onSubmit={handlePayment} className="flex flex-col gap-6">
               {errorBox}
 
@@ -421,7 +383,6 @@ export default function CheckoutModal({
               </section>
             </form>
 
-            {/* Right: trip + price + pay */}
             <aside className="lg:sticky lg:top-24 flex flex-col gap-6">
               {trip.length > 0 && (
                 <section className="bg-white rounded-3xl shadow-xl border border-gray-100 p-6">
@@ -477,10 +438,7 @@ export default function CheckoutModal({
     );
   }
 
-  // ------------------------------------------------------------ popup layout
 
-  // Rendered on <body> so it always covers the whole page, including the
-  // site header (the homepage search sits inside a lower layer).
   return createPortal(
     <div
       className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto"

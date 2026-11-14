@@ -1,11 +1,6 @@
 
--- Migration 17 - Recover outstanding refund loyalty points from future awards.
--- Run on an ISOLATED local test schema first; verify selected schema. Requires Migrations 15 and 16.
--- Back up the schema first. Stop all applications/workers connected to it.
--- Execute ONCE. The DROP/CREATE PROCEDURE is DDL and cannot be rolled back.
--- Existing Payment triggers continue calling award_loyalty_points.
 
-SELECT DATABASE() AS selected_schema; -- Select the intended schema in Workbench first
+SELECT DATABASE() AS selected_schema;
 
 CREATE TABLE LoyaltyDebtRecovery (
     recovery_id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -45,7 +40,6 @@ main: BEGIN
     SET p_net_points = v_remaining;
     IF v_remaining = 0 THEN LEAVE main; END IF;
 
-    -- Serialize with refund reversals on this member.
     SELECT points_balance INTO v_current_balance
     FROM MembershipAccount
     WHERE member_account_id = p_member_account_id
@@ -98,7 +92,6 @@ main: BEGIN
     SET p_net_points = v_remaining;
 END$$
 
--- The existing payment triggers will continue calling this same procedure name.
 DROP PROCEDURE award_loyalty_points$$
 
 CREATE PROCEDURE award_loyalty_points(IN p_payment_id INT)
@@ -145,7 +138,6 @@ main: BEGIN
         FETCH member_cursor INTO v_member_account_id;
         IF v_done THEN LEAVE award_loop; END IF;
 
-        -- Gross points are recorded for correct future proportional refunds.
         INSERT INTO LoyaltyPointLedger(payment_id, member_account_id, points_awarded)
         VALUES (p_payment_id, v_member_account_id, v_points_each);
 
@@ -162,7 +154,6 @@ END$$
 
 DELIMITER ;
 
--- Installation checks (read-only).
 SELECT ROUTINE_NAME FROM information_schema.ROUTINES
 WHERE ROUTINE_SCHEMA = DATABASE()
   AND ROUTINE_NAME IN ('award_loyalty_points', 'settle_loyalty_debt');

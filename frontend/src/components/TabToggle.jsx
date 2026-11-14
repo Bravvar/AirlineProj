@@ -1,8 +1,3 @@
-// Bubble tab switch.
-//   tabs     [{ id, label, short?, icon? }]  (default: Flights / Deals)
-//   counts   optional { [id]: number } shown as a bubble on each tab
-//   short    optional shorter label used on small screens
-//   isDarkBackground  glass style over a photo (true) or solid style (false)
 const DEFAULT_TABS = [
   { id: 'flights', label: 'Flights', icon: '✈' },
   { id: 'deals', label: 'Deals', icon: '🏷' },

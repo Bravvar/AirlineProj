@@ -3,10 +3,6 @@ import { API_URL } from '../config';
 
 const MAX_REASON = 500;
 
-// Member-facing "Cancel / Refund" popup.
-// Submits a cancellation request for supervisor review; the booking is NOT
-// cancelled until a supervisor approves it. Mount with a `key` per booking so
-// the form starts empty each time.
 export default function CancelRefundModal({ show, booking, token, onHide, onSubmitted }) {
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
@@ -48,7 +44,7 @@ export default function CancelRefundModal({ show, booking, token, onHide, onSubm
 
       const text = await res.text();
       let data = null;
-      try { data = JSON.parse(text); } catch { /* plain text */ }
+      try { data = JSON.parse(text); } catch { }
 
       if (!res.ok) {
         setError(data?.message || data?.title || text || 'Could not submit your request.');

@@ -33,7 +33,6 @@ export default function EmployeePage({ token, email, onBackToHome, onToggleSideb
     return () => { ignore = true; };
   }, [tab, token]);
 
-  // Reservation details search. Blank confirmation = all.
   const loadReservations = async (confirmation) => {
     if (!token) return;
     setLoadingRes(true);
@@ -62,7 +61,6 @@ export default function EmployeePage({ token, email, onBackToHome, onToggleSideb
     if (tab === 'reservations') {
       loadReservations(search);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, token]);
 
   const openManifest = async (id) => {
@@ -253,7 +251,6 @@ export default function EmployeePage({ token, email, onBackToHome, onToggleSideb
                   ))}
                 </div>
 
-                {/* Ticket and Segment Drilldown */}
                 <h4 className="font-bold text-lg mb-3">Ticket & Segment Details</h4>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-sm">

@@ -83,7 +83,6 @@ public class RefundsController : ControllerBase
             .FirstOrDefaultAsync();
     }
 
-    // GET api/admin/refunds
     [HttpGet]
     public async Task<IActionResult> GetRefunds(
         [FromQuery] string? status)
@@ -137,10 +136,6 @@ public class RefundsController : ControllerBase
         }
     }
 
-    // -----------------------------------------------------------------
-    // Q3 (Supervisor Refunds) — folded into Refund Management.
-    // Blank confirmation returns ALL rows.
-    // -----------------------------------------------------------------
     [HttpGet("audit")]
     public async Task<IActionResult> RefundAudit([FromQuery] string? confirmation)
     {
@@ -186,10 +181,6 @@ public class RefundsController : ControllerBase
         }
     }
 
-    // -----------------------------------------------------------------
-    // Q4 (Cancelled reservations + refund status) — folded into Refund Management.
-    // Blank confirmation returns ALL rows.
-    // -----------------------------------------------------------------
     [HttpGet("cancelled")]
     public async Task<IActionResult> CancelledReservations([FromQuery] string? confirmation)
     {
@@ -227,7 +218,6 @@ public class RefundsController : ControllerBase
         }
     }
 
-    // POST api/admin/refunds/1/calculate
     [HttpPost("{id:int}/calculate")]
     public async Task<IActionResult> CalculateRefund(int id)
     {
@@ -253,7 +243,6 @@ public class RefundsController : ControllerBase
         }
     }
 
-    // POST api/admin/refunds/1/approve
     [HttpPost("{id:int}/approve")]
     public async Task<IActionResult> ApproveRefund(
         int id,
@@ -291,7 +280,6 @@ public class RefundsController : ControllerBase
         }
     }
 
-    // POST api/admin/refunds/1/reject
     [HttpPost("{id:int}/reject")]
     public async Task<IActionResult> RejectRefund(
         int id,
@@ -347,7 +335,6 @@ public class RefundsController : ControllerBase
         }
     }
 
-    // POST api/admin/refunds/1/complete
     [HttpPost("{id:int}/complete")]
     public async Task<IActionResult> CompleteRefund(int id)
     {
@@ -366,7 +353,6 @@ public class RefundsController : ControllerBase
             await _db.Database.ExecuteSqlInterpolatedAsync(
                 $"CALL complete_flight_refund({id}, {employeeId.Value}, {reference})");
 
-            // Loyalty: take back the points earned on the refunded booking.
             await LoyaltyService.ReverseForRefundAsync(_db, _logger, reference);
 
             return Ok(await GetReview(id));

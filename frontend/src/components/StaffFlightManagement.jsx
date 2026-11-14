@@ -25,9 +25,6 @@ const FARE_CLASS_OPTIONS = [
   { id: 9, label: '9 — Premium Economy Flexible' },
 ];
 
-// Which fare classes belong to each cabin, and the max price for that cabin.
-// Economy only gets the Economy fare classes, Premium only the Premium ones,
-// Business only the Business ones — the other fare classes are hidden.
 const CABIN_FARE_CLASSES = {
   1: [1, 2, 3],
   2: [7, 8, 9],
@@ -43,9 +40,6 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
   const [airports, setAirports] = useState([]);
   const [flights, setFlights] = useState([]);
 
-  // Load the staff flight list (for the Flight dropdowns).
-  // Each flight carries its internal flightId AND its human flight number,
-  // so staff pick by flight number and the correct ID is sent.
   const loadFlights = async () => {
     if (!token) return;
     try {
@@ -54,7 +48,6 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
       });
       const data = await r.json();
       if (Array.isArray(data)) {
-        // Newest first: a flight just created sits at the top.
         setFlights([...data].sort((a, b) => (b.flightId || 0) - (a.flightId || 0)));
       }
     } catch {}
@@ -64,7 +57,6 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
     loadFlights();
   }, [token]);
 
-  // Add Flight Form state
   const [flightNumber, setFlightNumber] = useState('');
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
@@ -76,7 +68,6 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
   const [flightSuccess, setFlightSuccess] = useState('');
   const [flightError, setFlightError] = useState('');
 
-  // Add Fare Form state
   const [fareFlightId, setFareFlightId] = useState('');
   const [cabinClassId, setCabinClassId] = useState('1');
   const [fareClassId, setFareClassId] = useState('1');
@@ -86,13 +77,11 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
   const [fareSuccess, setFareSuccess] = useState('');
   const [fareError, setFareError] = useState('');
 
-  // Cancel Flight state
   const [cancelFlightId, setCancelFlightId] = useState('');
   const [loadingCancel, setLoadingCancel] = useState(false);
   const [cancelSuccess, setCancelSuccess] = useState('');
   const [cancelError, setCancelError] = useState('');
 
-  // Load airports for dropdowns
   useEffect(() => {
     fetch(`${API_URL}/api/airports`)
       .then((r) => r.json())
@@ -109,7 +98,6 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
       .catch(() => {});
   }, []);
 
-  // Submit Add Flight (POST /api/flights)
   const handleAddFlight = async (e) => {
     e.preventDefault();
     setFlightSuccess('');
@@ -180,7 +168,6 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
     }
   };
 
-  // Submit Add Fare (POST /api/flights/{id}/fares)
   const handleAddFare = async (e) => {
     e.preventDefault();
     setFareSuccess('');
@@ -241,7 +228,6 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
     }
   };
 
-  // Submit Cancel Flight (PUT /api/flights/{id}/cancel)
   const handleCancelFlight = async (e) => {
     e.preventDefault();
     setCancelSuccess('');
@@ -289,7 +275,6 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* SECTION 1: ADD FLIGHT FORM */}
         <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex flex-col justify-between">
           <div>
             <h3 className="font-bold text-gray-900 text-lg mb-4 flex items-center gap-2">
@@ -396,7 +381,6 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
           </div>
         </div>
 
-        {/* SECTION 2: ADD FARE FORM */}
         <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex flex-col justify-between">
           <div>
             <h3 className="font-bold text-gray-900 text-lg mb-4 flex items-center gap-2">
@@ -512,7 +496,6 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
           </div>
         </div>
 
-        {/* SECTION 3: CANCEL FLIGHT SECTION */}
         <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex flex-col justify-between">
           <div>
             <h3 className="font-bold text-gray-900 text-lg mb-4 flex items-center gap-2">

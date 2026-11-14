@@ -15,14 +15,12 @@ const labelCls = 'block text-[11px] font-semibold text-gray-500 uppercase tracki
 const toNumber = (v) => (v === '' || v == null ? null : Number(v));
 
 export default function RefundManagement({ token }) {
-  // ---------- Supervisor refund audit ----------
   const [auditRows, setAuditRows] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState('');
   const emptyAuditFilters = { search: '', supervisor: 'All', from: '', to: '', min: '', max: '', sort: 'dateDesc' };
   const [auditFilters, setAuditFilters] = useState(emptyAuditFilters);
 
-  // ---------- Cancelled reservations + refund status ----------
   const [cancelledRows, setCancelledRows] = useState([]);
   const [cancelledLoading, setCancelledLoading] = useState(false);
   const [cancelledError, setCancelledError] = useState('');
@@ -70,7 +68,6 @@ export default function RefundManagement({ token }) {
     loadCancelled();
   }, [loadAudit, loadCancelled]);
 
-  // ---------- Audit filtering ----------
   const supervisorOptions = useMemo(
     () => ['All', ...Array.from(new Set(auditRows.map((r) => r.supervisorEmail).filter(Boolean))).sort()],
     [auditRows]
@@ -83,7 +80,7 @@ export default function RefundManagement({ token }) {
     const max = toNumber(f.max);
 
     const rows = auditRows.filter((r) => {
-      const day = String(r.paymentDateTime || '').slice(0, 10); // YYYY-MM-DD
+      const day = String(r.paymentDateTime || '').slice(0, 10);
       const amt = Number(r.amount ?? 0);
       if (q && !(
         (r.confirmationNumber || '').toLowerCase().includes(q) ||
@@ -113,7 +110,6 @@ export default function RefundManagement({ token }) {
   const auditTotal = filteredAudit.reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
   const setAudit = (key) => (e) => setAuditFilters((f) => ({ ...f, [key]: e.target.value }));
 
-  // ---------- Cancelled filtering ----------
   const filteredCancelled = useMemo(() => {
     const f = cancelledFilters;
     const q = f.search.trim().toLowerCase();
@@ -149,7 +145,6 @@ export default function RefundManagement({ token }) {
 
   return (
     <section className="space-y-6">
-      {/* Member-submitted Cancel / Refund requests */}
       <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
         <CancellationRequestsPanel
           embedded
@@ -161,7 +156,6 @@ export default function RefundManagement({ token }) {
         />
       </div>
 
-      {/* Supervisor refund audit */}
       <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
         <div className="flex flex-wrap justify-between items-center gap-3">
           <div>
@@ -278,7 +272,6 @@ export default function RefundManagement({ token }) {
         </div>
       </div>
 
-      {/* Cancelled reservations and refund status */}
       <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm">
         <div className="flex flex-wrap justify-between items-center gap-3">
           <div>

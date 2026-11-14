@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import Logo from './Logo';
 
-// Refund notification shown after a member submits a Cancel / Refund request.
 export default function RefundConfirmationPage({ details, onBackToTrips }) {
   useEffect(() => {
     window.scrollTo(0, 0);

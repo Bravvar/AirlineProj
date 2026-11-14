@@ -1,42 +1,16 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-// Loyalty points, handled by the backend.
-//
-// Earn:    every successful Payment (booking, seat fee, extra bag) gives
-//          PointsPerDollar points per whole dollar, split evenly across the
-//          passengers on the reservation. Each passenger with an Active
-//          membership gets their share.
-// Reverse: every completed refund takes back the same fraction of the points
-//          earned on that reservation (full refund = all of them). If the
-//          member has already spent the points, the shortfall is recorded and
-//          taken from their next earnings instead of going below zero.
-//
-// Bookkeeping uses the same tables as db migrations 15-16
-// (LoyaltyPaymentProcessed, LoyaltyPointLedger, LoyaltyRefundProcessed,
-// LoyaltyRefundLedger). The backend creates them at startup if they are
-// missing, so no one has to run SQL by hand. Each payment and refund is only
-// ever processed once.
-//
-// If the database already has the loyalty triggers from migrations 15-16,
-// the database does this work itself and the backend steps aside, so points
-// are never counted twice.
-//
-// A loyalty failure is logged and never fails the booking or refund.
 public static class LoyaltyService
 {
-    /// <summary>Points per $1. The About page mentions ~5; change here to match.</summary>
     public const int PointsPerDollar = 1;
 
-    // Seeded demo payments; seeded members already have hand-set balances.
     private const string SeedReferencePrefix = "TXN-";
 
     private const string AwardTrigger = "trg_payment_loyalty_insert";
     private const string RefundTrigger = "trg_payment_loyalty_refund_insert";
 
-    // ------------------------------------------------------------------ public
 
-    /// <summary>Award points for the payment with this transaction reference.</summary>
     public static async Task AwardForPaymentAsync(ApplicationDbContext db, ILogger logger, string? transactionReference)
     {
         if (string.IsNullOrEmpty(transactionReference)) return;
@@ -52,7 +26,6 @@ public static class LoyaltyService
         }
     }
 
-    /// <summary>Take back points for the refund with this transaction reference.</summary>
     public static async Task ReverseForRefundAsync(ApplicationDbContext db, ILogger logger, string? transactionReference)
     {
         if (string.IsNullOrEmpty(transactionReference)) return;
@@ -68,10 +41,6 @@ public static class LoyaltyService
         }
     }
 
-    /// <summary>
-    /// Startup: create the bookkeeping tables if missing, then catch up on any
-    /// app payments / refunds that were never processed (oldest first).
-    /// </summary>
     public static async Task EnsureReadyAsync(ApplicationDbContext db, ILogger logger)
     {
         try
@@ -130,7 +99,6 @@ public static class LoyaltyService
         }
     }
 
-    // ------------------------------------------------------------------ earn
 
     private static async Task AwardAsync(ApplicationDbContext db, int paymentId)
     {
@@ -148,7 +116,6 @@ public static class LoyaltyService
             pay.ReservationId).ToListAsync()).FirstOrDefault();
         if (passengers == 0) return;
 
-        // Mark first: if this payment was already handled, stop here.
         int marked = await db.Database.ExecuteSqlRawAsync(
             "INSERT IGNORE INTO LoyaltyPaymentProcessed (payment_id) VALUES ({0})", paymentId);
         if (marked == 0) { await tx.CommitAsync(); return; }
@@ -165,7 +132,6 @@ public static class LoyaltyService
 
             foreach (int memberId in members.Distinct())
             {
-                // Record the gross amount so later refunds reverse the right share.
                 await db.Database.ExecuteSqlRawAsync(
                     "INSERT INTO LoyaltyPointLedger (payment_id, member_account_id, points_awarded) VALUES ({0}, {1}, {2})",
                     paymentId, memberId, pointsEach);
@@ -182,7 +148,6 @@ public static class LoyaltyService
         await tx.CommitAsync();
     }
 
-    // New points first pay back points still owed from earlier refunds.
     private static async Task<int> SettleOwedPointsAsync(ApplicationDbContext db, int memberId, int points)
     {
         int remaining = points;
@@ -207,7 +172,6 @@ public static class LoyaltyService
         return remaining;
     }
 
-    // ------------------------------------------------------------------ reverse
 
     private static async Task ReverseAsync(ApplicationDbContext db, int refundPaymentId)
     {
@@ -236,7 +200,6 @@ public static class LoyaltyService
         if (paid <= 0) { await tx.CommitAsync(); return; }
         refunded = Math.Min(refunded, paid);
 
-        // Points actually earned on this reservation, per member.
         var earned = await db.Database.SqlQueryRaw<LoyaltyEarnedRow>(@"
             SELECT l.member_account_id AS MemberAccountId, CAST(SUM(l.points_awarded) AS SIGNED) AS Points
             FROM LoyaltyPointLedger l
@@ -247,7 +210,6 @@ public static class LoyaltyService
 
         foreach (var row in earned)
         {
-            // Cumulative share of all refunds so far, minus what was already taken back.
             long target = (long)Math.Floor(row.Points * refunded / paid);
             decimal alreadyDue = await SumAsync(db, @"
                 SELECT COALESCE(SUM(l.points_due), 0) AS Value
@@ -279,7 +241,6 @@ public static class LoyaltyService
         await tx.CommitAsync();
     }
 
-    // ------------------------------------------------------------------ helpers
 
     private static async Task<bool> TriggerExistsAsync(ApplicationDbContext db, string triggerName)
     {
@@ -302,7 +263,6 @@ public static class LoyaltyService
         return (await db.Database.SqlQueryRaw<decimal>(sql, args).ToListAsync()).FirstOrDefault();
     }
 
-    // Same table definitions as db migrations 15 and 16.
     private static async Task CreateTablesAsync(ApplicationDbContext db)
     {
         await db.Database.ExecuteSqlRawAsync(@"

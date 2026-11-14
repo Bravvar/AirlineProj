@@ -1,6 +1,5 @@
 USE airlineschema;
 
--- Reservation
 INSERT INTO Reservation (confirmation_number, booking_date, booking_time,
                          reservation_status, hold_expiration, trip_type, total_amount) VALUES
 ('ARS1001', '2026-08-01', '10:15:00', 'Confirmed', NULL, 'One Way',    450.00),
@@ -9,7 +8,6 @@ INSERT INTO Reservation (confirmation_number, booking_date, booking_time,
 ('ARS1004', '2026-06-10', '16:20:00', 'Completed', NULL, 'Round Trip',1350.00),
 ('ARS1005', '2026-08-12', '11:05:00', 'Confirmed', NULL, 'One Way',    300.00);
 
--- ReservationPassenger
 INSERT INTO ReservationPassenger (reservation_id, passenger_id, additional_checked_bags, meal_selection) VALUES
 ((SELECT reservation_id FROM Reservation WHERE confirmation_number='ARS1001'),
  (SELECT passenger_id   FROM Passenger   WHERE email='james.wilson@google.com'),   0, 'Standard'),
@@ -24,8 +22,6 @@ INSERT INTO ReservationPassenger (reservation_id, passenger_id, additional_check
 ((SELECT reservation_id FROM Reservation WHERE confirmation_number='ARS1005'),
  (SELECT passenger_id   FROM Passenger   WHERE email='michael.brown@google.com'),  0, 'Gluten Free');
 
--- ReservationSegment
--- ARS1005 is Cancelled: segments marked Cancelled with cancellation metadata.
 INSERT INTO ReservationSegment (reservation_id, flight_id, flight_fare_id, segment_number,
                                 segment_status, fare_price_at_booking,
                                 cancellation_date_time, cancellation_reason) VALUES
@@ -72,17 +68,8 @@ INSERT INTO ReservationSegment (reservation_id, flight_id, flight_fare_id, segme
  2, 'Cancelled', 420.00, '2026-08-15 09:00:00', 'Passenger requested cancellation');
 
 
--- SeatAssignment
--- One seat per passenger per segment.
--- Flight IDs must match their reservation segments.
--- active_seat defaults to 1.
--- ARS1005 segments are cancelled, so no seats are assigned.
 
 
--- SeatAssignment
--- One seat per passenger per segment.
--- Flight IDs must match their reservation segments.
--- ARS1005 segments are cancelled, so no seats are assigned.
 
 INSERT INTO SeatAssignment (
     reservation_segment_id,
@@ -93,7 +80,6 @@ INSERT INTO SeatAssignment (
     seat_fee
 ) VALUES
 
--- ARS1001: AA100, seat A01
 ((SELECT rs.reservation_segment_id
   FROM ReservationSegment rs
   JOIN Reservation r ON r.reservation_id = rs.reservation_id
@@ -112,7 +98,6 @@ INSERT INTO SeatAssignment (
     AND s.seat_number = 'A01'),
  '2026-08-01 10:16:00', 0.00),
 
--- ARS1002: AA100, seat A02
 ((SELECT rs.reservation_segment_id
   FROM ReservationSegment rs
   JOIN Reservation r ON r.reservation_id = rs.reservation_id
@@ -131,7 +116,6 @@ INSERT INTO SeatAssignment (
     AND s.seat_number = 'A02'),
  '2026-08-03 14:31:00', 0.00),
 
--- ARS1002: UA205, seat B01
 ((SELECT rs.reservation_segment_id
   FROM ReservationSegment rs
   JOIN Reservation r ON r.reservation_id = rs.reservation_id
@@ -150,8 +134,6 @@ INSERT INTO SeatAssignment (
     AND s.seat_number = 'B01'),
  '2026-08-03 14:31:00', 15.00),
 
--- ARS1004: DL400, seat C01
--- Historical flown assignment
 ((SELECT rs.reservation_segment_id
   FROM ReservationSegment rs
   JOIN Reservation r ON r.reservation_id = rs.reservation_id
@@ -171,7 +153,6 @@ INSERT INTO SeatAssignment (
  '2026-06-10 16:21:00', 0.00);
 
 
--- Mark historical seat assignments as inactive.
 UPDATE SeatAssignment sa
 JOIN ReservationSegment rs
     ON rs.reservation_segment_id = sa.reservation_segment_id

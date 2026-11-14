@@ -1,14 +1,4 @@
-﻿-- =====================================================
--- Migration 14: Flight Cancellation and Refund Automation
--- =====================================================
--- DRAFT - NOT YET VALIDATED FOR DEPLOYMENT
---
--- Requires the existing airline tables and triggers.
--- One-time migration: do not run twice.
--- Select the intended database before executing.
--- Never run against the shared database without backup.
--- Scheduled events are created DISABLED.
--- =====================================================
+﻿
 
 ALTER TABLE Flight
     ADD COLUMN original_departure_at DATETIME NULL,
@@ -99,7 +89,6 @@ CREATE TRIGGER `trg_flight_delay_auto_cancel` BEFORE UPDATE ON `Flight` FOR EACH
             NEW.departure_time
         );
 
-    -- Preserve the original departure
     SET NEW.original_departure_at =
         COALESCE(
             OLD.original_departure_at,
@@ -109,7 +98,6 @@ CREATE TRIGGER `trg_flight_delay_auto_cancel` BEFORE UPDATE ON `Flight` FOR EACH
             )
         );
 
-    -- Start tracking when the flight becomes delayed
     IF NEW.flight_status = 'Delayed'
        AND OLD.flight_status <> 'Delayed' THEN
 
@@ -126,7 +114,6 @@ CREATE TRIGGER `trg_flight_delay_auto_cancel` BEFORE UPDATE ON `Flight` FOR EACH
 
     END IF;
 
-    -- Cancel flights postponed by at least 24 hours
     IF OLD.flight_status IN (
         'On Time', 'Delayed', 'Boarding'
     )
@@ -208,7 +195,6 @@ main: BEGIN
     DECLARE v_flight_status VARCHAR(20) DEFAULT NULL;
     DECLARE v_queue_status VARCHAR(20) DEFAULT NULL;
 
-    -- Undo every change if something fails.
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
         ROLLBACK;
@@ -217,7 +203,6 @@ main: BEGIN
 
     START TRANSACTION;
 
-    -- Lock the flight while processing.
     SELECT flight_status
     INTO v_flight_status
     FROM Flight
@@ -231,14 +216,12 @@ main: BEGIN
             'Flight must be cancelled first';
     END IF;
 
-    -- Lock the matching queue entry.
     SELECT processing_status
     INTO v_queue_status
     FROM FlightCancellationQueue
     WHERE flight_id = p_flight_id
     FOR UPDATE;
 
-    -- Idempotency: do nothing if already processed.
     IF v_queue_status = 'Processed' THEN
         COMMIT;
         LEAVE main;
@@ -251,8 +234,6 @@ main: BEGIN
             'No pending cancellation available';
     END IF;
 
-    -- Cancel affected booked segments.
-    -- Existing inventory and seat triggers fire.
     UPDATE ReservationSegment
     SET
         segment_status = 'Cancelled',
@@ -262,8 +243,6 @@ main: BEGIN
     WHERE flight_id = p_flight_id
       AND segment_status = 'Booked';
 
-    -- Cancel tickets only if every linked
-    -- segment is now cancelled.
     UPDATE Ticket t
     SET ticket_status = 'Cancelled'
     WHERE t.ticket_status = 'Issued'
@@ -286,8 +265,6 @@ main: BEGIN
             AND rs.segment_status <> 'Cancelled'
       );
 
-    -- Cancel reservations only when every
-    -- associated segment is cancelled.
     UPDATE Reservation r
     SET reservation_status = 'Cancelled'
     WHERE r.reservation_status IN (
@@ -308,8 +285,6 @@ main: BEGIN
             AND rs.segment_status <> 'Cancelled'
       );
 
-    -- Queue refund review only for segments
-    -- cancelled by this airline workflow.
     INSERT IGNORE INTO FlightRefundReview (
         flight_id,
         reservation_id,
@@ -333,8 +308,6 @@ main: BEGIN
             AND p.payment_status = 'Successful'
       );
 
-    -- All database cancellation steps succeeded.
-    -- Refund approval remains a separate process.
     UPDATE FlightCancellationQueue
     SET
         processing_status = 'Processed',
@@ -349,7 +322,6 @@ CREATE PROCEDURE `process_next_flight_cancellation`()
 BEGIN
     DECLARE v_flight_id INT DEFAULT NULL;
 
-    -- If the queue is empty, do nothing.
     BEGIN
         DECLARE CONTINUE HANDLER FOR NOT FOUND
             SET v_flight_id = NULL;
@@ -362,7 +334,6 @@ BEGIN
         LIMIT 1;
     END;
 
-    -- Reuse the transaction-safe procedure.
     IF v_flight_id IS NOT NULL THEN
         CALL process_flight_cancellation(v_flight_id);
     END IF;
@@ -391,7 +362,6 @@ BEGIN
 
     START TRANSACTION;
 
-    -- Find the reservation for this review.
     SELECT MAX(reservation_id)
     INTO v_reservation_id
     FROM FlightRefundReview
@@ -402,15 +372,12 @@ BEGIN
         SET MESSAGE_TEXT = 'Refund review not found';
     END IF;
 
-    -- Lock the reservation first, consistently with
-    -- approval and completion procedures.
     SELECT reservation_id
     INTO v_reservation_id
     FROM Reservation
     WHERE reservation_id = v_reservation_id
     FOR UPDATE;
 
-    -- Then lock the refund review.
     SELECT
         reservation_id,
         flight_id,
@@ -429,7 +396,6 @@ BEGIN
             'Refund review not found or not pending';
     END IF;
 
-    -- Calculate the airline-cancelled fare amount.
     SELECT COALESCE(SUM(fare_price_at_booking), 0)
     INTO v_fare
     FROM ReservationSegment
@@ -439,7 +405,6 @@ BEGIN
       AND cancellation_reason =
           'Flight cancelled by airline';
 
-    -- Successful payments.
     SELECT COALESCE(SUM(amount), 0)
     INTO v_paid
     FROM Payment
@@ -447,7 +412,6 @@ BEGIN
       AND transaction_type = 'Payment'
       AND payment_status = 'Successful';
 
-    -- Refunds already recorded as completed.
     SELECT COALESCE(SUM(amount), 0)
     INTO v_refunded
     FROM Payment
@@ -455,9 +419,6 @@ BEGIN
       AND transaction_type = 'Refund'
       AND payment_status = 'Refunded';
 
-    -- Reserve against other open refund recommendations.
-    -- Completed reviews are accounted for by actual
-    -- refunded Payment transactions instead.
     SELECT COALESCE(SUM(recommended_amount), 0)
     INTO v_reserved
     FROM FlightRefundReview
@@ -529,7 +490,6 @@ BEGIN
 
     START TRANSACTION;
 
-    -- Find the reservation associated with the review.
     SELECT MAX(reservation_id)
     INTO v_reservation_id
     FROM FlightRefundReview
@@ -540,14 +500,12 @@ BEGIN
         SET MESSAGE_TEXT = 'Refund review not found';
     END IF;
 
-    -- Lock the reservation to serialize refund decisions.
     SELECT reservation_id
     INTO v_reservation_id
     FROM Reservation
     WHERE reservation_id = v_reservation_id
     FOR UPDATE;
 
-    -- Lock the refund review.
     SELECT
         flight_id,
         review_status,
@@ -565,7 +523,6 @@ BEGIN
         SET MESSAGE_TEXT = 'Refund is no longer pending';
     END IF;
 
-    -- Verify employee authorization.
     SELECT MAX(employee_role)
     INTO v_role
     FROM Employee
@@ -589,7 +546,6 @@ BEGIN
         SET MESSAGE_TEXT = 'Invalid approved amount';
     END IF;
 
-    -- Confirm flight cancellation.
     SELECT MAX(flight_status)
     INTO v_flight_status
     FROM Flight
@@ -600,7 +556,6 @@ BEGIN
         SET MESSAGE_TEXT = 'Flight is not cancelled';
     END IF;
 
-    -- Confirm eligible airline-cancelled segments.
     SELECT COALESCE(SUM(fare_price_at_booking), 0)
     INTO v_fare
     FROM ReservationSegment
@@ -615,7 +570,6 @@ BEGIN
         SET MESSAGE_TEXT = 'No sufficient qualifying fare';
     END IF;
 
-    -- Successful customer payments.
     SELECT COALESCE(SUM(amount), 0)
     INTO v_paid
     FROM Payment
@@ -623,7 +577,6 @@ BEGIN
       AND transaction_type = 'Payment'
       AND payment_status = 'Successful';
 
-    -- Refunds previously completed.
     SELECT COALESCE(SUM(amount), 0)
     INTO v_refunded
     FROM Payment
@@ -631,7 +584,6 @@ BEGIN
       AND transaction_type = 'Refund'
       AND payment_status = 'Refunded';
 
-    -- Amounts reserved by other open reviews.
     SELECT COALESCE(
         SUM(
             CASE
@@ -662,7 +614,6 @@ BEGIN
             'Refund exceeds remaining paid balance';
     END IF;
 
-    -- Approval is not a completed payment.
     UPDATE FlightRefundReview
     SET
         review_status = 'Approved',
@@ -712,7 +663,6 @@ BEGIN
 
     START TRANSACTION;
 
-    -- Identify the review's reservation.
     SELECT MAX(reservation_id)
     INTO v_reservation_id
     FROM FlightRefundReview
@@ -723,14 +673,12 @@ BEGIN
         SET MESSAGE_TEXT = 'Refund review not found';
     END IF;
 
-    -- Lock reservation to serialize refund operations.
     SELECT reservation_id
     INTO v_reservation_id
     FROM Reservation
     WHERE reservation_id = v_reservation_id
     FOR UPDATE;
 
-    -- Lock and validate the approval.
     SELECT
         review_status,
         approved_amount,
@@ -749,7 +697,6 @@ BEGIN
             'Refund must be approved and not completed';
     END IF;
 
-    -- Verify supervisor authorization.
     SELECT MAX(employee_role)
     INTO v_role
     FROM Employee
@@ -768,7 +715,6 @@ BEGIN
         SET MESSAGE_TEXT = 'Invalid refund approval';
     END IF;
 
-    -- Prevent duplicate refund transactions.
     IF EXISTS (
         SELECT 1
         FROM Payment
@@ -778,7 +724,6 @@ BEGIN
         SET MESSAGE_TEXT = 'Refund already recorded';
     END IF;
 
-    -- Total successful payments.
     SELECT COALESCE(SUM(amount), 0)
     INTO v_paid
     FROM Payment
@@ -786,7 +731,6 @@ BEGIN
       AND transaction_type = 'Payment'
       AND payment_status = 'Successful';
 
-    -- Total previously completed refunds.
     SELECT COALESCE(SUM(amount), 0)
     INTO v_refunded
     FROM Payment
@@ -803,7 +747,6 @@ BEGIN
             'Refund exceeds remaining paid balance';
     END IF;
 
-    -- Find original payment method.
     SELECT payment_method
     INTO v_method
     FROM Payment
@@ -813,7 +756,6 @@ BEGIN
     ORDER BY payment_id DESC
     LIMIT 1;
 
-    -- Record the completed refund.
     INSERT INTO Payment (
         reservation_id,
         employee_id,
@@ -839,7 +781,6 @@ BEGIN
 
     SET v_payment_id = LAST_INSERT_ID();
 
-    -- Mark the review completed.
     UPDATE FlightRefundReview
     SET review_status = 'Completed',
         review_notes = 'Refund transaction recorded'

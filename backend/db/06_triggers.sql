@@ -4,12 +4,10 @@ USE airlineschema;
 
 DELIMITER $$
 
--- Remove the old inventory triggers.
 DROP TRIGGER IF EXISTS trg_segment_book_decrement_inventory$$
 DROP TRIGGER IF EXISTS trg_segment_cancel_restore_inventory$$
 DROP TRIGGER IF EXISTS trg_segment_change_restore_inventory$$
 
--- Remove any earlier versions of these new triggers.
 DROP TRIGGER IF EXISTS trg_segment_inventory_insert$$
 DROP TRIGGER IF EXISTS trg_segment_inventory_update$$
 DROP TRIGGER IF EXISTS trg_segment_inventory_delete$$
@@ -17,10 +15,6 @@ DROP TRIGGER IF EXISTS trg_passenger_inventory_insert$$
 DROP TRIGGER IF EXISTS trg_passenger_inventory_delete$$
 DROP TRIGGER IF EXISTS trg_passenger_inventory_update$$
 
--- =====================================================
--- TRIGGER 1: Reduce inventory when booking a segment.
--- One seat is required for each reservation passenger.
--- =====================================================
 CREATE TRIGGER trg_segment_inventory_insert
 BEFORE INSERT ON ReservationSegment
 FOR EACH ROW
@@ -66,10 +60,6 @@ BEGIN
 END$$
 
 
--- =====================================================
--- TRIGGER 2: Handle cancellations, rebooking,
--- and changes to the selected fare or flight.
--- =====================================================
 CREATE TRIGGER trg_segment_inventory_update
 BEFORE UPDATE ON ReservationSegment
 FOR EACH ROW
@@ -102,8 +92,6 @@ END IF;
     FROM ReservationPassenger
     WHERE reservation_id = OLD.reservation_id;
 
-    -- If an active booking is cancelled, changed, or
-    -- moved to another fare, release its old inventory.
     IF OLD.segment_status = 'Booked'
    AND (NEW.segment_status IN ('Cancelled', 'Changed')
         OR (NEW.segment_status = 'Booked'
@@ -122,8 +110,6 @@ IF ROW_COUNT() <> 1 THEN
         'Cannot restore inventory: capacity exceeded.';
 END IF;
 END IF;
-    -- If a segment becomes booked, or its fare changes,
-    -- reserve inventory for all passengers.
     IF NEW.segment_status = 'Booked'
        AND (OLD.segment_status <> 'Booked'
             OR NEW.flight_fare_id <> OLD.flight_fare_id) THEN
@@ -158,7 +144,6 @@ END IF;
         END IF;
     END IF;
 
-    -- The flight must match the fare for other statuses too.
     SELECT flight_id INTO fare_flight_id
     FROM FlightFare
     WHERE flight_fare_id = NEW.flight_fare_id;
@@ -172,10 +157,6 @@ END IF;
 END$$
 
 
--- =====================================================
--- TRIGGER 3: Restore inventory if a booked segment
--- is deleted directly.
--- =====================================================
 CREATE TRIGGER trg_segment_inventory_delete
 BEFORE DELETE ON ReservationSegment
 FOR EACH ROW
@@ -204,11 +185,6 @@ END IF;
 END$$
 
 
--- =====================================================
--- TRIGGERS 4-6: Prevent passenger-list edits after
--- segments exist. This keeps inventory counts accurate.
--- Create all passengers before creating segments.
--- =====================================================
 CREATE TRIGGER trg_passenger_inventory_insert
 BEFORE INSERT ON ReservationPassenger
 FOR EACH ROW
@@ -260,10 +236,6 @@ END$$
 
 
 
--- =========================================================
--- TRIGGER 4 (NEW): supervisor-only refunds
--- (Constraint 20 + Business Rule 4)
--- =========================================================
 DROP TRIGGER IF EXISTS trg_refund_supervisor_only $$
 CREATE TRIGGER trg_refund_supervisor_only
 BEFORE INSERT ON Payment
@@ -282,9 +254,6 @@ BEGIN
     END IF;
 END$$
 
--- =========================================================
--- TRIGGER 5: enforce ticket issuance rules (Business Rules 5 & 6)
--- =========================================================
 DROP TRIGGER IF EXISTS trg_ticket_issue_check $$
 CREATE TRIGGER trg_ticket_issue_check
 BEFORE INSERT ON Ticket
@@ -325,10 +294,6 @@ BEGIN
     END IF;
 END$$
 
--- =========================================================
--- TRIGGER 6 (NEW): seat must belong to the segment's aircraft
--- (Business Rule 7)
--- =========================================================
 DROP TRIGGER IF EXISTS trg_seat_matches_aircraft $$
 CREATE TRIGGER trg_seat_matches_aircraft
 BEFORE INSERT ON SeatAssignment
@@ -351,10 +316,6 @@ BEGIN
     END IF;
 END$$
 
--- =====================================================
--- TRIGGER 10: Release seats when a segment is cancelled
--- or changed, while keeping assignment history.
--- =====================================================
 DROP TRIGGER IF EXISTS trg_segment_release_seats$$
 
 CREATE TRIGGER trg_segment_release_seats
@@ -373,9 +334,6 @@ BEGIN
 END$$
 
 
--- =====================================================
--- TRIGGER 11: Validate new seat assignments.
--- =====================================================
 DROP TRIGGER IF EXISTS trg_seat_assignment_validate_insert$$
 
 CREATE TRIGGER trg_seat_assignment_validate_insert
@@ -412,9 +370,6 @@ END$$
 
 
 
--- =====================================================
--- TRIGGER 12: Validate updates to seat assignments.
--- =====================================================
 DROP TRIGGER IF EXISTS trg_seat_assignment_validate_update$$
 
 CREATE TRIGGER trg_seat_assignment_validate_update
@@ -426,14 +381,12 @@ BEGIN
     DECLARE seat_aircraft INT DEFAULT NULL;
     DECLARE flight_aircraft INT DEFAULT NULL;
 
-    -- Find the reservation and status of the segment.
     SELECT reservation_id, segment_status
     INTO segment_reservation, segment_status_value
     FROM ReservationSegment
     WHERE reservation_segment_id =
           NEW.reservation_segment_id;
 
-    -- Passenger must belong to the reservation.
     IF NOT EXISTS (
         SELECT 1
         FROM ReservationPassenger
@@ -446,9 +399,6 @@ BEGIN
             'Passenger does not belong to this reservation.';
     END IF;
 
-    -- Active seats require a booked segment.
-    -- Permit releasing an assignment on a cancelled
-    -- or changed segment.
     IF NEW.active_seat = 1
        AND (
            segment_status_value IS NULL
@@ -459,8 +409,6 @@ BEGIN
             'Active seats require a booked segment.';
     END IF;
 
-    -- Validate the aircraft when changing or activating
-    -- a seat. Historical released records remain unchanged.
     IF NEW.active_seat = 1
        AND (
            NEW.seat_id <> OLD.seat_id
@@ -493,10 +441,6 @@ END$$
 
 
 
--- =====================================================
--- TRIGGER 13: Prevent cancelling a reservation
--- while it still contains booked flight segments.
--- =====================================================
 DROP TRIGGER IF EXISTS trg_reservation_cancel_check$$
 
 CREATE TRIGGER trg_reservation_cancel_check

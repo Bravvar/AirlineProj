@@ -711,7 +711,6 @@ export default function ReportsPage({ token, email, role, onBackToHome, onSignIn
       if (!ignore) fetchReports();
     })();
     return () => { ignore = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const toggleColumn = (reportKey, colKey) => {

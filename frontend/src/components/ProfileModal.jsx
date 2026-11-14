@@ -60,7 +60,7 @@ export default function ProfileModal({ show, onHide, token, onAccountDeleted }) 
         try {
           const data = await res.json();
           if (data?.message) msg = data.message;
-        } catch { /* plain-text body */ }
+        } catch { }
         throw new Error(msg);
       }
       onAccountDeleted();

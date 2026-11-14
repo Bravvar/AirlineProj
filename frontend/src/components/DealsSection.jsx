@@ -4,9 +4,6 @@ import CheckoutModal from './CheckoutModal';
 import SeatSelectionModal from './SeatSelectionModal';
 
 
-// A different landscape photo for each deal card.
-// Destinations with a matching photo get it; the rest get one from the pool
-// (same route -> same photo), skipping any photo already used in the list.
 const IMG = (name) => `/landscapes/${name}.jpg`;
 const DEAL_IMG = {
   SFO: IMG('san fran'), LAX: IMG('cali'), SAN: IMG('cali'), SJC: IMG('cali'),
@@ -41,7 +38,6 @@ function pickDealImages(deals) {
   });
 }
 
-// navProps: the site header's props, so the seat + checkout pages show it.
 export default function DealsSection({ onSeeAll, onSignIn, onBooked, navProps }) {
   const [deals, setDeals] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +65,6 @@ export default function DealsSection({ onSeeAll, onSignIn, onBooked, navProps })
     setShowSeatModal(true);
   };
 
-  // A seat in another cabin books that cabin's fare instead of the deal fare.
   const handleSeatProceed = (seatIds, total, info) => {
     setSelectedSeatIds(seatIds);
     setSelectedSeatNumber(info?.seatNumber || null);
@@ -111,7 +106,6 @@ export default function DealsSection({ onSeeAll, onSignIn, onBooked, navProps })
           : null,
         passengerCount: passengerCount || 1,
         totalAmount: checkoutTotal,
-        // Shows the Points Earned box on the confirmation page.
         justBooked: true,
         loyalty: loyalty || null,
         flightNumber: deal.flightNumber,
@@ -178,7 +172,6 @@ export default function DealsSection({ onSeeAll, onSignIn, onBooked, navProps })
     };
   }, []);
 
-  // A different photo for each card.
   const dealImages = pickDealImages(deals);
 
   return (
@@ -283,7 +276,6 @@ export default function DealsSection({ onSeeAll, onSignIn, onBooked, navProps })
             setShowCheckoutModal(false);
             setSelectedDeal(null);
           }}
-          // Back to the seat map with the seat still picked.
           onBack={() => {
             setShowCheckoutModal(false);
             setShowSeatModal(true);

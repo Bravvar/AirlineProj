@@ -25,7 +25,6 @@ INSERT INTO Airport (airport_code, airport_name, city, state_province, country) 
 ('LHR', 'Heathrow Airport',                    'London',      'England',    'United Kingdom'),
 ('NRT', 'Narita International Airport',        'Narita',      'Chiba',      'Japan');
 
--- CHANGED: FareClass now uses unambiguous "cabin + tier" naming (plan Pages 3-4)
 INSERT INTO FareClass (fare_class_name, refundable, changes_allowed, change_fee,
                        advance_purchase_days, checked_bags_included,
                        carry_on_bags_included, seat_selection_included) VALUES

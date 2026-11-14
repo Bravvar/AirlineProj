@@ -3,19 +3,6 @@ import { createPortal } from 'react-dom';
 import { API_URL } from '../config';
 import CustomerNav from './CustomerNav';
 
-// ---------------------------------------------------------------------
-// Seat picker shown before checkout (booking) and from My Trips (change).
-//
-// Booking rules
-//   * A seat is required: one per traveler, no "continue without a seat".
-//   * Only seats in the cabin of the fare the user picked can be chosen
-//     (Economy fare -> Economy seats, Business fare -> Business seats).
-//   * Round trips call this twice (outbound, then return); `steps` and
-//     `stepIndex` drive the "Seat 1 of 2" progress in the summary card.
-//
-// Seat numbers are <row letter><seat number>: A01 ... C12. The section
-// order is always the front of the plane (First/Business) to the back.
-// ---------------------------------------------------------------------
 const SEATS_PER_SIDE = 3;
 const SEATS_PER_ROW = SEATS_PER_SIDE * 2;
 
@@ -26,16 +13,12 @@ const CABINS = {
   1: { name: 'Economy Class', short: 'Economy', seatFee: 20 },
 };
 
-// Only used when the seat map API leaves out the cabin.
 const ROW_CABIN = { A: 4, B: 3 };
 
-// Front of the plane to the back
 const CABIN_ORDER = [4, 3, 2, 1];
 
 const EMPTY = [];
 
-// While the picker is open the seat map is reloaded this often (and when the
-// tab regains focus), so seats other people just bought turn grey.
 const REFRESH_MS = 10000;
 
 const seatIdOf = (s) => s.seatId ?? s.SeatId;
@@ -55,7 +38,6 @@ const cabinIdOf = (x) => {
   return 1;
 };
 
-// "B3" -> { row: 'B', num: 3 }   (also handles zero padding: "B03")
 const parseSeat = (num) => {
   const m = num.match(/^([A-Z]+)0*(\d+)$/);
   return m ? { row: m[1], num: Number(m[2]) } : { row: num, num: 0 };
@@ -68,7 +50,6 @@ const seatCabinId = (s) => {
 
 const seatFeeFor = (cabinId) => (CABINS[cabinId] || CABINS[1]).seatFee;
 
-// ------------------------------------------------------------------ pieces
 
 function Cockpit() {
   return (
@@ -133,7 +114,6 @@ function Legend() {
   );
 }
 
-// One row per leg: done (check), current (blue dot) or upcoming (grey).
 function TripSteps({ steps, stepIndex, currentSeats }) {
   return (
     <ol className="space-y-3">
@@ -166,29 +146,7 @@ function TripSteps({ steps, stepIndex, currentSeats }) {
   );
 }
 
-// ------------------------------------------------------------------ modal
 
-/**
- * Props
- *  flightId       flight to load the seat map + fares for
- *  fareId         fare the user picked in search (booking mode)
- *  farePrice      price of that fare (fallback if fares can't load)
- *  extraPrice     other per-traveler fare money in the total (e.g. the other leg)
- *  extraFees      flat money already chosen (e.g. the outbound seat fee on step 2)
- *  mode           'booking' | 'change'
- *  maxSeats       seats to pick (one per traveler); booking requires all of them
- *  passengerCount how many fares the total covers
- *  steps          optional [{ label, route, cabin, seats }] for round trips
- *  stepIndex      which step is showing
- *  continueLabel  optional button text (e.g. "Next: return seat")
- *  onExit         optional: "Back to flights" (leave the picker to change
- *                 flights/fares). Without it the top-left button uses onHide.
- *  onHide         Escape / step back (round trip step 2 -> step 1)
- *  navProps       optional: the site header's props. When given, the picker
- *                 shows the normal site header (tabs + profile) with the
- *                 "Back to flights" button where the logo usually is.
- *  onProceed(seatIds, total, { fare, seatNumber, seatNumbers, cabinName, seatFee })
- */
 export default function SeatSelectionModal({
   show,
   onHide,
@@ -258,8 +216,6 @@ export default function SeatSelectionModal({
     setTakenNotice('');
   }, [show, preselectedSeatIds]);
 
-  // Live seat map: reload in the background while open. A seat someone else
-  // took is dropped from the selection with a short notice.
   useEffect(() => {
     if (!show || !flightId) return undefined;
     let stopped = false;
@@ -278,7 +234,7 @@ export default function SeatSelectionModal({
             return prev.filter((id) => !takenIds.has(id));
           });
         })
-        .catch(() => { /* keep the current map; try again next time */ });
+        .catch(() => { });
     };
     const timer = setInterval(refresh, REFRESH_MS);
     window.addEventListener('focus', refresh);
@@ -300,11 +256,8 @@ export default function SeatSelectionModal({
 
   const chosenFare = useMemo(() => fares.find((f) => fareIdOf(f) === fareId) || null, [fares, fareId]);
 
-  // Booking: only the chosen fare's cabin is open. Change mode: any cabin.
   const allowedCabinId = isBooking && chosenFare ? cabinIdOf(chosenFare) : null;
 
-  // One section per class, front of the plane to the back. A row with more
-  // than 6 seats wraps onto a second line.
   const sections = useMemo(() => {
     const byRow = {};
     seats.forEach((s) => {
@@ -381,10 +334,7 @@ export default function SeatSelectionModal({
       ? `Choose ${remaining} more seat${remaining === 1 ? '' : 's'}`
       : continueLabel || 'Continue to Payment';
 
-  // Rendered on <body> so it always covers the whole page, including the
-  // site header (the homepage search sits inside a lower layer).
   const leave = onExit || onHide;
-  // Run a header action after closing the picker (e.g. open My Trips).
   const leaveThen = (action) => () => {
     leave();
     action?.();
@@ -405,8 +355,6 @@ export default function SeatSelectionModal({
 
   return createPortal(
     <div className="fixed inset-0 z-[100] overflow-y-auto bg-gray-50 font-sans text-gray-900">
-      {/* Header: the site header with "Back to flights" in the logo's place.
-          Any header action leaves the seat picker first. */}
       {navProps ? (
         <CustomerNav
           {...navProps}
@@ -424,7 +372,6 @@ export default function SeatSelectionModal({
         </div>
       )}
 
-      {/* Page title + round-trip progress */}
       <div className="max-w-6xl mx-auto px-4 sm:px-8 pt-8 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-2xl font-bold">{isBooking ? 'Choose your seat' : 'Change seat'}</h2>
         {hasSteps && (
@@ -435,7 +382,6 @@ export default function SeatSelectionModal({
       </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-8 pt-5 pb-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] items-start">
-        {/* Plane */}
         <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-6">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
             <div>
@@ -552,7 +498,6 @@ export default function SeatSelectionModal({
           </div>
         </div>
 
-        {/* Summary, same card style as "Price Details" */}
         <aside className="lg:sticky lg:top-24 flex flex-col gap-6">
           {hasSteps && (
             <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-6">

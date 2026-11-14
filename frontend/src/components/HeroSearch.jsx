@@ -3,11 +3,6 @@ import { API_URL } from '../config';
 import CheckoutModal from './CheckoutModal';
 import SeatSelectionModal from './SeatSelectionModal';
 
-// ---------------------------------------------------------------------
-// Fare picker: one column per class (Economy, Premium Economy, Business),
-// each with its own fares and prices. A class with no fares on the flight
-// shows "Not offered on this flight".
-// ---------------------------------------------------------------------
 const CABIN_GROUPS = [
   { id: 1, name: 'Economy' },
   { id: 2, name: 'Premium Economy' },
@@ -84,7 +79,6 @@ function CabinFareGrid({ fares, freeByCabin, onPick, disabled, compact = false }
   );
 }
 
-// navProps: the site header's props, so the seat picker can show the same header.
 export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) {
   const currentTab = activeTab === 'deals' ? activeTab : 'flights';
 
@@ -123,9 +117,7 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
   const [showSeatModal, setShowSeatModal] = useState(false);
   const [selectedSeatIds, setSelectedSeatIds] = useState([]);
   const [selectedSeatNumber, setSelectedSeatNumber] = useState(null);
-  // Seat numbers in the same order as selectedSeatIds (seat i -> traveler i).
   const [selectedSeatNumbers, setSelectedSeatNumbers] = useState([]);
-  // Round trip: seats are picked in two steps (0 = outbound, 1 = return).
   const [seatStep, setSeatStep] = useState(0);
   const [outboundSeatFee, setOutboundSeatFee] = useState(0);
   const [returnSeatIds, setReturnSeatIds] = useState([]);
@@ -136,8 +128,7 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
   const [showFromDropdown, setShowFromDropdown] = useState(false);
   const [showToDropdown, setShowToDropdown] = useState(false);
 
-  // Availability search mode
-  const [searchMode, setSearchMode] = useState('search'); // 'search' | 'availability'
+  const [searchMode, setSearchMode] = useState('search');
   const [availabilityRows, setAvailabilityRows] = useState(null);
   const [availabilitySearching, setAvailabilitySearching] = useState(false);
 
@@ -529,8 +520,6 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
         .then((r) => r.json())
         .catch(() => [])
     );
-    // Real seat counts come from the seat map (free seats / seats on the plane).
-    // Summing fare inventory over-counts, because fare buckets share seats.
     const seatPromises = rows.map((flight) =>
       fetch(`${API_URL}/api/flights/${flight.flightId}/seatmap`)
         .then((r) => (r.ok ? r.json() : null))
@@ -553,9 +542,6 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
         const seats = seatResults[index];
         if (Array.isArray(seats) && seats.length > 0) {
           const free = seats.filter((s) => !Number(s.occupied ?? s.Occupied ?? 0)).length;
-          // Free seats per cabin: fare buckets in the same cabin share the same physical
-          // seats, so each fare card shows its cabin's real free count, not its own
-          // inventory counter (which would let two fares in one cabin each claim 36).
           const freeByCabin = {};
           seats.forEach((s) => {
             const cabinId = s.cabinClassId ?? s.CabinClassId;
@@ -578,7 +564,6 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
     ).padStart(2, '0')}`;
   };
 
-  // Flight Availability search (flight + cabin + fare + price + seats-left in one row)
   const handleAvailabilitySearch = async () => {
     setAvailabilitySearching(true);
     setBookingError('');
@@ -656,9 +641,6 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
 
       let rows = Array.isArray(data) ? data : [];
 
-      // Never show a cancelled flight in search. Nobody can book it.
-      // (The backend also filters these out; this is a safety net so a
-      // stale or cached response can never surface one.)
       rows = rows.filter((f) => (f.flightStatus || f.FlightStatus) !== 'Cancelled');
 
       if (rows.length === 0 && params.has('date')) {
@@ -710,7 +692,6 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
       const data = await res.json();
       let rows = Array.isArray(data) ? data : [];
 
-      // Never show a cancelled flight in search (see outbound search).
       rows = rows.filter((f) => (f.flightStatus || f.FlightStatus) !== 'Cancelled');
 
       if (rows.length === 0 && params.has('date')) {
@@ -740,10 +721,6 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
     setBookingMessage('');
   };
 
-  // Seat selection runs after the final fare is picked, before checkout.
-  // A seat is required for every traveler. Round trips pick seats twice:
-  // step 0 on the outbound flight (outbound fare's class only), then step 1
-  // on the return flight (return fare's class only).
   const openSeatSelection = () => {
     setSelectedSeatIds([]);
     setSelectedSeatNumber(null);
@@ -766,7 +743,6 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
       setSelectedSeatNumber(numbers[0] || null);
       setSelectedSeatNumbers(numbers);
       if (isRoundTripBooking) {
-        // Next: the return flight's seat map.
         setOutboundSeatFee(Number(info?.seatFee || 0));
         setSeatStep(1);
         return;
@@ -781,16 +757,11 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
     setShowCheckoutModal(true);
   };
 
-  // Back from the return seat map goes to the outbound one; back from the
-  // outbound one closes the picker.
   const handleSeatBack = () => {
     if (seatStep === 1) setSeatStep(0);
     else setShowSeatModal(false);
   };
 
-  // "Back to flights": leave the seat picker from any step. The search
-  // results stay open, so a different fare or flight can be picked (round
-  // trips also keep "Change Outbound"). Seats start fresh on the next pick.
   const handleSeatExit = () => {
     setShowSeatModal(false);
     setSeatStep(0);
@@ -859,9 +830,6 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
     const bookedFare = selectedFlightFare?.fare;
     const returnFlight = selectedFlightFare?.returnFlight || null;
     const returnFare = selectedFlightFare?.returnFare || null;
-    // One seat per traveler, in order (seat i -> traveler i, same as the
-    // backend). Attach each traveler's seat to their ticket so the
-    // confirmation page can render one ticket card per passenger.
     const ticketsWithSeats = Array.isArray(tickets)
       ? tickets.map((t, i) => ({
           ...t,
@@ -879,8 +847,6 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
         tickets: ticketsWithSeats,
         passengerCount: passengerCount || totalTravelers || 1,
         totalAmount: checkoutTotal,
-        // Points earned on this booking (shown under Show Ticket). Only set
-        // for a fresh booking, never when re-opening an old ticket.
         justBooked: true,
         loyalty: loyalty || null,
         flightNumber: bookedFlight?.flightNumber || '',
@@ -892,9 +858,6 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
         arrivalTime: bookedFlight?.arrivalTime
           ? String(bookedFlight.arrivalTime).substring(0, 5)
           : '',
-        // Return leg (round trip only). Without this the confirmation
-        // page showed only the outbound leg, so a round trip looked
-        // like a one-way trip.
         tripType: returnFlight ? 'Round Trip' : 'One Way',
         returnFlightNumber: returnFlight?.flightNumber || '',
         returnOrigin: returnFlight?.originAirportCode || '',
@@ -1280,8 +1243,6 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
       {currentTab === 'flights' && (searching || results !== null || availabilitySearching || availabilityRows !== null) && (
         <div
           ref={resultsPanelRef}
-          // Floats over the page (absolute), so opening results never makes the
-          // homepage background taller; it overlaps the hero and the deals below.
           className="absolute left-0 right-0 top-full mt-4 z-[70] bg-white rounded-3xl shadow-2xl p-6 text-gray-800 max-h-[500px] overflow-y-auto"
         >
           <div className="flex justify-between items-center mb-4 sticky top-0 bg-white z-20 pb-2">
@@ -1372,7 +1333,6 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
                   const flightFares = faresByFlight[flight.flightId] || [];
                   const seatCounts = seatCountsByFlight[flight.flightId];
                   const totalSeats = seatCounts?.total ?? AIRCRAFT_SEATS;
-                  // Fallback if the seat map didn't load: largest fare bucket, capped at the plane size.
                   const seatsLeft = seatCounts
                     ? seatCounts.free
                     : Math.min(
@@ -1478,9 +1438,6 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
                                         <span className="flex items-center gap-2 text-xs font-bold text-gray-800">
                                           {rFlight.originAirportCode} →{' '}
                                           {rFlight.destinationAirportCode}
-                                          {/* Flight number + status (the outbound card shows
-                                              these; the return card did not, so the return
-                                              flight looked blank/missing). */}
                                           <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
                                             {rFlight.flightNumber}
                                           </span>
@@ -1544,7 +1501,6 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
       )}
 
       {selectedFlightFare && (() => {
-        // Which leg the seat map is for: outbound (step 0) or return (step 1).
         const onReturn = isRoundTripBooking && seatStep === 1;
         const legFlight = onReturn ? selectedFlightFare.returnFlight : selectedFlightFare.flight;
         const legFare = onReturn ? selectedFlightFare.returnFare : selectedFlightFare.fare;
@@ -1580,7 +1536,6 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
       })()}
 
       {selectedFlightFare && (() => {
-        // Checkout page: what's being bought, leg by leg, plus the price split.
         const f = selectedFlightFare;
         const leg = (label, flight, fare, seats) => ({
           label,
@@ -1604,7 +1559,6 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
             variant="page"
             show={showCheckoutModal}
             onHide={() => setShowCheckoutModal(false)}
-            // Back to the last seat map with the seats still picked.
             onBack={() => {
               setShowCheckoutModal(false);
               setShowSeatModal(true);

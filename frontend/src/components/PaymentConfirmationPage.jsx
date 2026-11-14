@@ -3,11 +3,6 @@ import CustomerNav from './CustomerNav';
 import { API_URL } from '../config';
 import { getTierForPoints, getTierProgress } from '../membershipTiers';
 
-// ---------------------------------------------------------------------------
-// E-ticket: one passenger's ticket
-// ---------------------------------------------------------------------------
-// Barcode bar widths come from the ticket number, so each ticket looks different
-// but the same ticket always draws the same barcode.
 function barcodeWidths(seed, count = 40) {
   let h = 0;
   for (const ch of String(seed || 'TICKET')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
@@ -31,7 +26,6 @@ function PlaneLine() {
   );
 }
 
-// Boarding starts 40 minutes before departure ("22:00" -> "21:20").
 function boardingTime(departure) {
   const m = String(departure || '').match(/^(\d{1,2}):(\d{2})/);
   if (!m) return null;
@@ -39,7 +33,6 @@ function boardingTime(departure) {
   return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
 }
 
-// "Business Class" -> "Business" so it fits the ticket's narrow column.
 const shortClass = (name) => String(name || '').replace(/\s*class$/i, '') || null;
 
 function TicketField({ label, value }) {
@@ -90,7 +83,6 @@ function ETicketCard({ ticket, details }) {
         <TicketField label="Boarding" value={boardingTime(details.departureTime) || details.boardingTime} />
       </div>
 
-      {/* Return leg (round trip): small header, then the same three fields */}
       {isRoundTrip && (
         <div className="-mt-4 mb-8">
           <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">
@@ -105,7 +97,6 @@ function ETicketCard({ ticket, details }) {
         </div>
       )}
 
-      {/* Barcode */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 flex flex-col items-center justify-center relative overflow-hidden">
         <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-[#f8f9fc] rounded-full shadow-inner border-r border-gray-200" />
         <div className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-[#f8f9fc] rounded-full shadow-inner border-l border-gray-200" />
@@ -124,10 +115,6 @@ function ETicketCard({ ticket, details }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Ticket viewer: one ticket at a time, arrows + "Ticket X of N"
-// ---------------------------------------------------------------------------
-// Arrows (or ← / → keys, or the dots) move between tickets.
 
 function ArrowButton({ direction, disabled, onClick }) {
   const isPrev = direction === 'prev';
@@ -187,7 +174,6 @@ function TicketCarousel({ tickets, details, airlineCode, airlineName, onClose })
         className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl animate-in zoom-in-95 duration-200 my-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header / airline brand */}
         <div className="relative bg-slate-900 rounded-t-3xl p-6 pb-8 overflow-hidden">
           <div className="absolute inset-0 bg-cover bg-center opacity-30" style={{ backgroundImage: "url('/landscapes/europe.jpg')" }} />
           <div className="relative z-10 flex justify-between items-start">
@@ -220,7 +206,6 @@ function TicketCarousel({ tickets, details, airlineCode, airlineName, onClose })
           </div>
         </div>
 
-        {/* Ticket track: one ticket visible, slides left/right */}
         <div className="relative">
           <div className="overflow-hidden">
             <div
@@ -247,7 +232,6 @@ function TicketCarousel({ tickets, details, airlineCode, airlineName, onClose })
           )}
         </div>
 
-        {/* Position indicator */}
         {multiple && (
           <div className="px-6 pb-6 -mt-2 flex flex-col items-center gap-2">
             <div className="flex items-center gap-2">
@@ -273,17 +257,6 @@ function TicketCarousel({ tickets, details, airlineCode, airlineName, onClose })
   );
 }
 
-// ---------------------------------------------------------------------------
-// Points Earned box (under Show Ticket)
-// ---------------------------------------------------------------------------
-// Rule: 1 point for every whole dollar of the flight price ($20 -> 20 points).
-//
-// Props
-//   totalAmount  flight price paid for this booking
-//   loyalty      optional, from the booking response: { pointsEarned, pointsBalance, membershipStatus }
-//   account      optional, from GET /api/loyalty/mine: { pointsBalance, membershipStatus }
-//   justBooked   true right after paying; false when re-opening an older booking
-//   onViewLoyalty  optional, shows a "View My Rewards" button
 
 const POINTS_PER_DOLLAR = 1;
 
@@ -374,9 +347,6 @@ function PointsEarnedCard({ totalAmount, loyalty, account, justBooked = true, on
   );
 }
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
 export default function PaymentConfirmationPage({ 
   details, 
   onNavigate, 
@@ -391,9 +361,6 @@ export default function PaymentConfirmationPage({
     window.scrollTo(0, 0);
   }, []);
 
-  // Right after a booking, load the member's balance so the points box can
-  // show the new total and tier progress. Skipped when the booking response
-  // already included it, and when re-opening an older booking.
   const needsAccount = Boolean(details?.justBooked && !details?.loyalty && auth?.token);
   useEffect(() => {
     if (!needsAccount) return undefined;
@@ -406,7 +373,7 @@ export default function PaymentConfirmationPage({
       .then((data) => {
         if (data && data.enrolled !== false) setAccount(data);
       })
-      .catch(() => { /* balance is optional; the earned points still show */ });
+      .catch(() => { });
     return () => controller.abort();
   }, [needsAccount, auth?.token]);
 
@@ -418,8 +385,6 @@ export default function PaymentConfirmationPage({
   const airlineCode = (details.flightNumber || '').slice(0, 2).toUpperCase();
   const airlineName = AIRLINES[airlineCode] || 'Coog10 Airlines';
 
-  // One ticket card per passenger. Falls back to a single card built from
-  // `details` when the backend did not return a tickets list.
   const ticketList = Array.isArray(details.tickets) && details.tickets.length > 0
     ? details.tickets.map((t) => ({
         passengerName: t.passengerName || details.passengerName,
@@ -437,7 +402,6 @@ export default function PaymentConfirmationPage({
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900 pb-20">
       
-      {/* Same header as the homepage (tabs + profile picture) */}
       <CustomerNav
         variant="solid"
         activeTab={null}
@@ -450,7 +414,6 @@ export default function PaymentConfirmationPage({
         onToggleSidebar={onToggleSidebar}
       />
 
-      {/* Rounded image card like the homepage background */}
       <section className="p-4">
         <div className="relative h-72 rounded-[2.5rem] overflow-hidden shadow-2xl">
           <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: 'url("/landscapes/europe.jpg")' }} />
@@ -468,7 +431,6 @@ export default function PaymentConfirmationPage({
       <div className="max-w-6xl mx-auto px-4 -mt-16 relative z-10">
         <div className="flex flex-col lg:flex-row gap-8">
           
-          {/* Left Side: Original Detailed Trip Info */}
           <div className="flex-1 bg-white rounded-3xl shadow-xl border border-gray-100 p-8">
             <div className="flex justify-between items-start mb-8 pb-8 border-b border-gray-100">
               <div>
@@ -561,8 +523,6 @@ export default function PaymentConfirmationPage({
               </div>
             </div>
 
-            {/* Return leg (round trip only). Without this the page showed
-                only the outbound leg, so a round trip looked one-way. */}
             {details.returnFlightNumber && (
               <div className="bg-gray-50 rounded-2xl p-6 mb-6">
                 <div className="flex items-center justify-between gap-3 mb-4">
@@ -618,7 +578,6 @@ export default function PaymentConfirmationPage({
             )}
           </div>
 
-          {/* Right Side: Pricing & Show Ticket Button */}
           <div className="w-full lg:w-96 flex flex-col gap-6">
             <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-6">
               <h3 className="text-lg font-bold text-gray-900 mb-6">Price Details</h3>
@@ -640,7 +599,6 @@ export default function PaymentConfirmationPage({
               </button>
             </div>
 
-            {/* Points earned on this flight: 1 point per $1 */}
             <PointsEarnedCard
               totalAmount={details.totalAmount}
               loyalty={details.loyalty}
@@ -653,7 +611,6 @@ export default function PaymentConfirmationPage({
         </div>
       </div>
 
-      {/* E-ticket modal: one ticket at a time, arrows to switch */}
       {showTicket && (
         <TicketCarousel
           tickets={ticketList}

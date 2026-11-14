@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { API_URL } from '../config';
 
-// Helper to render the green checkmark or gray dot
 function ValidationIndicator({ isValid, text }) {
   return (
     <div className={`flex items-center gap-1.5 text-[11px] font-medium transition-colors ${isValid ? 'text-green-600' : 'text-gray-400'}`}>
@@ -26,12 +25,8 @@ const getTodayStr = () => {
 };
 
 export default function SignInModal({ show, onHide }) {
-  // One unified login: every account (member, employee, supervisor) signs
-  // in through this single form. The backend returns the role, and the app
-  // routes by that role. There are no separate User / Admin tabs.
   const [view, setView] = useState('login'); 
 
-  // Form State
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
@@ -70,7 +65,6 @@ export default function SignInModal({ show, onHide }) {
     onHide();
   };
 
-  // Lock body scroll when modal is open and restore on close/unmount
   useEffect(() => {
     if (!show) return;
     const originalOverflow = document.body.style.overflow;
@@ -80,7 +74,6 @@ export default function SignInModal({ show, onHide }) {
     };
   }, [show]);
 
-  // Handle Escape key to close
   useEffect(() => {
     if (!show) return;
     const handleKeyDown = (e) => {
@@ -93,14 +86,12 @@ export default function SignInModal({ show, onHide }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [show, onHide]);
 
-  // Live guard logic to prevent impossible dates (future, year > currentYear, 5-digit year)
   const enforceDobGuard = (target, isBlur = false) => {
     if (justRejectedRef.current) {
       justRejectedRef.current = false;
       return;
     }
 
-    // Check browser validity flags (badInput catches 5+ year digits, rangeOverflow catches > max)
     if (target.validity && (target.validity.badInput || target.validity.rangeOverflow)) {
       target.value = lastValidDobRef.current;
       setDateOfBirth(lastValidDobRef.current);
@@ -119,7 +110,6 @@ export default function SignInModal({ show, onHide }) {
     const yearPart = parts[0];
     const yearNum = parseInt(yearPart, 10);
 
-    // 1. Block a 5th year digit
     if (yearPart && yearPart.length > 4) {
       target.value = lastValidDobRef.current;
       setDateOfBirth(lastValidDobRef.current);
@@ -128,7 +118,6 @@ export default function SignInModal({ show, onHide }) {
       return;
     }
 
-    // 2. Block any year above the current year (e.g. 9999 or future year)
     if (yearPart && yearPart.length >= 4 && yearNum > currentYear) {
       target.value = lastValidDobRef.current;
       setDateOfBirth(lastValidDobRef.current);
@@ -137,7 +126,6 @@ export default function SignInModal({ show, onHide }) {
       return;
     }
 
-    // 3. Block any date after today (e.g. tomorrow)
     if (parts.length >= 3 && parts[0] && parts[1] && parts[2]) {
       if (raw > todayStr) {
         target.value = lastValidDobRef.current;
@@ -148,7 +136,6 @@ export default function SignInModal({ show, onHide }) {
       }
     }
 
-    // 4. On blur (or submit), check if year is < 1900
     if (isBlur && yearPart && yearPart.length === 4 && yearNum < 1900) {
       target.value = lastValidDobRef.current;
       setDateOfBirth(lastValidDobRef.current);
@@ -157,7 +144,6 @@ export default function SignInModal({ show, onHide }) {
       return;
     }
 
-    // If fully valid date (year 1900..currentYear and <= todayStr)
     if (parts.length >= 3 && parts[0]?.length === 4 && yearNum >= 1900 && yearNum <= currentYear && raw <= todayStr) {
       setDobError('');
       setDateOfBirth(raw);
@@ -195,14 +181,12 @@ export default function SignInModal({ show, onHide }) {
     const pasted = (e.clipboardData || window.clipboardData)?.getData('text') || '';
     if (!pasted) return;
 
-    // Check if 5+ digits in year
     if (/\d{5,}/.test(pasted)) {
       e.preventDefault();
       setDobError('Enter a real birth date in the past');
       return;
     }
 
-    // Check if year is above current year or before 1900
     const match = pasted.match(/\b(\d{4})\b/);
     if (match) {
       const y = parseInt(match[1], 10);
@@ -213,7 +197,6 @@ export default function SignInModal({ show, onHide }) {
       }
     }
 
-    // Check if full date string is after today
     const dateMatch = pasted.match(/(\d{4})-(\d{2})-(\d{2})/);
     if (dateMatch) {
       if (dateMatch[0] > todayStr) {
@@ -275,8 +258,6 @@ export default function SignInModal({ show, onHide }) {
           return;
         }
 
-        // One login for every role. The backend returns the role and the
-        // app routes by it; there is no separate staff login to pick.
         sessionStorage.setItem('token', data.token);
         sessionStorage.setItem('role', data.role);
         sessionStorage.setItem('email', data.email);
@@ -290,7 +271,6 @@ export default function SignInModal({ show, onHide }) {
         return;
       }
 
-      // DOB must be a real date in the past: year 1900 through current year, not in the future
       const yearPart = dateOfBirth.split('-')[0];
       const yearNum = parseInt(yearPart, 10);
       if (!/^\d{4}$/.test(yearPart) || isNaN(yearNum) || yearNum < 1900 || yearNum > currentYear || dateOfBirth > todayStr) {
@@ -298,7 +278,6 @@ export default function SignInModal({ show, onHide }) {
         return;
       }
 
-      // Phone Validation: must be exactly 10 digits (no letters)
       const phoneDigits = phone.replace(/\D/g, '');
       if (phoneDigits.length !== 10) {
         setFormError('Please enter a valid 10-digit phone number.');
@@ -385,7 +364,6 @@ export default function SignInModal({ show, onHide }) {
     let value = e.target.value.replace(/\D/g, '');
     if (value.length > 10) value = value.substring(0, 10);
     
-    // Format as (XXX) XXX-XXXX
     if (value.length > 6) {
       value = `(${value.substring(0, 3)}) ${value.substring(3, 6)}-${value.substring(6)}`;
     } else if (value.length > 3) {
@@ -419,7 +397,6 @@ export default function SignInModal({ show, onHide }) {
         className="bg-white rounded-3xl shadow-2xl w-full max-w-[440px] p-7 relative animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto flex flex-col my-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Sticky Close Button: always visible even when scrolled */}
         <div className="sticky top-0 z-30 flex justify-end -mt-3 -mr-3 pb-2 pointer-events-none">
           <button 
             type="button"

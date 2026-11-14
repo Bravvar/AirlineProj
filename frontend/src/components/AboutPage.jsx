@@ -54,10 +54,7 @@ function CheckIcon() {
   );
 }
 
-// Signed-in member's current tier, driven by their points balance.
 function MyStatusCard({ token, onSignIn }) {
-  // `forToken` records which sign-in the result belongs to, so loading is derived
-  // instead of being set inside the effect.
   const [result, setResult] = useState({ forToken: null, data: null, error: '' });
 
   useEffect(() => {
@@ -174,7 +171,6 @@ function MembershipSection({ token, onSignIn }) {
         </p>
       </div>
 
-      {/* Tier cards */}
       <div className="grid md:grid-cols-3 gap-6">
         {TIERS.map((tier, i) => (
           <div
@@ -214,7 +210,6 @@ function MembershipSection({ token, onSignIn }) {
         ))}
       </div>
 
-      {/* How points work */}
       <div className="grid md:grid-cols-2 gap-6 mt-10">
         <div className="bg-white rounded-3xl border border-gray-200 shadow-[0_4px_20px_rgb(0,0,0,0.05)] p-8">
           <h3 className="text-xl font-bold text-gray-900">Two balances, two jobs</h3>
@@ -290,7 +285,6 @@ export default function AboutPage({
         onToggleSidebar={onToggleSidebar}
       />
 
-      {/* Hero */}
       <section className="p-4">
         <div className="relative rounded-[2.5rem] overflow-hidden shadow-2xl">
           <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: 'url("/landscapes/new zea.jpg")' }} />
@@ -308,7 +302,6 @@ export default function AboutPage({
         </div>
       </section>
 
-      {/* Stats */}
       <section className="max-w-6xl mx-auto px-4 -mt-12 relative z-10">
         <div className="bg-white rounded-3xl border border-gray-200 shadow-[0_4px_20px_rgb(0,0,0,0.08)] grid grid-cols-2 md:grid-cols-4 divide-x divide-gray-100">
           {STATS.map((s) => (
@@ -320,7 +313,6 @@ export default function AboutPage({
         </div>
       </section>
 
-      {/* Story */}
       <section className="max-w-6xl mx-auto px-4 py-20 grid md:grid-cols-2 gap-12 items-center">
         <div>
           <h2 className="text-3xl font-bold text-gray-900">Our story</h2>
@@ -339,7 +331,6 @@ export default function AboutPage({
         </div>
       </section>
 
-      {/* Values */}
       <section className="max-w-6xl mx-auto px-4 pb-20">
         <h2 className="text-3xl font-bold text-gray-900 text-center mb-10">What we stand for</h2>
         <div className="grid md:grid-cols-3 gap-6">
@@ -355,7 +346,6 @@ export default function AboutPage({
         </div>
       </section>
 
-      {/* Membership (bottom of page) */}
       <MembershipSection token={auth?.token} onSignIn={onSignIn} />
     </div>
   );

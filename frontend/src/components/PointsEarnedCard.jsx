@@ -1,10 +1,5 @@
 import { getTierForPoints, getTierProgress } from '../membershipTiers';
 
-// "Points earned" box on the booking confirmation page, under Show Ticket.
-//
-// `loyalty` comes from the backend ({ pointsEarned, pointsBalance, membershipStatus }).
-// If it is missing (e.g. older backend), we show an estimate using the same rule
-// the backend uses: 1 point per whole dollar, split evenly across passengers.
 
 const POINTS_PER_DOLLAR = 1;
 

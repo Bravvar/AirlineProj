@@ -1,9 +1,7 @@
 
-// Status Points (SP) decide the tier; they are never spent.
-// Redeemable Points (RP) are the spendable balance.
 
 export const SP_PER_DOLLAR = 5;
-export const RP_VALUE_CENTS = 1; // 100 RP = $1
+export const RP_VALUE_CENTS = 1;
 
 export const TIERS = [
   {
@@ -80,20 +78,17 @@ export const REDEMPTIONS = [
   { label: 'Bag and seat fees', cost: '100 RP = $1', note: '' },
 ];
 
-/** Returns the tier a balance qualifies for (highest threshold reached). */
 export function getTierForPoints(points) {
   const sp = Math.max(0, Number(points) || 0);
   return [...TIERS].reverse().find((t) => sp >= t.minPoints) ?? TIERS[0];
 }
 
-/** Returns the next tier above the current one, or null at Gold. */
 export function getNextTier(points) {
   const current = getTierForPoints(points);
   const idx = TIERS.findIndex((t) => t.id === current.id);
   return TIERS[idx + 1] ?? null;
 }
 
-/** Progress (0-100) from the current tier's threshold toward the next one. */
 export function getTierProgress(points) {
   const sp = Math.max(0, Number(points) || 0);
   const current = getTierForPoints(sp);

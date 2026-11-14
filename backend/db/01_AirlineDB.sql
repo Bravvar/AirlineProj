@@ -152,7 +152,6 @@ CREATE TABLE Flight (
         CHECK (arrival_date > departure_date
             OR (arrival_date = departure_date AND arrival_time > departure_time)),
     CONSTRAINT chk_overbooking CHECK (overbooking_capacity >= 0),
-    -- CHANGED: flight uniqueness per day (prevents duplicate flight_number/date)
     CONSTRAINT uq_flight_number_date UNIQUE (flight_number, departure_date)
 );
 
@@ -277,7 +276,6 @@ CREATE TABLE ReservationSegment (
     CONSTRAINT uq_reservation_segment_number
         UNIQUE (reservation_id, segment_number),
 
-    -- Ensures seat assignments reference the correct flight.
     CONSTRAINT uq_segment_flight_pair
         UNIQUE (reservation_segment_id, flight_id)
 );
@@ -293,7 +291,6 @@ CREATE TABLE SeatAssignment (
     assignment_date_time     DATETIME NOT NULL,
     seat_fee                 DECIMAL(10,2) NOT NULL DEFAULT 0.00,
 
-    -- New columns for flight and seat status.
     flight_id                INT NOT NULL,
     active_seat              TINYINT NULL DEFAULT 1,
 
@@ -307,7 +304,6 @@ CREATE TABLE SeatAssignment (
     FOREIGN KEY (seat_id)
         REFERENCES Seat(seat_id),
 
-    -- Ensure the seat assignment belongs to the segment's flight.
     CONSTRAINT fk_seat_assignment_segment_flight
         FOREIGN KEY (reservation_segment_id, flight_id)
         REFERENCES ReservationSegment
@@ -319,11 +315,9 @@ CREATE TABLE SeatAssignment (
     CONSTRAINT chk_active_seat
         CHECK (active_seat = 1 OR active_seat IS NULL),
 
-    -- One active assignment per physical seat per flight.
     CONSTRAINT uq_active_flight_seat
         UNIQUE (flight_id, seat_id, active_seat),
 
-    -- One active seat per passenger within a segment.
     CONSTRAINT uq_active_passenger_segment
         UNIQUE (
             reservation_segment_id,
@@ -331,7 +325,6 @@ CREATE TABLE SeatAssignment (
             active_seat
         ),
 
-    -- Allow historical released seats but prevent active duplicates.
     CONSTRAINT uq_active_segment_seat
         UNIQUE (
             reservation_segment_id,

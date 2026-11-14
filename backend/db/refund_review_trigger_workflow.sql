@@ -1,8 +1,4 @@
 
--- Migration 20: Trigger-driven refund review workflow
--- Requires migration 18.
--- Select a disposable test schema before execution.
--- Do NOT run against production without validation.
 
 SELECT DATABASE() AS selected_schema;
 
@@ -47,8 +43,6 @@ CREATE TRIGGER trg_cancel_request_insert
 AFTER INSERT ON CancellationRequest
 FOR EACH ROW
 BEGIN
-    -- A customer request automatically enters
-    -- the supervisor review queue.
 
     INSERT INTO CancellationReviewQueue (
         request_id,
@@ -59,7 +53,6 @@ BEGIN
         'Pending'
     );
 
-    -- Record the initial request event.
     INSERT INTO CancellationReviewAudit (
         request_id,
         old_status,
@@ -86,7 +79,6 @@ BEGIN
 
     IF OLD.request_status <> NEW.request_status THEN
 
-        -- Only Pending requests can be reviewed.
         IF OLD.request_status <> 'Pending'
            OR NEW.request_status NOT IN
                ('Approved', 'Rejected') THEN
@@ -96,7 +88,6 @@ BEGIN
                 'Invalid cancellation request transition';
         END IF;
 
-        -- Approval/rejection requires a supervisor.
         SELECT COUNT(*)
         INTO supervisor_count
         FROM Employee
@@ -117,9 +108,6 @@ BEGIN
 
         IF NEW.request_status = 'Approved' THEN
 
-            -- Approval is valid only after
-            -- the cancellation procedure has
-            -- cancelled the booking.
             IF NOT EXISTS (
                 SELECT 1
                 FROM Reservation
@@ -202,13 +190,11 @@ FOR EACH ROW
 BEGIN
     IF OLD.request_status <> NEW.request_status THEN
 
-        -- Automatically update the review queue.
         UPDATE CancellationReviewQueue
         SET queue_status = NEW.request_status,
             processed_at = NOW()
         WHERE request_id = NEW.request_id;
 
-        -- Automatically record the decision.
         INSERT INTO CancellationReviewAudit (
             request_id,
             old_status,
@@ -229,7 +215,6 @@ END$$
 
 DELIMITER ;
 
--- Include historical requests in the queue.
 INSERT IGNORE INTO CancellationReviewQueue (
     request_id,
     queue_status,
@@ -243,7 +228,6 @@ SELECT
     cr.reviewed_at
 FROM CancellationRequest cr;
 
--- Confirm the three new triggers exist.
 SELECT
     TRIGGER_NAME,
     ACTION_TIMING,

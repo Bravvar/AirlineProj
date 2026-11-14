@@ -139,7 +139,6 @@ export default function QueriesPage({ token, email, role, onBackToHome, onMyTrip
       if (!ignore) fetchQueries(confirmation);
     })();
     return () => { ignore = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const visibleQueries = QUERY_DEFINITIONS.filter(q =>

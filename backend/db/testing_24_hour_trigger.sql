@@ -87,7 +87,6 @@ SELECT
 FROM Flight
 WHERE flight_id = @test_flight_id;
 
--- Confirm the AFTER UPDATE trigger fired.
 SELECT
     audit_id,
     old_status,

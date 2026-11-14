@@ -8,14 +8,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MySqlConnector;
 
-// ---------------------------------------------------------------------
-// Customer cancellation / refund requests (migration 18).
-//
-// Member:     POST api/reservations/{id}/cancel-request   { reason }
-// Supervisor: GET  api/admin/cancellation-requests?status=Pending
-//             POST api/admin/cancellation-requests/{id}/approve { amount?, notes? }
-//             POST api/admin/cancellation-requests/{id}/reject  { reason }
-// ---------------------------------------------------------------------
 [ApiController]
 [Authorize]
 [Route("api")]
@@ -63,7 +55,6 @@ public class CancellationRequestsController : ControllerBase
         return count > 0 ? account.EmployeeId : null;
     }
 
-    // Pull the SIGNAL message out of a stored-procedure failure.
     private static string? ProcedureMessage(Exception ex)
     {
         for (Exception? e = ex; e != null; e = e.InnerException)
@@ -74,9 +65,6 @@ public class CancellationRequestsController : ControllerBase
         return null;
     }
 
-    // =================================================================
-    // MEMBER: submit a cancellation request
-    // =================================================================
     [HttpPost("reservations/{id:int}/cancel-request")]
     public async Task<IActionResult> SubmitRequest(
         int id,
@@ -160,9 +148,6 @@ public class CancellationRequestsController : ControllerBase
         }
     }
 
-    // =================================================================
-    // SUPERVISOR: list / approve / reject
-    // =================================================================
     private const string AdminQuery = @"
         SELECT
             cr.request_id          AS RequestId,
@@ -267,7 +252,6 @@ JOIN Reservation r
             await _db.Database.ExecuteSqlInterpolatedAsync(
                 $"CALL approve_cancellation_request({id}, {employeeId.Value}, {amount}, {reference}, {notes})");
 
-            // Loyalty: take back the points earned on the refunded booking.
             await LoyaltyService.ReverseForRefundAsync(_db, _logger, reference);
 
             return Ok(await GetRequest(id));
@@ -357,7 +341,6 @@ public class CancellationRequestRow
     public decimal RefundableAmount { get; set; }
 }
 
-// Latest request per booking, merged into GET api/reservations/mine.
 public class MemberCancellationRow
 {
     public int ReservationId { get; set; }

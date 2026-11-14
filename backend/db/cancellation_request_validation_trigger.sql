@@ -1,7 +1,4 @@
 
--- Migration 21: Validate customer cancellation requests
--- Run in a disposable test database first.
--- Requires migrations 18 and 20.
 
 SELECT DATABASE() AS selected_schema;
 
@@ -14,8 +11,6 @@ BEFORE INSERT ON CancellationRequest
 FOR EACH ROW
 BEGIN
 
-    -- Business Rule 1:
-    -- The reservation must exist.
     IF NOT EXISTS (
         SELECT 1
         FROM Reservation r
@@ -26,9 +21,6 @@ BEGIN
             'Cancellation rejected: reservation not found';
     END IF;
 
-    -- Business Rule 2:
-    -- The user must be associated with a passenger
-    -- included in the reservation.
     IF NOT EXISTS (
         SELECT 1
         FROM UserAccount ua
@@ -42,8 +34,6 @@ BEGIN
             'Cancellation rejected: user does not own booking';
     END IF;
 
-    -- Business Rule 3:
-    -- Already cancelled reservations are not eligible.
     IF EXISTS (
         SELECT 1
         FROM Reservation r
@@ -55,8 +45,6 @@ BEGIN
             'Cancellation rejected: booking already cancelled';
     END IF;
 
-    -- Business Rule 4:
-    -- A booking with a flown segment cannot be cancelled.
     IF EXISTS (
         SELECT 1
         FROM ReservationSegment rs
@@ -68,8 +56,6 @@ BEGIN
             'Cancellation rejected: booking already flown';
     END IF;
 
-    -- Business Rule 5:
-    -- Every new cancellation request must start Pending.
     IF NEW.request_status IS NULL
        OR NEW.request_status <> 'Pending' THEN
         SIGNAL SQLSTATE '45000'
@@ -81,7 +67,6 @@ END$$
 
 DELIMITER ;
 
--- Verify installation.
 SELECT
     TRIGGER_NAME,
     ACTION_TIMING,

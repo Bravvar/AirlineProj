@@ -10,7 +10,6 @@ BEGIN
     DECLARE revised_departure DATETIME;
     DECLARE original_departure DATETIME;
 
-    -- Calculate the newly scheduled departure.
     SET revised_departure =
         TIMESTAMP(NEW.departure_date, NEW.departure_time);
 

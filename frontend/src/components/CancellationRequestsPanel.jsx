@@ -3,12 +3,8 @@ import { API_URL } from '../config';
 
 const FILTERS = ['Pending', 'Approved', 'Rejected', 'All'];
 
-// Show at most this many rows of request cards; the rest scroll inside the list.
 const MAX_VISIBLE_ROWS = 2;
 
-// Caps the grid's height at the bottom of row MAX_VISIBLE_ROWS. Works for both
-// the 1-column (mobile) and 2-column (desktop) layouts and re-measures when a
-// card changes size (typing, approve/reject, window resize).
 function useMaxRows(gridRef, deps) {
   useLayoutEffect(() => {
     const grid = gridRef.current;
@@ -31,7 +27,6 @@ function useMaxRows(gridRef, deps) {
     observer.observe(grid);
     Array.from(grid.children).forEach((card) => observer.observe(card));
     return () => observer.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 }
 
@@ -47,9 +42,6 @@ const STATUS_STYLES = {
   Rejected: 'bg-red-50 text-red-700 border-red-200',
 };
 
-// Supervisor queue for member-submitted Cancel / Refund requests.
-// Approve = cancel the booking + record the refund. Reject = keep the booking.
-// Pass `embedded` to render without its own card wrapper (used inside a shared card).
 export default function CancellationRequestsPanel({ token, onChanged, embedded = false }) {
   const [requests, setRequests] = useState([]);
   const [filter, setFilter] = useState('Pending');
@@ -100,7 +92,6 @@ export default function CancellationRequestsPanel({ token, onChanged, embedded =
         setError(`Refund cannot exceed the refundable balance of ${money(req.refundableAmount)}.`);
         return;
       }
-      // No browser confirm: clicking "Approve & Refund" approves immediately.
       body = { amount, notes: (notes[id] || '').trim() || null };
     }
 

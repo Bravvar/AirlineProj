@@ -167,10 +167,6 @@ public class HomeController : ControllerBase
     {
         var data = _context.Flight.AsQueryable();
 
-        // Members search to book a flight. A cancelled flight can never
-        // be booked, so it must not appear in search results. Staff
-        // manage flights (including cancelled ones) through the separate
-        // /api/staff/flights and /api/admin/flights endpoints.
         data = data.Where(i => i.FlightStatus != "Cancelled");
 
         if (!string.IsNullOrEmpty(origin))
@@ -242,10 +238,6 @@ public class HomeController : ControllerBase
         return Ok(data);
     }
 
-    // -----------------------------------------------------------------
-    // Q1 (Flight Availability) — moved from the old Queries page.
-    // Blank origin/destination/date => all matching fares are returned.
-    // -----------------------------------------------------------------
     [AllowAnonymous]
     [HttpGet("queries/availability")]
     public IActionResult Availability(string? origin, string? destination, string? date)
@@ -279,7 +271,6 @@ public class HomeController : ControllerBase
         return Ok(rows);
     }
 
-    // Seat map for a flight: real integer Seat.seat_id values.
     [AllowAnonymous]
     [HttpGet("flights/{id}/seatmap")]
     public IActionResult SeatMap(int id)
@@ -407,9 +398,6 @@ public class HomeController : ControllerBase
     }
 
 
-    // ---------------------------------------------------------------
-    // Profile: name, email, phone and loyalty points for the member.
-    // ---------------------------------------------------------------
     [HttpGet("profile/mine")]
     public IActionResult MyProfile()
     {
@@ -444,19 +432,6 @@ public class HomeController : ControllerBase
         });
     }
 
-    // ---------------------------------------------------------------
-    // Delete account: permanently cancels the member's account.
-    //  * Login (UserAccount) is deleted -> they can no longer sign in.
-    //  * MembershipAccount is deleted -> loyalty points are forfeited
-    //    (loyalty ledgers cascade with it).
-    //  * Cancellation requests they filed are deleted (FK to UserAccount).
-    //  * Passenger row:
-    //      - no booking history  -> deleted outright (travel docs cascade).
-    //      - has booking history -> kept only so past reservations, tickets
-    //        and payments stay intact, but email/phone/address/DOB are
-    //        scrubbed so signing up again with the same email creates a
-    //        brand-new profile instead of re-linking the old one.
-    // ---------------------------------------------------------------
     [HttpDelete("profile/mine")]
     public async Task<IActionResult> DeleteMyAccount()
     {
@@ -514,14 +489,6 @@ public class HomeController : ControllerBase
         }
     }
 
-    // ---------------------------------------------------------------
-    // Update profile: phone and/or email.
-    //  * Phone can be changed on its own (10 digits).
-    //  * Changing email requires the current password, must not be a
-    //    staff domain, and must not already be used by another account.
-    //    UserAccount.email and Passenger.email are kept in sync, and a
-    //    fresh token is returned so the session carries the new email.
-    // ---------------------------------------------------------------
     [HttpPut("profile/mine")]
     public async Task<IActionResult> UpdateMyProfile([FromBody] UpdateProfilePayload body)
     {
@@ -584,10 +551,6 @@ public class HomeController : ControllerBase
         });
     }
 
-    // ---------------------------------------------------------------
-    // Change password: current password must match before the new one
-    // is saved. Same rules as sign-up: 8+ chars, 1 uppercase, 1 symbol.
-    // ---------------------------------------------------------------
     [HttpPut("profile/password")]
     public async Task<IActionResult> ChangeMyPassword([FromBody] ChangePasswordPayload body)
     {
@@ -632,15 +595,12 @@ public class HomeController : ControllerBase
 
         var data = _context.Reservation.Where(i => ids.Contains(i.ReservationId)).ToList();
 
-        // The member's own add-ons on each booking (extra bags, meal), so
-        // Modify Trip can show what is already there.
         var myLinks = _context.ReservationPassenger
             .Where(i => i.PassengerId == account.PassengerId)
             .ToList()
             .GroupBy(i => i.ReservationId)
             .ToDictionary(g => g.Key, g => g.First());
 
-        // Latest cancellation request per booking (migration 18).
         var latest = new Dictionary<int, MemberCancellationRow>();
         try
         {
@@ -666,10 +626,6 @@ public class HomeController : ControllerBase
             _logger.LogWarning(ex, "Cancellation requests unavailable; is migration 18 deployed?");
         }
 
-        // Airline-cancelled flight refund per booking (migration 19).
-        // One row per reservation that had a flight cancelled by the
-        // airline, with the refund review status and the amount that
-        // was actually refunded (0 if still pending).
         var flightCancels = new Dictionary<int, FlightCancellationRow>();
         try
         {
@@ -719,7 +675,6 @@ public class HomeController : ControllerBase
                 r.TotalAmount,
                 AdditionalCheckedBags = myLink?.AdditionalCheckedBags ?? 0,
                 MealSelection = myLink?.MealSelection,
-                // "Refunded" / "Cancellation Pending" / the raw status
                 DisplayStatus = refunded ? "Refunded"
                               : pending ? "Cancellation Pending"
                               : (fc != null && fc.RefundedAmount > 0) ? "Refunded"
@@ -734,8 +689,6 @@ public class HomeController : ControllerBase
                     req.RequestedAt,
                     req.ReviewedAt
                 },
-                // Airline-cancelled flight: the member is told the
-                // flight was cancelled and how much was refunded.
                 FlightCancellation = fc == null ? null : new
                 {
                     fc.FlightNumber,
@@ -832,8 +785,6 @@ public class HomeController : ControllerBase
             if (returnFlight.FlightStatus == "Cancelled") return BadRequest("Return flight is cancelled");
         }
 
-        // Multi-passenger: the passenger list sets the head count (default 1).
-        // The first entry is the account holder; the rest are additional travelers.
         var passengerNames = (book.passengers ?? new List<PassengerName>())
             .Where(p => !string.IsNullOrWhiteSpace(p.firstName) && !string.IsNullOrWhiteSpace(p.lastName))
             .Take(9).ToList();
@@ -844,7 +795,6 @@ public class HomeController : ControllerBase
         var seatIds = (book.seats ?? new List<int>()).Distinct().ToList();
         if (seatIds.Count > passengerCount) return BadRequest("You can only pick one seat per passenger.");
 
-        // Round trip: seats on the return flight, one per passenger, same order.
         var returnSeatIds = returnFare == null ? new List<int>() : (book.returnSeats ?? new List<int>()).Distinct().ToList();
         if (returnSeatIds.Count > passengerCount) return BadRequest("You can only pick one return seat per passenger.");
 
@@ -868,8 +818,6 @@ public class HomeController : ControllerBase
             _context.Reservation.Add(reservation);
             await _context.SaveChangesAsync();
 
-            // One ReservationPassenger per traveler. The first is the account holder;
-            // each extra traveler gets a new Passenger row (name from the payment page).
             var reservationPassengers = new List<ReservationPassenger>();
             var firstPassenger = new ReservationPassenger
             {
@@ -932,7 +880,6 @@ public class HomeController : ControllerBase
                 await _context.SaveChangesAsync();
             }
 
-            // Seat assignment — one seat per passenger, in order (seat i -> traveler i).
             for (int i = 0; i < seatIds.Count; i++)
             {
                 int seatId = seatIds[i];
@@ -951,7 +898,6 @@ public class HomeController : ControllerBase
                     segment.ReservationSegmentId, reservationPassengers[i].ReservationPassengerId, seatId, fare.FlightId, DateTime.Now, 25m);
             }
 
-            // Return seats go on the return segment / return flight.
             if (returnSegment != null && returnFlight != null)
             {
                 for (int i = 0; i < returnSeatIds.Count; i++)
@@ -1017,7 +963,6 @@ public class HomeController : ControllerBase
 
             await transaction.CommitAsync();
 
-            // Loyalty: add points for this booking.
             await LoyaltyService.AwardForPaymentAsync(_context, _logger, paymentReference);
 
             var ticketDetails = reservationPassengers.Select((rp, i) => new
@@ -1036,11 +981,6 @@ public class HomeController : ControllerBase
         }
     }
 
-    // -----------------------------------------------------------------
-    // Add or change a seat on an existing booking.
-    // Validates ownership, cancelled state, aircraft match, seat free,
-    // releases the old active seat, charges the $25 seat fee.
-    // -----------------------------------------------------------------
     [HttpPut("reservations/{id}/seats")]
     public async Task<IActionResult> ChangeSeat(int id, [FromBody] ChangeSeatPayload body)
     {
@@ -1078,12 +1018,10 @@ public class HomeController : ControllerBase
         await using var tx = await _context.Database.BeginTransactionAsync();
         try
         {
-            // Release existing active seats for this passenger on this segment.
             await _context.Database.ExecuteSqlRawAsync(
                 "UPDATE SeatAssignment SET active_seat = NULL WHERE reservation_segment_id = {0} AND reservation_passenger_id = {1} AND active_seat = 1",
                 segment.ReservationSegmentId, link.ReservationPassengerId);
 
-            // Detect whether the passenger already had a paid seat (avoid double-charging).
             var alreadyPaid = _context.Database.SqlQueryRaw<long>(
                 "SELECT COUNT(*) AS Value FROM SeatAssignment WHERE reservation_segment_id = {0} AND reservation_passenger_id = {1}",
                 segment.ReservationSegmentId, link.ReservationPassengerId).FirstOrDefault() > 0;
@@ -1109,7 +1047,6 @@ public class HomeController : ControllerBase
 
             await tx.CommitAsync();
 
-            // Loyalty: the $25 seat fee earns points too.
             await LoyaltyService.AwardForPaymentAsync(_context, _logger, seatPaymentReference);
 
             return Ok(new
@@ -1146,8 +1083,6 @@ public class HomeController : ControllerBase
 
         if (reservation.ReservationStatus == "Cancelled") return BadRequest("Already cancelled");
 
-        // Members no longer cancel instantly: the cancellation goes to a
-        // Supervisor for review (POST api/reservations/{id}/cancel-request).
         if (account.Role == "Member")
             return BadRequest(new { message = "Please submit a cancellation request. A supervisor will review it." });
 
@@ -1282,7 +1217,6 @@ public class HomeController : ControllerBase
 
             await transaction.CommitAsync();
 
-            // Loyalty: paid extra bags earn points too.
             await LoyaltyService.AwardForPaymentAsync(_context, _logger, bagPaymentReference);
 
             return Ok(new
@@ -1292,7 +1226,6 @@ public class HomeController : ControllerBase
                 reservationStatus = reservation.ReservationStatus,
                 totalAmount = reservation.TotalAmount,
                 bagFee,
-                // Receipt for the modification confirmation page.
                 paymentReference = receiptReference,
                 paidAt,
                 additionalCheckedBags = link.AdditionalCheckedBags,
@@ -1306,10 +1239,6 @@ public class HomeController : ControllerBase
         }
     }
 
-    // -----------------------------------------------------------------
-    // Receipts for trip modifications (extra checked bags), newest first.
-    // Bag charges are the Payment rows whose reference starts with "BAG".
-    // -----------------------------------------------------------------
     [HttpGet("reservations/{id}/modifications")]
     public IActionResult ReservationModifications(int id)
     {
@@ -1336,10 +1265,7 @@ public class HomeController : ControllerBase
             r.PaymentStatus,
             r.PaymentMethod,
             r.Amount,
-            // Bag payments are stored in UTC (DateTime.UtcNow); say so, so the
-            // browser shows the member's local time.
             PaidAt = DateTime.SpecifyKind(r.PaidAt, DateTimeKind.Utc),
-            // $30 per extra checked bag
             Bags = (int)Math.Round(r.Amount / 30m)
         }));
     }
@@ -1477,8 +1403,6 @@ public class HomeController : ControllerBase
     ORDER BY Revenue DESC",
       r1Args.ToArray()).ToList();
 
-        // Detail rows behind Report 1: the individual tickets that make up
-        // each flight's revenue (Ed's detailed-report work, merged onto HEAD).
         var report1Details = new List<Report1DetailRow>();
         var report1FlightIds = report1.Select(row => row.FlightId).Distinct().ToList();
         if (report1FlightIds.Count > 0)
@@ -1564,8 +1488,6 @@ public class HomeController : ControllerBase
         string pWhereSql = pWhere.Count > 0 ? " WHERE " + string.Join(" AND ", pWhere) : "";
         var report3 = _context.Database.SqlQueryRaw<Report3Row>(@"SELECT r.confirmation_number AS ConfirmationNumber, p.transaction_reference AS TransactionReference, p.transaction_type AS TransactionType, p.amount AS Amount, p.payment_status AS PaymentStatus, CONCAT(COALESCE(e.first_name,'-'),' ',COALESCE(e.last_name,'')) AS ProcessedBy, e.employee_role AS EmployeeRole, p.payment_date_time AS PaymentDateTime FROM Payment p JOIN Reservation r ON r.reservation_id = p.reservation_id LEFT JOIN Employee e ON e.employee_id = p.employee_id" + pWhereSql + @" ORDER BY p.payment_date_time", pArgs.ToArray()).ToList();
 
-        // Detail rows behind Report 3: the individual payment/refund records
-        // (Ed's detailed-report work, merged onto HEAD).
         var report3Details = _context.Database.SqlQueryRaw<Report3DetailRow>(@"
             SELECT
                 p.payment_id AS PaymentId,
@@ -1608,8 +1530,6 @@ public class HomeController : ControllerBase
         string lfHavingSql = lfHaving.Count > 0 ? " HAVING " + string.Join(" AND ", lfHaving) : "";
         var report4 = _context.Database.SqlQueryRaw<Report4Row>(@"SELECT f.flight_number AS FlightNumber, f.flight_status AS FlightStatus, cc.cabin_name AS CabinName, ff.fare_class_id AS FareClassId, ff.available_inventory AS AvailableInventory, ff.allocated_capacity AS AllocatedCapacity, ROUND(100.0 * (ff.allocated_capacity - ff.available_inventory) / ff.allocated_capacity, 1) AS PctFull, CONCAT(DATE_FORMAT(f.departure_date, '%Y-%m-%d'), ' ', TIME_FORMAT(f.departure_time, '%H:%i')) AS Departure, f.origin_airport_code AS Origin, f.destination_airport_code AS Destination, fc.fare_class_name AS FareClassName, (ff.allocated_capacity - ff.available_inventory) AS SeatsSold, ff.base_price AS BasePrice, ff.current_price AS CurrentPrice, (SELECT COALESCE(SUM(rs.fare_price_at_booking), 0.00) FROM ReservationSegment rs JOIN TicketSegment ts ON ts.reservation_segment_id = rs.reservation_segment_id JOIN Ticket t ON t.ticket_id = ts.ticket_id AND t.ticket_status <> 'Cancelled' WHERE rs.flight_fare_id = ff.flight_fare_id AND rs.segment_status <> 'Cancelled') AS Revenue FROM FlightFare ff JOIN Flight f ON f.flight_id = ff.flight_id JOIN CabinClass cc ON cc.cabin_class_id = ff.cabin_class_id JOIN FareClass fc ON fc.fare_class_id = ff.fare_class_id" + lfWhereSql + lfHavingSql + @" ORDER BY f.flight_number, f.departure_date, f.departure_time, ff.fare_class_id", lfArgs.ToArray()).ToList();
 
-        // Detail rows behind Report 4: the individual passengers and seats
-        // that fill each flight/cabin (Ed's detailed-report work, merged onto HEAD).
         var lfDetailHaving = new List<string>();
         if (report4_minPctFull.HasValue) lfDetailHaving.Add($"ROUND(100.0 * (ff.allocated_capacity - ff.available_inventory) / ff.allocated_capacity, 1) >= {report4_minPctFull.Value.ToString(inv)}");
         if (report4_maxPctFull.HasValue) lfDetailHaving.Add($"ROUND(100.0 * (ff.allocated_capacity - ff.available_inventory) / ff.allocated_capacity, 1) <= {report4_maxPctFull.Value.ToString(inv)}");
@@ -1694,13 +1614,10 @@ public class HomeController : ControllerBase
     ORDER BY Revenue DESC
 ", aArgs.ToArray()).ToList();
 
-        // Share of total revenue across the airports shown.
         decimal report7Total = report7.Sum(r => r.Revenue);
         foreach (var r in report7)
             r.RevenueShare = report7Total > 0 ? Math.Round(100m * r.Revenue / report7Total, 1) : null;
 
-        // Detail rows behind Report 7: the individual tickets that make up
-        // each airport's revenue (Ed's detailed-report work, merged onto HEAD).
         var report7Details = new List<Report7DetailRow>();
         if (report7.Count > 0)
         {
@@ -1757,10 +1674,6 @@ public class HomeController : ControllerBase
         return Ok(new { report1, report1Details, report2, report3, report3Details, report4, report4Details, report7, report7Details });
     }
 
-    // -----------------------------------------------------------------
-    // Q2 (Reservation Details) — used by Employee Purchased Flights.
-    // Blank confirmation returns ALL reservations.
-    // -----------------------------------------------------------------
     [HttpGet("staff/reservations")]
     public IActionResult StaffReservations(string? confirmation)
     {
@@ -1793,9 +1706,6 @@ public class HomeController : ControllerBase
         return Ok(data);
     }
 
-    // -----------------------------------------------------------------
-    // Q5 (Ticket and Segment details) — folded into the manifest endpoint.
-    // -----------------------------------------------------------------
     [HttpGet("staff/reservations/{id}/manifest")]
     public IActionResult StaffManifest(int id)
     {
@@ -1821,7 +1731,6 @@ public class HomeController : ControllerBase
             WHERE rs.reservation_id = {0}
             ORDER BY rs.segment_number", id).ToList();
 
-        // Q5 rows — ticket + segment drilldown for every passenger on the reservation.
         var tickets = _context.Database.SqlQueryRaw<ManifestTicketRow>(@"
             SELECT CONCAT(p.first_name, ' ', p.last_name) AS Passenger,
                    t.ticket_number AS TicketNumber,
@@ -1898,10 +1807,8 @@ public class HomeController : ControllerBase
         if (add.price < 0 || add.allocatedCapacity <= 0 || add.allocatedCapacity > 36) return BadRequest("Capacity must be between 1 and 36");
         if (_context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM CabinClass WHERE cabin_class_id = {0}", add.cabinClassId).FirstOrDefault() == 0) return BadRequest("Unknown cabin class");
         if (_context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM FareClass WHERE fare_class_id = {0}", add.fareClassId).FirstOrDefault() == 0) return BadRequest("Unknown fare class");
-        // Fare class must belong to the cabin: Economy -> 1,2,3; Premium Economy -> 7,8,9; Business -> 4,5,6.
         var allowedFareClasses = add.cabinClassId switch { 1 => new[] { 1, 2, 3 }, 2 => new[] { 7, 8, 9 }, 3 => new[] { 4, 5, 6 }, _ => Array.Empty<int>() };
         if (!allowedFareClasses.Contains(add.fareClassId)) return BadRequest("That fare class does not belong to this cabin");
-        // Price cap per cabin: Economy $300, Premium Economy $500, Business $1000.
         var maxPrice = add.cabinClassId switch { 1 => 300m, 2 => 500m, 3 => 1000m, _ => 300m };
         if (add.price > maxPrice) return BadRequest($"Price cannot exceed ${maxPrice} for this cabin");
 
@@ -1952,11 +1859,6 @@ public class HomeController : ControllerBase
 
         try
         {
-            // The employee cancelling the flight. A Supervisor's id lets
-            // the procedure auto-refund affected members in full (the
-            // Refund trigger requires a Supervisor employee_id); an
-            // Employee (or the worker) leaves refunds Pending for a
-            // supervisor to approve. Migration 19.
             int? employeeId = null;
             var userIdText = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             if (int.TryParse(userIdText, out int userId))
@@ -1997,7 +1899,6 @@ public class HomeController : ControllerBase
         if (role != "Employee" && role != "Supervisor") return StatusCode(403, "Staff only");
         var data = _context.Database.SqlQueryRaw<StaffFlightRow>(@"SELECT f.flight_id AS FlightId, f.flight_number AS FlightNumber, f.origin_airport_code AS OriginAirportCode, f.destination_airport_code AS DestinationAirportCode, f.departure_date AS DepartureDate, f.flight_status AS FlightStatus, f.status_reason AS StatusReason, (SELECT COUNT(DISTINCT rs.reservation_id) FROM ReservationSegment rs WHERE rs.flight_id = f.flight_id AND rs.segment_status = 'Booked') AS BookedSeats, CAST(NULL AS CHAR) AS PassengerNames FROM Flight f ORDER BY f.departure_date, f.departure_time").ToList();
 
-        // Names of passengers booked on each flight, so the Flight Status search bar can filter by name.
         var names = _context.Database.SqlQueryRaw<StaffFlightPassengerRow>(@"
             SELECT DISTINCT rs.flight_id AS FlightId,
                    CONCAT(p.first_name, ' ', p.last_name) AS FullName
@@ -2090,7 +1991,6 @@ public class ManifestSegmentRow { public int SegmentNumber { get; set; } public 
 public class ManifestTicketRow { public string Passenger { get; set; } public string TicketNumber { get; set; } public string FlightNumber { get; set; } public int SegmentNumber { get; set; } public string SegmentStatus { get; set; } public decimal FarePriceAtBooking { get; set; } }
 public class SeatMapRow { public int SeatId { get; set; } public string SeatNumber { get; set; } public int CabinClassId { get; set; } public string SeatType { get; set; } public int Occupied { get; set; } }
 public class AdminUserRow { public int UserAccountId { get; set; } public string Email { get; set; } public string Role { get; set; } public int? EmployeeId { get; set; } public int? PassengerId { get; set; } }
-// Airline-cancelled flight refund info per booking (migration 19).
 public class ModificationReceiptRow { public int PaymentId { get; set; } public string Reference { get; set; } = ""; public string TransactionType { get; set; } = ""; public string PaymentStatus { get; set; } = ""; public string? PaymentMethod { get; set; } public decimal Amount { get; set; } public DateTime PaidAt { get; set; } }
 public class FlightCancellationRow { public int ReservationId { get; set; } public string FlightNumber { get; set; } public string ReviewStatus { get; set; } public decimal? ApprovedAmount { get; set; } public decimal RefundedAmount { get; set; } public string? RefundReference { get; set; } }
 public class AdminFlightRow { public int FlightId { get; set; } public string FlightNumber { get; set; } public string OriginAirportCode { get; set; } public string DestinationAirportCode { get; set; } public string FlightStatus { get; set; } }

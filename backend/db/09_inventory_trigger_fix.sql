@@ -1,34 +1,13 @@
--- 09_inventory_trigger_fix.sql
--- Deployment of the six inventory-related triggers to the shared MariaDB database.
--- Source: corrected 06_triggers.sql after local functional tests.
--- IMPORTANT: Run ONLY against the shared database after backing up the DB AND
--- saving SHOW CREATE TRIGGER for all three original inventory triggers.
--- MySQL/MariaDB DDL (DROP/CREATE TRIGGER) is not transactionally rolled back.
--- Coordinate a maintenance window and stop booking changes while deploying.
--- Do NOT run the nine-trigger setup script on the shared database.
 
 USE db75049;
 
--- PREFLIGHT: Run these SELECT statements separately first and inspect their output.
--- SELECT DATABASE() AS selected_database;
--- SELECT VERSION() AS server_version;
--- SELECT TRIGGER_NAME, EVENT_OBJECT_TABLE, ACTION_TIMING, EVENT_MANIPULATION
--- FROM information_schema.TRIGGERS
--- WHERE TRIGGER_SCHEMA = DATABASE()
--- ORDER BY TRIGGER_NAME;
--- SELECT flight_fare_id, available_inventory, allocated_capacity
--- FROM FlightFare WHERE available_inventory < 0
---    OR available_inventory > allocated_capacity;
 
--- IMPORTANT: the rest of this file changes trigger definitions immediately.
 DELIMITER $$
 
--- Remove only the three older inventory triggers (if present).
 DROP TRIGGER IF EXISTS trg_segment_book_decrement_inventory$$
 DROP TRIGGER IF EXISTS trg_segment_cancel_restore_inventory$$
 DROP TRIGGER IF EXISTS trg_segment_change_restore_inventory$$
 
--- Make this script re-runnable for the six inventory-related triggers.
 DROP TRIGGER IF EXISTS trg_segment_inventory_insert$$
 DROP TRIGGER IF EXISTS trg_segment_inventory_update$$
 DROP TRIGGER IF EXISTS trg_segment_inventory_delete$$
@@ -81,10 +60,6 @@ BEGIN
 END$$
 
 
--- =====================================================
--- TRIGGER 2: Handle cancellations, rebooking,
--- and changes to the selected fare or flight.
--- =====================================================
 CREATE TRIGGER trg_segment_inventory_update
 BEFORE UPDATE ON ReservationSegment
 FOR EACH ROW
@@ -117,8 +92,6 @@ END IF;
     FROM ReservationPassenger
     WHERE reservation_id = OLD.reservation_id;
 
-    -- If an active booking is cancelled, changed, or
-    -- moved to another fare, release its old inventory.
     IF OLD.segment_status = 'Booked'
    AND (NEW.segment_status IN ('Cancelled', 'Changed')
         OR (NEW.segment_status = 'Booked'
@@ -137,8 +110,6 @@ IF ROW_COUNT() <> 1 THEN
         'Cannot restore inventory: capacity exceeded.';
 END IF;
 END IF;
-    -- If a segment becomes booked, or its fare changes,
-    -- reserve inventory for all passengers.
     IF NEW.segment_status = 'Booked'
        AND (OLD.segment_status <> 'Booked'
             OR NEW.flight_fare_id <> OLD.flight_fare_id) THEN
@@ -173,7 +144,6 @@ END IF;
         END IF;
     END IF;
 
-    -- The flight must match the fare for other statuses too.
     SELECT flight_id INTO fare_flight_id
     FROM FlightFare
     WHERE flight_fare_id = NEW.flight_fare_id;
@@ -187,10 +157,6 @@ END IF;
 END$$
 
 
--- =====================================================
--- TRIGGER 3: Restore inventory if a booked segment
--- is deleted directly.
--- =====================================================
 CREATE TRIGGER trg_segment_inventory_delete
 BEFORE DELETE ON ReservationSegment
 FOR EACH ROW
@@ -219,11 +185,6 @@ END IF;
 END$$
 
 
--- =====================================================
--- TRIGGERS 4-6: Prevent passenger-list edits after
--- segments exist. This keeps inventory counts accurate.
--- Create all passengers before creating segments.
--- =====================================================
 CREATE TRIGGER trg_passenger_inventory_insert
 BEFORE INSERT ON ReservationPassenger
 FOR EACH ROW
@@ -275,8 +236,6 @@ END$$
 
 DELIMITER ;
 
--- POST-DEPLOYMENT: Verify nine triggers overall, provided that the existing
--- refund, ticket, and seat-assignment triggers were already present.
 SELECT TRIGGER_NAME, EVENT_OBJECT_TABLE, ACTION_TIMING, EVENT_MANIPULATION
 FROM information_schema.TRIGGERS
 WHERE TRIGGER_SCHEMA = DATABASE()

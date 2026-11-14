@@ -63,7 +63,6 @@ export default function DealsPage({
 
   const cityOf = (code) => cityByCode[(code || '').toUpperCase()] || code;
 
-  // Site header for the seat + checkout pages (same tabs as this page).
   const navProps = {
     auth,
     activeTab: 'deals',
@@ -139,7 +138,6 @@ export default function DealsPage({
     setShowSeatModal(true);
   };
 
-  // A seat in another cabin books that cabin's fare instead of the deal fare.
   const handleSeatProceed = (seatIds, total, info) => {
     setSelectedSeatIds(seatIds);
     setSelectedSeatNumber(info?.seatNumber || null);
@@ -181,7 +179,6 @@ export default function DealsPage({
           : null,
         passengerCount: passengerCount || 1,
         totalAmount: checkoutTotal,
-        // Shows the Points Earned box on the confirmation page.
         justBooked: true,
         loyalty: loyalty || null,
         flightNumber: deal.flightNumber,
@@ -203,7 +200,6 @@ export default function DealsPage({
     }
   };
 
-  // A different photo for each card.
   const dealImages = pickDealImages(deals);
 
   return (
@@ -334,7 +330,6 @@ export default function DealsPage({
             setShowCheckoutModal(false);
             setSelectedDeal(null);
           }}
-          // Back to the seat map with the seat still picked.
           onBack={() => {
             setShowCheckoutModal(false);
             setShowSeatModal(true);

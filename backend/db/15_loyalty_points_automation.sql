@@ -1,13 +1,4 @@
 
--- Migration 15: Automatic loyalty rewards for successful payments.
--- MySQL 8.0.46; run ONLY in the disposable local TEST schema after a backup.
--- In MySQL Workbench, select your target test schema as the default before running.
--- Do not run against the shared/hosted database.
--- Rule: 1 point per whole dollar of payment PER passenger share.
--- The payment is divided evenly among ALL passengers in the reservation;
--- inactive/unregistered members receive no points. Remainder cents are not rewarded.
--- Past payments are NOT backfilled. This migration does NOT reverse refunded points.
--- DDL auto-commits: ROLLBACK does NOT uninstall these objects.
 
 SELECT DATABASE() AS selected_schema;
 
@@ -45,7 +36,6 @@ main: BEGIN
     DECLARE v_member_account_id INT;
     DECLARE v_done BOOLEAN DEFAULT FALSE;
 
-    -- Only active members, but split spending across EVERY passenger.
     DECLARE member_cursor CURSOR FOR
         SELECT m.member_account_id
         FROM ReservationPassenger rp
@@ -55,7 +45,6 @@ main: BEGIN
         ORDER BY m.member_account_id;
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_done = TRUE;
 
-    -- Fetch payment once. MAX returns one row even if payment does not exist.
     SELECT MAX(reservation_id), MAX(amount), MAX(transaction_type), MAX(payment_status)
       INTO v_reservation_id, v_amount, v_kind, v_status
     FROM Payment WHERE payment_id = p_payment_id;
@@ -64,8 +53,6 @@ main: BEGIN
         LEAVE main;
     END IF;
 
-    -- This unique marker means the payment is awarded only once,
-    -- even if its status changes again or it has no eligible members.
     INSERT IGNORE INTO LoyaltyPaymentProcessed (payment_id) VALUES (p_payment_id);
     IF ROW_COUNT() = 0 THEN
         LEAVE main;
@@ -117,7 +104,6 @@ END$$
 
 DELIMITER ;
 
--- Read-only installation check.
 SELECT TRIGGER_NAME, ACTION_TIMING, EVENT_MANIPULATION
 FROM information_schema.TRIGGERS
 WHERE TRIGGER_SCHEMA = DATABASE() AND EVENT_OBJECT_TABLE = 'payment'

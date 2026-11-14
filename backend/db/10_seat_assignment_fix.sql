@@ -1,36 +1,26 @@
 USE db75049;
 
--- =====================================================
--- SEAT ASSIGNMENT MIGRATION
--- Add seat uniqueness, validation, and cancellation rules
--- =====================================================
 
--- STEP 1: Add the flight/segment unique relationship.
 ALTER TABLE ReservationSegment
 ADD CONSTRAINT uq_segment_flight_pair
 UNIQUE (reservation_segment_id, flight_id);
 
 
--- STEP 2: Add the new seat assignment columns.
 ALTER TABLE SeatAssignment
 ADD COLUMN flight_id INT NULL,
 ADD COLUMN active_seat TINYINT NULL DEFAULT 1;
 
 
--- STEP 3: Copy the correct flight ID to existing assignments.
 UPDATE SeatAssignment sa
 JOIN ReservationSegment rs
     ON sa.reservation_segment_id = rs.reservation_segment_id
 SET sa.flight_id = rs.flight_id;
 
 
--- STEP 4: Require flight_id for every seat assignment.
 ALTER TABLE SeatAssignment
 MODIFY COLUMN flight_id INT NOT NULL;
 
 
--- STEP 5: Make sure the seat assignment flight matches
--- the flight assigned to its reservation segment.
 ALTER TABLE SeatAssignment
 ADD CONSTRAINT fk_seat_assignment_segment_flight
 FOREIGN KEY (reservation_segment_id, flight_id)
@@ -38,7 +28,6 @@ REFERENCES ReservationSegment
     (reservation_segment_id, flight_id);
 
 
--- STEP 6: Add new uniqueness rules and validation.
 ALTER TABLE SeatAssignment
 ADD CONSTRAINT uq_active_flight_seat
     UNIQUE (flight_id, seat_id, active_seat),
@@ -50,14 +39,11 @@ ADD CONSTRAINT chk_active_seat
     CHECK (active_seat = 1 OR active_seat IS NULL);
 
 
--- STEP 7: Remove old uniqueness rules after adding replacements.
 ALTER TABLE SeatAssignment
 DROP INDEX uq_passenger_segment_seat,
 DROP INDEX uq_segment_seat;
 
 
--- STEP 8: Release historical assignments belonging to
--- cancelled, changed, or already flown segments.
 UPDATE SeatAssignment sa
 JOIN ReservationSegment rs
     ON sa.reservation_segment_id = rs.reservation_segment_id
@@ -65,13 +51,9 @@ SET sa.active_seat = NULL
 WHERE rs.segment_status IN ('Cancelled', 'Changed', 'Flown');
 
 
--- =====================================================
--- ADDITIONAL BUSINESS RULE TRIGGERS
--- =====================================================
 
 DELIMITER $$
 
--- TRIGGER 10: Release seats when a segment is cancelled
 DROP TRIGGER IF EXISTS trg_segment_release_seats$$
 
 CREATE TRIGGER trg_segment_release_seats
@@ -90,7 +72,6 @@ BEGIN
 END$$
 
 
--- TRIGGER 11: Validate new seat assignments.
 DROP TRIGGER IF EXISTS trg_seat_assignment_validate_insert$$
 
 CREATE TRIGGER trg_seat_assignment_validate_insert
@@ -123,7 +104,6 @@ BEGIN
 END$$
 
 
--- TRIGGER 12: Validate updates to seat assignments.
 DROP TRIGGER IF EXISTS trg_seat_assignment_validate_update$$
 
 CREATE TRIGGER trg_seat_assignment_validate_update
@@ -180,8 +160,6 @@ BEGIN
     END IF;
 END$$
 
--- TRIGGER 13: REMOVED. The strict cancellation trigger is dropped to allow 
--- the backend to safely process cancellations within a transaction.
 DROP TRIGGER IF EXISTS trg_reservation_cancel_check$$
 
 DELIMITER ;

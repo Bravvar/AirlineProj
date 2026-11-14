@@ -1,13 +1,4 @@
 
--- Migration 16 - Loyalty point reversal on completed refunds
--- MySQL 8.0.46. LOCAL disposable test schema ONLY; backup before installation.
--- Select airline_migration14_test as the default schema in Workbench.
--- Requires Migration 15 and existing refund supervisor validation.
--- First-time installation only. DDL commits automatically; ROLLBACK cannot uninstall.
--- A partial refund reverses a proportional amount of points previously earned.
--- No retroactive credit or reversal for historical payments without loyalty awards.
--- If balance is insufficient, the unpaid reversal is recorded, not made negative.
--- Future earning offset, refund cancellation, and loyalty redemption are NOT implemented.
 
 SELECT DATABASE() AS selected_schema;
 
@@ -85,7 +76,6 @@ main: BEGIN
     FROM Payment WHERE reservation_id = v_reservation_id
       AND transaction_type = 'Refund' AND payment_status = 'Refunded';
 
-    -- Refunds cannot exceed successful payments; protects the accrual calculation.
     IF v_total_paid <= 0 OR v_total_refunded > v_total_paid THEN
         SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'Loyalty refund: refund exceeds successful payments or no payments exist';
@@ -96,7 +86,6 @@ main: BEGIN
         FETCH member_cursor INTO v_member, v_total_awarded;
         IF v_done THEN LEAVE reversal_loop; END IF;
 
-        -- Cumulative fraction avoids rounding drift across multiple partial refunds.
         SET v_target = FLOOR(v_total_awarded * v_total_refunded / v_total_paid);
         SELECT COALESCE(SUM(points_due), 0) INTO v_previous_due
         FROM LoyaltyRefundLedger l

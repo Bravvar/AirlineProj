@@ -1,14 +1,6 @@
 import { useEffect } from 'react';
 import CustomerNav from './CustomerNav';
 
-// ---------------------------------------------------------------------
-// Shown after a member changes a booking in My Trips (extra bags, meal,
-// phone). Separate from the booking confirmation page.
-//
-// details: { reservationId, confirmationNumber, tripType, changes: [{ label, value, amount? }],
-//            bagsAdded, amountPaid, paymentReference, paidAt, totalBags, newTotal }
-// onViewTrip()  back to My Trips with this booking's Receipts open
-// ---------------------------------------------------------------------
 
 const money = (n) =>
   `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -55,7 +47,6 @@ export default function ModificationConfirmationPage({ details, auth, onNavigate
 
       <div className="max-w-2xl mx-auto px-4 pt-12">
         <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden animate-in zoom-in-95 duration-300">
-          {/* Header */}
           <div className="px-8 pt-10 pb-8 text-center border-b border-gray-100">
             <div className="w-20 h-20 bg-green-50 border border-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
               <svg className="w-10 h-10 text-green-600" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" aria-hidden="true">
@@ -71,7 +62,6 @@ export default function ModificationConfirmationPage({ details, auth, onNavigate
             </p>
           </div>
 
-          {/* What changed */}
           <div className="px-8 py-6">
             <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">What changed</h2>
             <ul className="flex flex-col gap-2">
@@ -87,7 +77,6 @@ export default function ModificationConfirmationPage({ details, auth, onNavigate
             </ul>
           </div>
 
-          {/* Receipt */}
           <div className="mx-8 mb-8 bg-gray-50 border border-gray-100 rounded-2xl p-5 flex flex-col gap-3">
             <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500">Receipt</h2>
             {paid ? (

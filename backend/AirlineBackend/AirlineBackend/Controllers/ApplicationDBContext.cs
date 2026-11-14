@@ -31,7 +31,6 @@ public class ApplicationDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        // Explicitly map table names to match your SQL schema
         modelBuilder.Entity<Passenger>().ToTable("Passenger");
         modelBuilder.Entity<Employee>().ToTable("Employee");
         modelBuilder.Entity<Airport>().ToTable("Airport");
@@ -102,7 +101,6 @@ public class ApplicationDbContext : DbContext
     }
 }
 
-// --- ENTITY MODELS ---
 
 public class Passenger
 {

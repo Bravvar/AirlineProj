@@ -130,7 +130,6 @@ export default function TriggersPage({ token, email, role, onBackToHome, onMyTri
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
-      {/* Navbar */}
       <nav className="sticky top-0 z-50 bg-white border-b border-gray-100 px-8 py-4 flex justify-between items-center shadow-sm">
         <div className="cursor-pointer" onClick={() => onBackToHome('flights')}>
           <Logo />
@@ -170,7 +169,6 @@ export default function TriggersPage({ token, email, role, onBackToHome, onMyTri
         </div>
       </nav>
 
-      {/* Main Container */}
       <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6">
         {!token ? (
           <div className="max-w-md mx-auto mt-16 bg-white rounded-3xl shadow-[0_4px_20px_rgb(0,0,0,0.05)] border border-gray-200 p-10 text-center">
@@ -196,7 +194,6 @@ export default function TriggersPage({ token, email, role, onBackToHome, onMyTri
           </div>
         ) : (
           <>
-            {/* Header */}
             <div className="mb-8">
               <h1 className="text-3xl font-bold text-gray-900 mb-2">Database Triggers Reference & Activation</h1>
               <p className="text-gray-500 text-sm">
@@ -204,7 +201,6 @@ export default function TriggersPage({ token, email, role, onBackToHome, onMyTri
               </p>
             </div>
 
-            {/* Critical Note required by prompt */}
             <div className="bg-blue-50 border border-blue-200 rounded-3xl p-6 mb-8 text-blue-900">
               <h3 className="font-bold text-sm uppercase tracking-wider mb-2 flex items-center gap-2">
                 <span>ℹ</span> Operational Behavior Notice
@@ -214,7 +210,6 @@ export default function TriggersPage({ token, email, role, onBackToHome, onMyTri
               </p>
             </div>
 
-            {/* Triggers Table */}
             <div className="bg-white rounded-3xl shadow-[0_4px_20px_rgb(0,0,0,0.05)] border border-gray-200 overflow-hidden mb-10">
               <div className="px-6 py-5 border-b border-gray-100 bg-gray-50/60">
                 <h2 className="text-lg font-bold text-gray-900">Trigger Specifications Table</h2>
@@ -257,7 +252,6 @@ export default function TriggersPage({ token, email, role, onBackToHome, onMyTri
               </div>
             </div>
 
-            {/* Individual Detailed Cards */}
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Activation Walkthroughs</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {TRIGGERS.map((t, idx) => (

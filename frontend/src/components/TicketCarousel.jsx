@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import ETicketCard from './ETicketCard';
 
-// E-ticket modal. Shows one ticket at a time; with more than one passenger,
-// arrows on the sides (or ← / → keys, or the dots) move between tickets, and
-// a "Ticket X of N" pill shows where you are.
 
 function ArrowButton({ direction, disabled, onClick }) {
   const isPrev = direction === 'prev';
@@ -63,7 +60,6 @@ export default function TicketCarousel({ tickets, details, airlineCode, airlineN
         className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl animate-in zoom-in-95 duration-200 my-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header / airline brand */}
         <div className="relative bg-slate-900 rounded-t-3xl p-6 pb-8 overflow-hidden">
           <div className="absolute inset-0 bg-cover bg-center opacity-30" style={{ backgroundImage: "url('/landscapes/europe.jpg')" }} />
           <div className="relative z-10 flex justify-between items-start">
@@ -96,7 +92,6 @@ export default function TicketCarousel({ tickets, details, airlineCode, airlineN
           </div>
         </div>
 
-        {/* Ticket track: one ticket visible, slides left/right */}
         <div className="relative">
           <div className="overflow-hidden">
             <div
@@ -123,7 +118,6 @@ export default function TicketCarousel({ tickets, details, airlineCode, airlineN
           )}
         </div>
 
-        {/* Position indicator */}
         {multiple && (
           <div className="px-6 pb-6 -mt-2 flex flex-col items-center gap-2">
             <div className="flex items-center gap-2">

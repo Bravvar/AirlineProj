@@ -24,15 +24,6 @@ const BACKGROUNDS = [
   { src: '/landscapes/peru.jpg', name: 'Andes Mountains, Peru' },
 ];
 
-// ---------------------------------------------------------------------
-// "View Confirmation" in My Trips: rebuild the same details the
-// confirmation page gets right after paying, from the saved booking.
-//   * both legs (segment 1 = outbound, segment 2 = return)
-//   * each leg's class / fare, looked up from the flight's fares
-//   * one ticket per traveler, with their seat on each leg
-// ---------------------------------------------------------------------
-// Staff only see their workspaces. Any other page (flight search, deals,
-// My Trips...) sends them to their own workspace instead.
 const STAFF_PAGES = {
   Supervisor: { home: 'admin', allowed: ['admin', 'employee', 'reports', 'refund'] },
   Employee: { home: 'employee', allowed: ['employee', 'reports', 'refund'] },
@@ -41,8 +32,6 @@ const STAFF_PAGES = {
 const hhmm = (t) => (t ? String(t).substring(0, 5) : '');
 const ymd = (d) => (d ? String(d).slice(0, 10) : '');
 
-// Seats on a segment, one per traveler in booking order. Uses the full list
-// when the backend sends it (seatNumbers "A01,A02"), else the single seat.
 const segmentSeats = (seg) => {
   const list = seg?.seatNumbers ?? seg?.SeatNumbers;
   if (list) return String(list).split(',').map((x) => x.trim()).filter(Boolean);
@@ -56,7 +45,6 @@ async function loadTripDetails(booking, segments, auth) {
   const out = legs[0] || {};
   const ret = legs.length > 1 ? legs[1] : null;
 
-  // Tickets + each leg's fare (class, fare name, bags) in parallel.
   const fareFor = (seg) =>
     seg?.flightId
       ? fetch(`${API_URL}/api/flights/${seg.flightId}/fares`)
@@ -93,7 +81,6 @@ async function loadTripDetails(booking, segments, auth) {
     totalAmount: booking.totalAmount,
     tripType: ret ? 'Round Trip' : 'One Way',
     stops: 'Non-stop',
-    // Outbound
     flightNumber: out.flightNumber || '',
     origin: out.origin || '',
     destination: out.destination || '',
@@ -105,7 +92,6 @@ async function loadTripDetails(booking, segments, auth) {
     fareClassName: outFare?.fareClassName || '',
     refundable: Boolean(outFare?.refundable),
     checkedBagsIncluded: outFare?.checkedBagsIncluded ?? 0,
-    // Return (round trip only)
     returnFlightNumber: ret?.flightNumber || '',
     returnOrigin: ret?.origin || '',
     returnDestination: ret?.destination || '',
@@ -122,8 +108,6 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('flights');
   const [showSignIn, setShowSignIn] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
-  // Set right before the reload that follows an account deletion, so the
-  // home page can tell the visitor what happened.
   const [accountDeletedNotice, setAccountDeletedNotice] = useState(
     () => sessionStorage.getItem('accountDeleted') === '1'
   );
@@ -132,8 +116,6 @@ export default function App() {
 
   const [refundDetails, setRefundDetails] = useState(null);
   const [paymentDetails, setPaymentDetails] = useState(null);
-  // Trip modification (extra bags etc.): its confirmation, then which trip
-  // My Trips should open with Receipts showing.
   const [modifyDetails, setModifyDetails] = useState(null);
   const [focusTripId, setFocusTripId] = useState(null);
 
@@ -143,7 +125,6 @@ export default function App() {
     email: sessionStorage.getItem('email'),
   }));
 
-  // Staff never see customer pages (see STAFF_PAGES).
   const staff = auth.token ? STAFF_PAGES[auth.role] : null;
   const currentPage = staff && !staff.allowed.includes(requestedPage) ? staff.home : requestedPage;
 
@@ -171,13 +152,11 @@ export default function App() {
     window.location.reload();
   };
 
-  // Account deleted: drop the session and land on the signed-out flight search.
   const handleAccountDeleted = () => {
     sessionStorage.setItem('accountDeleted', '1');
     handleLogout();
   };
 
-  // Email changed on the profile page: keep the session in step.
   const handleEmailChanged = (email, token) => {
     if (email) sessionStorage.setItem('email', email);
     if (token) sessionStorage.setItem('token', token);
@@ -213,7 +192,6 @@ export default function App() {
 
   const currentBg = BACKGROUNDS[bgIndex];
 
-  // Pages call onBackToHome('deals') from the header's Deals tab.
   const goHome = (tab = 'flights') => {
     if (tab === 'deals') {
       setCurrentPage('deals');
@@ -442,8 +420,6 @@ export default function App() {
     );
   }
 
-  // Home page: same layout as the About page for every visitor — white
-  // header, rounded image hero (backgrounds still rotate).
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
       <CustomerNav
@@ -460,10 +436,7 @@ export default function App() {
       />
 
       <section className="p-4">
-        {/* Fills the screen under the header, so Deals start below the fold. */}
         <div className="relative rounded-[2.5rem] shadow-2xl min-h-[calc(100vh-8rem)] flex flex-col">
-          {/* Background photos, clipped to the rounded card. Content is not
-              clipped, so search dropdowns can extend past the card. */}
           <div className="absolute inset-0 rounded-[2.5rem] overflow-hidden pointer-events-none">
             {BACKGROUNDS.map((bg, i) => (
               <div
@@ -533,7 +506,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Which photo is showing */}
           <div className="absolute left-8 bottom-6 z-20 hidden md:flex items-center gap-3 pointer-events-none">
             <span className="bg-white/15 border border-white/25 backdrop-blur-md text-white text-xs font-semibold px-3 py-1.5 rounded-full">
               {currentBg.name}

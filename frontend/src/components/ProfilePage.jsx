@@ -32,7 +32,7 @@ async function readError(res, fallback) {
     const data = await res.json();
     if (data?.message) return data.message;
     if (typeof data === 'string') return data;
-  } catch { /* plain-text body */ }
+  } catch { }
   return fallback;
 }
 
@@ -79,7 +79,6 @@ function PasswordInput({ value, onChange, placeholder, autoComplete }) {
   );
 }
 
-// ---------------------------------------------------------------- Contact info
 function ContactInfoCard({ profile, token, onSaved }) {
   const [editing, setEditing] = useState(false);
   const [email, setEmail] = useState('');
@@ -225,7 +224,6 @@ function ContactInfoCard({ profile, token, onSaved }) {
   );
 }
 
-// ---------------------------------------------------------------- Password
 function PasswordCard({ token }) {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -304,7 +302,6 @@ function PasswordCard({ token }) {
   );
 }
 
-// ---------------------------------------------------------------- Delete pop-up
 function DeleteConfirmModal({ points, deleting, error, onCancel, onConfirm }) {
   const [typed, setTyped] = useState('');
 
@@ -376,7 +373,6 @@ function DeleteConfirmModal({ points, deleting, error, onCancel, onConfirm }) {
   );
 }
 
-// ---------------------------------------------------------------- Page
 export default function ProfilePage({
   auth,
   onBackToHome,
@@ -467,7 +463,6 @@ export default function ProfilePage({
         {profile && (
           <>
             <div className="grid lg:grid-cols-3 gap-6">
-              {/* Left: identity + points */}
               <div className="space-y-6">
                 <div className={`${CARD} p-8 text-center`}>
                   <div className="w-24 h-24 mx-auto rounded-full bg-[#0066ff] text-white flex items-center justify-center font-bold text-4xl shadow-lg ring-4 ring-blue-100">
@@ -507,14 +502,12 @@ export default function ProfilePage({
                 </div>
               </div>
 
-              {/* Right: editable sections */}
               <div className="lg:col-span-2 space-y-6">
                 <ContactInfoCard profile={profile} token={token} onSaved={handleSaved} />
                 <PasswordCard token={token} />
               </div>
             </div>
 
-            {/* Danger zone */}
             <div className="mt-10 border-2 border-red-200 bg-red-50 rounded-3xl p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div>
                 <h2 className="text-xl font-bold text-red-700">Delete account</h2>

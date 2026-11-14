@@ -1,8 +1,4 @@
-// One passenger's e-ticket (passenger, route, seat/gate/boarding, barcode).
-// Used by TicketCarousel; renders a single ticket only.
 
-// Barcode bar widths come from the ticket number, so each ticket looks different
-// but the same ticket always draws the same barcode.
 function barcodeWidths(seed, count = 40) {
   let h = 0;
   for (const ch of String(seed || 'TICKET')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
@@ -73,7 +69,6 @@ export default function ETicketCard({ ticket, details }) {
         </div>
       </div>
 
-      {/* Barcode */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 flex flex-col items-center justify-center relative overflow-hidden">
         <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-[#f8f9fc] rounded-full shadow-inner border-r border-gray-200" />
         <div className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-[#f8f9fc] rounded-full shadow-inner border-l border-gray-200" />
