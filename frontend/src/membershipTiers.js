@@ -1,27 +1,67 @@
 
 
 export const SP_PER_DOLLAR = 5;
-export const RP_VALUE_CENTS = 1;
+export const RP_VALUE_CENTS = 1; 
 
 export const TIERS = [
   {
-    id: 'bronze',
-    name: 'Bronze',
+    id: 'inactive',
+    name: 'Inactive',
     minPoints: 0,
+    howToGet: 'No points yet — earn points on your first flight',
+    tagline: 'Fly once to start earning.',
+    rpMultiplier: 1,
+    accent: {
+      text: 'text-gray-500',
+      badge: 'bg-gray-100 text-gray-500',
+      ring: 'ring-gray-200',
+      bar: 'bg-gray-300',
+      card: 'from-gray-50 to-white',
+    },
+    benefits: [
+      'Earn SP and RP on every qualifying flight',
+      'Member-only fare alerts and promos',
+    ],
+  },
+  {
+    id: 'basic',
+    name: 'Basic',
+    minPoints: 1,
     howToGet: 'Free, automatic when you sign up',
     tagline: 'Start earning from your first flight.',
     rpMultiplier: 1,
     accent: {
-      text: 'text-orange-800',
-      badge: 'bg-gradient-to-r from-orange-200 to-amber-100 text-orange-900',
-      ring: 'ring-orange-200',
-      bar: 'bg-gradient-to-r from-orange-700 to-amber-500',
-      card: 'from-orange-50 to-white',
+      text: 'text-slate-700',
+      badge: 'bg-slate-100 text-slate-700',
+      ring: 'ring-slate-200',
+      bar: 'bg-slate-400',
+      card: 'from-slate-50 to-white',
     },
     benefits: [
       'Earn SP and RP on every qualifying flight',
       'Member-only fare alerts and promos',
       'Standard carry-on (per fare rules)',
+    ],
+  },
+  {
+    id: 'bronze',
+    name: 'Bronze',
+    minPoints: 1000,
+    howToGet: '1,000 SP in 12 months',
+    tagline: 'For regular flyers. About $200 a year in fares.',
+    rpMultiplier: 1.1,
+    accent: {
+      text: 'text-orange-700',
+      badge: 'bg-gradient-to-r from-orange-200 to-amber-100 text-orange-800',
+      ring: 'ring-orange-300',
+      bar: 'bg-gradient-to-r from-orange-400 to-amber-300',
+      card: 'from-orange-50 to-white',
+    },
+    benefits: [
+      'Earn SP and RP on every qualifying flight',
+      'Member-only fare alerts and promos',
+      'Discounted standard seat selection',
+      '+10% RP bonus on every flight',
     ],
   },
   {
@@ -49,9 +89,9 @@ export const TIERS = [
   {
     id: 'gold',
     name: 'Gold',
-    minPoints: 30000,
-    howToGet: '30,000 SP in 12 months',
-    tagline: 'For business travelers. About $6,000 a year in fares.',
+    minPoints: 25000,
+    howToGet: '25,000 SP in 12 months',
+    tagline: 'For business travelers. About $5,000 a year in fares.',
     rpMultiplier: 1.5,
     accent: {
       text: 'text-amber-600',
@@ -77,6 +117,7 @@ export const REDEMPTIONS = [
   { label: 'Upgrade to business', cost: 'from 15,000 RP', note: '' },
   { label: 'Bag and seat fees', cost: '100 RP = $1', note: '' },
 ];
+
 
 export function getTierForPoints(points) {
   const sp = Math.max(0, Number(points) || 0);
