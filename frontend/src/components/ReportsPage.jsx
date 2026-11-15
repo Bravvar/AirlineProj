@@ -7,7 +7,6 @@ const REPORT_DEFINITIONS = [
     key: 'report1',
     title: 'Revenue by Flight',
     description: 'How much money each flight earned and how many tickets it sold. Use it to see which routes and flights bring in the most revenue.',
-    source: 'Live query on Flight, ReservationSegment, and Ticket — tickets counted and total_fare_paid summed per flight, straight from the database.',
     filters: ['origin', 'destination', 'startDate', 'endDate', 'flightStatus', 'minTickets', 'minRevenue', 'maxRevenue'],
     columns: [
       { key: 'flightNumber', label: 'Flight Number' },
@@ -26,7 +25,6 @@ const REPORT_DEFINITIONS = [
     key: 'report2',
     title: 'Membership tier summary',
     description: 'Every member, their loyalty points balance, membership status, and tier (Gold, Silver, Bronze, or Basic). Use it to see who your most loyal customers are.',
-    source: 'Live query on Passenger and MembershipAccount — points_balance read from the membership table, tier calculated from the balance.',
     filters: ['tier', 'membershipStatus', 'minPoints'],
     columns: [
       { key: 'passengerId', label: 'Passenger ID' },
@@ -46,7 +44,6 @@ const REPORT_DEFINITIONS = [
     key: 'report3',
     title: 'Payment / refund audit',
     description: 'Every payment and refund: the booking, the amount, whether it succeeded or was refunded, and which staff member processed it. Use it to audit money moving in and out.',
-    source: 'Live query on Payment, Reservation, and Employee — every row is a real payment record, joined to its booking and the staff member who processed it.',
     filters: ['transactionType', 'paymentStatus', 'minAmount', 'maxAmount', 'startDate', 'endDate', 'employeeRole'],
     columns: [
       { key: 'confirmationNumber', label: 'Confirmation Number' },
@@ -63,7 +60,6 @@ const REPORT_DEFINITIONS = [
     key: 'report4',
     title: 'Flight load factor',
     description: 'How full each flight is, by cabin: allocated seats, available seats, and percent full. Use it to see which flights are selling out and which have empty seats.',
-    source: 'Live query on FlightFare, Flight, and CabinClass — percent full is calculated from allocated_capacity minus available_inventory, per fare.',
     filters: ['origin', 'destination', 'startDate', 'endDate', 'flightStatus', 'cabinName', 'minPctFull', 'maxPctFull'],
     columns: [
       { key: 'flightNumber', label: 'Flight Number' },
@@ -87,7 +83,6 @@ const REPORT_DEFINITIONS = [
     key: 'report7',
     title: 'Revenue by Airport',
     description: 'How much money and how many tickets each airport generated. Use it to compare which airports are the most profitable for the airline.',
-    source: 'Live query on Flight, ReservationSegment, and Ticket — revenue summed per origin airport, straight from the database.',
     filters: ['airport', 'startDate', 'endDate', 'minRevenue', 'minTickets'],
     columns: [
       { key: 'airport', label: 'Airport' },
@@ -304,9 +299,6 @@ function ReportTable({ def, rows, search, hiddenColumns, toggleColumn, loading }
           <h2 className="text-lg font-bold text-gray-900">{def.title}</h2>
           {def.description && (
             <p className="text-sm text-gray-600 mt-1 max-w-2xl">{def.description}</p>
-          )}
-          {def.source && (
-            <p className="text-xs text-gray-500 mt-1 max-w-2xl"><span className="font-semibold text-gray-600">Data source: </span>{def.source}</p>
           )}
           <p className="text-xs text-gray-500 mt-0.5">{filteredRows.length} {filteredRows.length === 1 ? 'record' : 'records'}{(search || (filterCol && filterVal)) ? ' (filtered)' : ''}</p>
         </div>
