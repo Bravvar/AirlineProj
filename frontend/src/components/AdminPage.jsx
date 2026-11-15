@@ -91,6 +91,114 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
     return !q || (f.flightNumber || '').toLowerCase().includes(q) || (f.originAirportCode || '').toLowerCase().includes(q) || (f.destinationAirportCode || '').toLowerCase().includes(q) || (f.flightStatus || '').toLowerCase().includes(q);
   });
 
+  const [editingFareId, setEditingFareId] = useState(null);
+  const [editingPrice, setEditingPrice] = useState('');
+  const [fareMsg, setFareMsg] = useState('');
+  const [userMsg, setUserMsg] = useState('');
+
+  const reloadFlights = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/admin/flights`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (Array.isArray(data)) setFlights(data);
+    } catch {}
+  };
+
+  const reloadUsers = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/admin/users`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (Array.isArray(data)) setUsers(data);
+    } catch {}
+  };
+
+  const handleSaveFare = async (flightId, fareId) => {
+    setFareMsg('');
+    const price = parseFloat(editingPrice);
+    if (isNaN(price) || price < 0) {
+      setFareMsg('Enter a valid price of 0 or more.');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_URL}/api/flights/${flightId}/fares/${fareId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ price }),
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        setFareMsg(text || 'Could not update the fare.');
+        return;
+      }
+      setEditingFareId(null);
+      setFareMsg('Fare price updated.');
+      reloadFlights();
+    } catch {
+      setFareMsg('Unable to connect to server.');
+    }
+  };
+
+  const handleDeleteFare = async (flightId, fareId) => {
+    if (!window.confirm('Delete this fare? This cannot be undone.')) return;
+    setFareMsg('');
+    try {
+      const res = await fetch(`${API_URL}/api/flights/${flightId}/fares/${fareId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        setFareMsg(text || 'Could not delete the fare.');
+        return;
+      }
+      setFareMsg('Fare deleted.');
+      reloadFlights();
+    } catch {
+      setFareMsg('Unable to connect to server.');
+    }
+  };
+
+  const handleChangeRole = async (userAccountId, newRole) => {
+    setUserMsg('');
+    try {
+      const res = await fetch(`${API_URL}/api/admin/users/${userAccountId}/role`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ role: newRole }),
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        setUserMsg(text || 'Could not change the role.');
+        reloadUsers();
+        return;
+      }
+      setUserMsg('Role updated.');
+      reloadUsers();
+    } catch {
+      setUserMsg('Unable to connect to server.');
+    }
+  };
+
+  const handleDeleteUser = async (userAccountId, userEmail) => {
+    if (!window.confirm(`Delete the account ${userEmail}? This cannot be undone.`)) return;
+    setUserMsg('');
+    try {
+      const res = await fetch(`${API_URL}/api/admin/users/${userAccountId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        setUserMsg(text || 'Could not delete the user.');
+        return;
+      }
+      setUserMsg('User deleted.');
+      reloadUsers();
+    } catch {
+      setUserMsg('Unable to connect to server.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F4F6F9] flex flex-col font-sans text-gray-900">
       <header className="h-20 bg-white border-b border-gray-200 flex items-center justify-between px-8 sticky top-0 z-10">
@@ -212,6 +320,11 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
               placeholder="Search flights by number, route, or status..."
               className="w-full max-w-md bg-white border border-gray-200 rounded-2xl px-5 py-3 text-sm font-medium outline-none focus:border-[#0066ff] focus:ring-2 focus:ring-blue-100 shadow-sm mb-6"
             />
+            {fareMsg && (
+              <p className="bg-green-50 border border-green-200 text-green-800 font-semibold rounded-xl p-3 text-xs mb-6 max-w-md">
+                {fareMsg}
+              </p>
+            )}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {filteredFlights.map(f => (
                 <div key={f.flightId} className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
@@ -228,9 +341,28 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
                   </div>
                   <div className="flex flex-col gap-2 mt-4">
                     {(f.fares || []).map(fare => (
-                      <div key={fare.flightFareId} className="flex justify-between text-sm bg-gray-50 rounded-xl px-4 py-2">
+                      <div key={fare.flightFareId} className="flex justify-between items-center text-sm bg-gray-50 rounded-xl px-4 py-2">
                         <span className="text-gray-600 font-medium">Fare {fare.fareClassId}</span>
-                        <span className="font-bold text-gray-900">${fare.currentPrice} <span className="text-gray-400 font-normal">| {fare.availableInventory} left</span></span>
+                        {editingFareId === fare.flightFareId ? (
+                          <span className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={editingPrice}
+                              onChange={(e) => setEditingPrice(e.target.value)}
+                              className="w-24 bg-white border border-gray-300 rounded-lg px-2 py-1 text-xs font-mono outline-none focus:border-blue-500"
+                            />
+                            <button onClick={() => handleSaveFare(f.flightId, fare.flightFareId)} className="text-xs font-bold text-green-700 hover:underline cursor-pointer">Save</button>
+                            <button onClick={() => setEditingFareId(null)} className="text-xs font-bold text-gray-500 hover:underline cursor-pointer">Cancel</button>
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-2">
+                            <span className="font-bold text-gray-900">${fare.currentPrice} <span className="text-gray-400 font-normal">| {fare.availableInventory} left</span></span>
+                            <button onClick={() => { setEditingFareId(fare.flightFareId); setEditingPrice(String(fare.currentPrice)); setFareMsg(''); }} className="text-xs font-bold text-blue-600 hover:underline cursor-pointer">Edit</button>
+                            <button onClick={() => handleDeleteFare(f.flightId, fare.flightFareId)} className="text-xs font-bold text-red-600 hover:underline cursor-pointer">Delete</button>
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -280,6 +412,11 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
               </div>
               <span className="text-sm text-gray-500 font-medium">{staffCount} staff · {memberCount} members · {users.length} total</span>
             </div>
+            {userMsg && (
+              <p className="bg-green-50 border border-green-200 text-green-800 font-semibold rounded-xl p-3 text-xs mb-4 max-w-md">
+                {userMsg}
+              </p>
+            )}
             <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
             <table className="w-full text-sm text-left">
               <thead className="bg-gray-50 text-gray-500 font-semibold border-b border-gray-100">
@@ -288,6 +425,7 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
                   <th className="px-8 py-4">Role</th>
                   <th className="px-8 py-4">Employee ID</th>
                   <th className="px-8 py-4">Passenger ID</th>
+                  <th className="px-8 py-4">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -295,14 +433,21 @@ export default function AdminPage({ token, email, onBackToHome, onToggleSidebar 
                   <tr key={u.userAccountId} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50">
                     <td className="px-8 py-4 font-medium">{u.email}</td>
                     <td className="px-8 py-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                        u.role === 'Supervisor' ? 'bg-blue-50 text-blue-700'
-                        : u.role === 'Employee' ? 'bg-purple-50 text-purple-700'
-                        : 'bg-gray-100 text-gray-600'
-                      }`}>{u.role}</span>
+                      <select
+                        value={u.role}
+                        onChange={(e) => handleChangeRole(u.userAccountId, e.target.value)}
+                        className="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold outline-none focus:border-blue-500 cursor-pointer"
+                      >
+                        <option value="Member">Member</option>
+                        <option value="Employee">Employee</option>
+                        <option value="Supervisor">Supervisor</option>
+                      </select>
                     </td>
                     <td className="px-8 py-4 text-gray-500">{u.employeeId ?? '—'}</td>
                     <td className="px-8 py-4 text-gray-500">{u.passengerId ?? '—'}</td>
+                    <td className="px-8 py-4">
+                      <button onClick={() => handleDeleteUser(u.userAccountId, u.email)} className="text-xs font-bold text-red-600 hover:underline cursor-pointer">Delete</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -98,6 +98,14 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
   const [cancelSuccess, setCancelSuccess] = useState('');
   const [cancelError, setCancelError] = useState('');
 
+  const [editFlightId, setEditFlightId] = useState('');
+  const [editDeparture, setEditDeparture] = useState('');
+  const [editArrival, setEditArrival] = useState('');
+  const [editStatus, setEditStatus] = useState('On Time');
+  const [loadingEdit, setLoadingEdit] = useState(false);
+  const [editSuccess, setEditSuccess] = useState('');
+  const [editError, setEditError] = useState('');
+
   useEffect(() => {
     fetch(`${API_URL}/api/airports`)
       .then((r) => r.json())
@@ -278,6 +286,99 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
       setCancelError('Unable to connect to server.');
     } finally {
       setLoadingCancel(false);
+    }
+  };
+
+  const toLocalInput = (dateStr, timeStr) => {
+    if (!dateStr) return '';
+    const d = String(dateStr).slice(0, 10);
+    const t = String(timeStr || '00:00:00').slice(0, 5);
+    return `${d}T${t}`;
+  };
+
+  const handleEditFlightSelect = async (id) => {
+    setEditFlightId(id);
+    setEditSuccess('');
+    setEditError('');
+    if (!id) {
+      setEditDeparture('');
+      setEditArrival('');
+      setEditStatus('On Time');
+      return;
+    }
+    try {
+      const r = await fetch(`${API_URL}/api/flights`);
+      const data = await r.json();
+      const list = Array.isArray(data) ? data : [];
+      const f = list.find((x) => String(x.flightId) === String(id));
+      if (!f) {
+        setEditError('Could not load this flight. It may have already departed.');
+        return;
+      }
+      setEditDeparture(toLocalInput(f.departureDate, f.departureTime));
+      setEditArrival(toLocalInput(f.arrivalDate, f.arrivalTime));
+      setEditStatus(f.flightStatus || 'On Time');
+    } catch {
+      setEditError('Unable to load flight details.');
+    }
+  };
+
+  const handleEditFlight = async (e) => {
+    e.preventDefault();
+    setEditSuccess('');
+    setEditError('');
+
+    const fId = parseInt(editFlightId, 10);
+    if (isNaN(fId) || fId <= 0) {
+      setEditError('Select a flight to edit.');
+      return;
+    }
+    if (!editDeparture || !editArrival) {
+      setEditError('Departure and Arrival date & time are required.');
+      return;
+    }
+    if (new Date(editDeparture) < new Date()) {
+      setEditError('Departure cannot be in the past.');
+      return;
+    }
+    if (new Date(editArrival) <= new Date(editDeparture)) {
+      setEditError('Arrival must be after departure.');
+      return;
+    }
+
+    setLoadingEdit(true);
+    try {
+      const res = await fetch(`${API_URL}/api/flights/${fId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          departure: new Date(editDeparture).toISOString(),
+          arrival: new Date(editArrival).toISOString(),
+          flightStatus: editStatus,
+        }),
+      });
+
+      const text = await res.text();
+      if (!res.ok) {
+        setEditError(text || 'Failed to update flight.');
+        return;
+      }
+
+      const data = JSON.parse(text);
+      setEditSuccess(`Flight ${data.flightNumber || fId} updated.`);
+      setEditFlightId('');
+      setEditDeparture('');
+      setEditArrival('');
+      setEditStatus('On Time');
+      if (onFlightUpdated) onFlightUpdated();
+      loadFlights();
+    } catch {
+      setEditError('Unable to connect to server.');
+    } finally {
+      setLoadingEdit(false);
     }
   };
 
@@ -568,6 +669,99 @@ export default function StaffFlightManagement({ token, onFlightUpdated }) {
                 className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-xl text-xs mt-2 transition-colors cursor-pointer disabled:opacity-50"
               >
                 {loadingCancel ? 'Cancelling Flight...' : 'Cancel Flight'}
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm flex flex-col justify-between">
+          <div>
+            <h3 className="font-bold text-gray-900 text-lg mb-4 flex items-center gap-2">
+              <span className="text-blue-600">✎</span> Edit Flight
+            </h3>
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-800 font-medium mb-4">
+              Note: A cancelled flight cannot be edited. Pick a flight to load its current times.
+            </div>
+
+            {editSuccess && (
+              <p className="bg-green-50 border border-green-200 text-green-800 font-semibold rounded-xl p-3 text-xs mb-4">
+                {editSuccess}
+              </p>
+            )}
+            {editError && (
+              <p className="bg-red-50 border border-red-200 text-red-700 font-semibold rounded-xl p-3 text-xs mb-4">
+                {editError}
+              </p>
+            )}
+
+            <form onSubmit={handleEditFlight} className="flex flex-col gap-3">
+              <div>
+                <label className="text-xs font-semibold text-gray-600 mb-1 block">Flight to Edit</label>
+                {flights.length > 0 ? (
+                  <select
+                    value={editFlightId}
+                    onChange={(e) => handleEditFlightSelect(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-2 py-2 text-xs text-gray-900 outline-none focus:border-blue-500 cursor-pointer"
+                  >
+                    <option value="">Select a flight…</option>
+                    {flights.map((f) => (
+                      <option key={f.flightId} value={f.flightId}>
+                        {f.flightNumber} — {f.originAirportCode} → {f.destinationAirportCode} ({String(f.departureDate || '').slice(0, 10)})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="number"
+                    placeholder="e.g. 546"
+                    value={editFlightId}
+                    onChange={(e) => handleEditFlightSelect(e.target.value)}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 outline-none focus:border-blue-500 font-mono"
+                  />
+                )}
+                <p className="text-[11px] text-gray-400 mt-1">Pick the flight by its flight number — the ID is filled in for you.</p>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-600 mb-1 block">Departure Date & Time</label>
+                <input
+                  type="datetime-local"
+                  value={editDeparture}
+                  onChange={(e) => setEditDeparture(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-600 mb-1 block">Arrival Date & Time</label>
+                <input
+                  type="datetime-local"
+                  value={editArrival}
+                  onChange={(e) => setEditArrival(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-600 mb-1 block">Flight Status</label>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-900 outline-none focus:border-blue-500 cursor-pointer"
+                >
+                  <option value="On Time">On Time</option>
+                  <option value="Delayed">Delayed</option>
+                  <option value="Boarding">Boarding</option>
+                  <option value="Departed">Departed</option>
+                </select>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loadingEdit}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-xs mt-2 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {loadingEdit ? 'Saving Changes...' : 'Save Flight Changes'}
               </button>
             </form>
           </div>

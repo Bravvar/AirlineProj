@@ -168,13 +168,13 @@ public class HomeController : ControllerBase
         var data = _context.Flight.AsQueryable();
 
         var today = DateTime.Today;
-var currentTime = DateTime.Now.TimeOfDay;
+        var currentTime = DateTime.Now.TimeOfDay;
 
-data = data.Where(i =>
-    i.FlightStatus != "Cancelled" &&
-    (i.DepartureDate > today ||
-    (i.DepartureDate == today && i.DepartureTime > currentTime))
-);
+        data = data.Where(i =>
+            i.FlightStatus != "Cancelled" &&
+            (i.DepartureDate > today ||
+            (i.DepartureDate == today && i.DepartureTime > currentTime))
+        );
 
         if (!string.IsNullOrEmpty(origin))
         {
@@ -780,7 +780,7 @@ data = data.Where(i =>
         if (flight == null) return NotFound("No flight like that");
         if (flight.FlightStatus == "Cancelled") return BadRequest("Flight is cancelled");
         if (flight.DepartureDate.Date + flight.DepartureTime <= DateTime.Now)
-    return BadRequest("This flight has already departed and cannot be booked.");
+            return BadRequest("This flight has already departed and cannot be booked.");
 
         FlightFare? returnFare = null;
         Flight? returnFlight = null;
@@ -792,12 +792,12 @@ data = data.Where(i =>
 
             returnFlight = _context.Flight.FirstOrDefault(i => i.FlightId == returnFare.FlightId);
             if (returnFlight == null) return NotFound("No return flight like that");
-           if (returnFlight.FlightStatus == "Cancelled")
-    return BadRequest("Return flight is cancelled");
+            if (returnFlight.FlightStatus == "Cancelled")
+                return BadRequest("Return flight is cancelled");
 
-if (returnFlight.DepartureDate.Date + returnFlight.DepartureTime <= DateTime.Now)
-    return BadRequest("This return flight has already departed and cannot be booked.");
-}
+            if (returnFlight.DepartureDate.Date + returnFlight.DepartureTime <= DateTime.Now)
+                return BadRequest("This return flight has already departed and cannot be booked.");
+        }
 
         var passengerNames = (book.passengers ?? new List<PassengerName>())
             .Where(p => !string.IsNullOrWhiteSpace(p.firstName) && !string.IsNullOrWhiteSpace(p.lastName))
@@ -1301,15 +1301,15 @@ p.first_name AS PassengerFirstName, p.last_name AS PassengerLastName
             FROM Ticket t JOIN Passenger p ON p.passenger_id = t.passenger_id
             WHERE t.reservation_id = {0} AND t.ticket_status <> 'Cancelled'
             ORDER BY t.ticket_id", id).ToList();
-       if (tickets.Count == 0)
-    return Ok(new
-    {
-        ticketNumber = (string?)null,
-        tickets = new List<TicketRow>(),
-        seatAssignments = new List<TicketSeatRow>()
-    });
+        if (tickets.Count == 0)
+            return Ok(new
+            {
+                ticketNumber = (string?)null,
+                tickets = new List<TicketRow>(),
+                seatAssignments = new List<TicketSeatRow>()
+            });
 
-var seatAssignments = _context.Database.SqlQueryRaw<TicketSeatRow>(@"
+        var seatAssignments = _context.Database.SqlQueryRaw<TicketSeatRow>(@"
     SELECT
         rp.passenger_id AS PassengerId,
         sa.reservation_segment_id AS ReservationSegmentId,
@@ -1322,12 +1322,12 @@ var seatAssignments = _context.Database.SqlQueryRaw<TicketSeatRow>(@"
     WHERE rp.reservation_id = {0}
       AND sa.active_seat = 1", id).ToList();
 
-return Ok(new
-{
-    ticketNumber = tickets[0].TicketNumber,
-    tickets = tickets,
-    seatAssignments = seatAssignments
-});
+        return Ok(new
+        {
+            ticketNumber = tickets[0].TicketNumber,
+            tickets = tickets,
+            seatAssignments = seatAssignments
+        });
     }
 
     [HttpGet("reports")]
@@ -1932,6 +1932,107 @@ return Ok(new
         });
     }
 
+    [HttpPut("flights/{id}")]
+    public async Task<IActionResult> EditFlight(int id, [FromBody] EditFlightPayload edit)
+    {
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (role != "Supervisor") return StatusCode(403, "Supervisors only");
+        var flight = await _context.Flight.FirstOrDefaultAsync(f => f.FlightId == id);
+        if (flight == null) return NotFound("Flight not found");
+        if (flight.FlightStatus == "Cancelled") return BadRequest("A cancelled flight cannot be edited");
+        if (edit.departure < DateTime.Now) return BadRequest("Departure can't be made in the past.");
+        if (edit.arrival <= edit.departure) return BadRequest("Arrival must be after departure");
+        var validStatuses = new[] { "On Time", "Delayed", "Boarding", "Departed" };
+        if (!validStatuses.Contains(edit.flightStatus)) return BadRequest("Invalid flight status");
+        flight.DepartureDate = edit.departure.Date;
+        flight.DepartureTime = edit.departure.TimeOfDay;
+        flight.ArrivalDate = edit.arrival.Date;
+        flight.ArrivalTime = edit.arrival.TimeOfDay;
+        flight.FlightStatus = edit.flightStatus;
+        if (edit.flightStatus == "On Time") flight.StatusReason = string.Empty;
+        await _context.SaveChangesAsync();
+        return Ok(new { flightId = flight.FlightId, flightNumber = flight.FlightNumber, flightStatus = flight.FlightStatus });
+    }
+
+    [HttpPut("flights/{flightId}/fares/{fareId}")]
+    public async Task<IActionResult> UpdateFare(int flightId, int fareId, [FromBody] UpdateFarePayload update)
+    {
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (role != "Supervisor") return StatusCode(403, "Supervisors only");
+        var fare = await _context.FlightFare.FirstOrDefaultAsync(f => f.FlightFareId == fareId && f.FlightId == flightId);
+        if (fare == null) return NotFound("Fare not found");
+        if (update.price < 0) return BadRequest("Price cannot be negative");
+        var maxPrice = fare.CabinClassId switch { 1 => 300m, 2 => 500m, 3 => 1000m, _ => 300m };
+        if (update.price > maxPrice) return BadRequest($"Price cannot exceed ${maxPrice} for this cabin");
+        fare.BasePrice = update.price;
+        fare.CurrentPrice = update.price;
+        await _context.SaveChangesAsync();
+        return Ok(new { flightFareId = fare.FlightFareId, currentPrice = fare.CurrentPrice });
+    }
+
+    [HttpDelete("flights/{flightId}/fares/{fareId}")]
+    public async Task<IActionResult> DeleteFare(int flightId, int fareId)
+    {
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (role != "Supervisor") return StatusCode(403, "Supervisors only");
+        var fare = await _context.FlightFare.FirstOrDefaultAsync(f => f.FlightFareId == fareId && f.FlightId == flightId);
+        if (fare == null) return NotFound("Fare not found");
+        var booked = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM ReservationSegment WHERE flight_fare_id = {0} AND segment_status = 'Booked'", fareId).FirstOrDefault();
+        if (booked > 0) return BadRequest("Cannot delete this fare: it has bookings.");
+        _context.FlightFare.Remove(fare);
+        await _context.SaveChangesAsync();
+        return NoContent();
+    }
+
+    [HttpPut("admin/users/{id}/role")]
+    public async Task<IActionResult> ChangeUserRole(int id, [FromBody] ChangeRolePayload change)
+    {
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (role != "Supervisor") return StatusCode(403, "Supervisors only");
+        var validRoles = new[] { "Member", "Employee", "Supervisor" };
+        if (!validRoles.Contains(change.role)) return BadRequest("Invalid role");
+        var user = await _context.UserAccount.FirstOrDefaultAsync(u => u.UserAccountId == id);
+        if (user == null) return NotFound("User not found");
+        var currentUserIdText = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (int.TryParse(currentUserIdText, out int currentUserId) && currentUserId == id) return BadRequest("You cannot change your own role");
+        if ((change.role == "Employee" || change.role == "Supervisor") && user.EmployeeId == null) return BadRequest("This user has no employee record, so the role cannot be changed to Employee or Supervisor");
+        if (change.role == "Member" && user.PassengerId == null) return BadRequest("This user has no passenger record, so the role cannot be changed to Member");
+        user.Role = change.role;
+        await _context.SaveChangesAsync();
+        return Ok(new { userAccountId = user.UserAccountId, email = user.Email, role = user.Role });
+    }
+
+    [HttpDelete("admin/users/{id}")]
+    public async Task<IActionResult> DeleteUser(int id)
+    {
+        var role = User.FindFirst(ClaimTypes.Role)?.Value;
+        if (role != "Supervisor") return StatusCode(403, "Supervisors only");
+        var user = await _context.UserAccount.FirstOrDefaultAsync(u => u.UserAccountId == id);
+        if (user == null) return NotFound("User not found");
+        var currentUserIdText = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (int.TryParse(currentUserIdText, out int currentUserId) && currentUserId == id) return BadRequest("You cannot delete your own account");
+        if (user.Role == "Supervisor")
+        {
+            var supervisorCount = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM UserAccount WHERE role = 'Supervisor'").FirstOrDefault();
+            if (supervisorCount <= 1) return BadRequest("Cannot delete the last supervisor");
+        }
+        if (user.PassengerId != null)
+        {
+            var activeReservations = _context.Database.SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM Reservation r JOIN ReservationPassenger rp ON rp.reservation_id = r.reservation_id WHERE rp.passenger_id = {0} AND r.reservation_status IN ('Held', 'Confirmed')", user.PassengerId.Value).FirstOrDefault();
+            if (activeReservations > 0) return BadRequest("Cannot delete this user: they have active reservations.");
+        }
+        _context.UserAccount.Remove(user);
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            return BadRequest("Cannot delete this user: their account is referenced by other records.");
+        }
+        return NoContent();
+    }
+
     [HttpGet("staff/flights")]
     public IActionResult StaffFlights()
     {
@@ -2001,6 +2102,9 @@ public record ChangePasswordPayload(string currentPassword, string newPassword);
 public record ModifyPayload(string? phone, string? address, string? mealSelection, int? additionalCheckedBags);
 public record AddFlightPayload(string flightNumber, string origin, string destination, int aircraftId, DateTime departure, DateTime arrival);
 public record AddFarePayload(int cabinClassId, int fareClassId, decimal price, int allocatedCapacity);
+public record EditFlightPayload(DateTime departure, DateTime arrival, string flightStatus);
+public record UpdateFarePayload(decimal price);
+public record ChangeRolePayload(string role);
 
 
 public class Report1Row { public int FlightId { get; set; } public string FlightNumber { get; set; } public string Origin { get; set; } public string Destination { get; set; } public string FlightStatus { get; set; } public string? Departure { get; set; } public long TicketsSold { get; set; } public decimal Revenue { get; set; } public long Capacity { get; set; } public decimal? LoadFactor { get; set; } public decimal? AvgFare { get; set; } }
@@ -2020,7 +2124,7 @@ public class DealRow { public int FlightId { get; set; } public string FlightNum
 public class FareRow { public int FlightFareId { get; set; } public int FlightId { get; set; } public int CabinClassId { get; set; } public string CabinName { get; set; } public int FareClassId { get; set; } public string FareClassName { get; set; } public bool Refundable { get; set; } public bool ChangesAllowed { get; set; } public decimal ChangeFee { get; set; } public int CheckedBagsIncluded { get; set; } public int CarryOnBagsIncluded { get; set; } public bool SeatSelectionIncluded { get; set; } public decimal BasePrice { get; set; } public decimal CurrentPrice { get; set; } public int AllocatedCapacity { get; set; } public int AvailableInventory { get; set; } }
 public class SegmentRow { public int ReservationSegmentId { get; set; } public int ReservationId { get; set; } public int FlightId { get; set; } public int FlightFareId { get; set; } public int SegmentNumber { get; set; } public string SegmentStatus { get; set; } public decimal FarePriceAtBooking { get; set; } public DateTime? CancellationDateTime { get; set; } public string? CancellationReason { get; set; } public string FlightNumber { get; set; } public string Origin { get; set; } public string Destination { get; set; } public DateTime DepartureDate { get; set; } public TimeSpan DepartureTime { get; set; } public DateTime ArrivalDate { get; set; } public TimeSpan ArrivalTime { get; set; } public string FlightStatus { get; set; } public string? SeatNumber { get; set; } }
 public class Query1Row { public string FlightNumber { get; set; } public string OriginAirportCode { get; set; } public string DestinationAirportCode { get; set; } public DateTime DepartureDate { get; set; } public TimeSpan DepartureTime { get; set; } public string CabinName { get; set; } public string FareClassName { get; set; } public decimal CurrentPrice { get; set; } public int AvailableInventory { get; set; } }
-public class TicketRow { public int TicketId { get; set; } public int PassengerId { get; set; }public string TicketNumber { get; set; } public string TicketStatus { get; set; } public decimal FareAmount { get; set; } public decimal TaxAmount { get; set; } public decimal TotalFarePaid { get; set; } public DateTime IssueDateTime { get; set; } public string? PassengerFirstName { get; set; } public string? PassengerLastName { get; set; } }
+public class TicketRow { public int TicketId { get; set; } public int PassengerId { get; set; } public string TicketNumber { get; set; } public string TicketStatus { get; set; } public decimal FareAmount { get; set; } public decimal TaxAmount { get; set; } public decimal TotalFarePaid { get; set; } public DateTime IssueDateTime { get; set; } public string? PassengerFirstName { get; set; } public string? PassengerLastName { get; set; } }
 
 public class EmployeeRow { public string FirstName { get; set; } public string LastName { get; set; } public DateTime? DateOfBirth { get; set; } public string Email { get; set; } public string? Phone { get; set; } }
 public class StaffFlightRow { public int FlightId { get; set; } public string FlightNumber { get; set; } public string OriginAirportCode { get; set; } public string DestinationAirportCode { get; set; } public DateTime DepartureDate { get; set; } public string FlightStatus { get; set; } public string? StatusReason { get; set; } public long BookedSeats { get; set; } public string? PassengerNames { get; set; } }
