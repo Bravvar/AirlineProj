@@ -346,67 +346,11 @@ function ReportDrillDown({ details }) {
 
   const records = details.rows;
 
-  const total = details.amountKey
-    ? records.reduce(
-        (sum, row) =>
-          sum + Number(row[details.amountKey] || 0),
-        0
-      )
-    : null;
-
-  const amountsMatch =
-    total === null ||
-    Math.abs(total - Number(details.expectedAmount || 0)) < 0.01;
-
-  const countsMatch =
-    details.expectedCount == null ||
-    Number(details.expectedCount) === records.length;
-
-  const matches = amountsMatch && countsMatch;
-
   return (
     <div className="bg-blue-50/40 border border-blue-100 rounded-xl p-5">
       <h3 className="font-bold text-blue-900 mb-3">
         {details.title}
       </h3>
-
-      <div className="flex flex-wrap items-center gap-4 text-sm mb-4">
-        <span className="text-gray-600">
-          {records.length} supporting record(s)
-        </span>
-
-        {total !== null && (
-          <>
-            <span>
-              Supporting Total:
-              <strong className="ml-1">
-                {formatDrillMoney(total)}
-              </strong>
-            </span>
-
-            <span>
-              Report Total:
-              <strong className="ml-1">
-                {formatDrillMoney(details.expectedAmount)}
-              </strong>
-            </span>
-          </>
-        )}
-
-        {(total !== null || details.expectedCount != null) && (
-          <span
-            className={
-              matches
-                ? 'font-semibold text-green-700'
-                : 'font-semibold text-amber-700'
-            }
-          >
-            {matches
-              ? 'Records match summary'
-              : 'Reconciliation requires review'}
-          </span>
-        )}
-      </div>
 
       {records.length === 0 ? (
         <p className="text-sm text-gray-500">
