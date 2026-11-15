@@ -1468,8 +1468,8 @@ p.first_name AS PassengerFirstName, p.last_name AS PassengerLastName
         f.destination_airport_code AS Destination,
         CONCAT(traveler.first_name, ' ', traveler.last_name) AS Passenger,
         COALESCE(
-            NULLIF(CONCAT(purchaser.first_name, ' ', purchaser.last_name), ' '),
-            purchaserAccount.email,
+            NULLIF((SELECT CONCAT(p.first_name, ' ', p.last_name) FROM ReservationPassenger rp0 JOIN Passenger p ON p.passenger_id = rp0.passenger_id WHERE rp0.reservation_id = r.reservation_id ORDER BY rp0.reservation_passenger_id LIMIT 1), ' '),
+            (SELECT ua.email FROM ReservationPassenger rp0 JOIN UserAccount ua ON ua.passenger_id = rp0.passenger_id WHERE rp0.reservation_id = r.reservation_id ORDER BY rp0.reservation_passenger_id LIMIT 1),
             NULLIF(CONCAT(issuer.first_name, ' ', issuer.last_name), ' '),
             'Unknown'
         ) AS PurchasedBy,
@@ -1489,16 +1489,6 @@ p.first_name AS PassengerFirstName, p.last_name AS PassengerLastName
         ON r.reservation_id = t.reservation_id
     JOIN Passenger traveler
         ON traveler.passenger_id = t.passenger_id
-    LEFT JOIN UserAccount purchaserAccount
-        ON purchaserAccount.passenger_id = (
-            SELECT rp0.passenger_id
-            FROM ReservationPassenger rp0
-            WHERE rp0.reservation_id = r.reservation_id
-            ORDER BY rp0.reservation_passenger_id
-            LIMIT 1
-        )
-    LEFT JOIN Passenger purchaser
-        ON purchaser.passenger_id = purchaserAccount.passenger_id
     LEFT JOIN Employee issuer
         ON issuer.employee_id = t.employee_id
     " + detailWhereSql + @"
