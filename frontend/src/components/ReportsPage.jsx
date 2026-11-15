@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Logo from './Logo';
 import { API_URL } from '../config';
 
@@ -239,7 +239,223 @@ function useClickOutside(ref, handler) {
   }, [ref, handler]);
 }
 
-function ReportTable({ def, rows, search, hiddenColumns, toggleColumn, loading }) {
+const formatDrillMoney = (amount) =>
+  '$' + Number(amount || 0).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+function getDrillDetails(report, row, data) {
+  const getRows = (key) =>
+    Array.isArray(data?.[key]) ? data[key] : [];
+
+  switch (report.key) {
+    case 'report1':
+      return {
+        title: 'Supporting Ticket Purchases',
+        rows: getRows('report1Details').filter(
+          (d) => Number(d.flightId) === Number(row.flightId)
+        ),
+        columns: [
+          ['ticketNumber', 'Ticket Number'],
+          ['passenger', 'Passenger'],
+          ['purchasedBy', 'Purchased By'],
+          ['ticketStatus', 'Status'],
+          ['ticketRevenue', 'Revenue'],
+        ],
+        amountKey: 'ticketRevenue',
+        expectedAmount: row.revenue,
+        expectedCount: row.ticketsSold,
+      };
+
+    case 'report2':
+      return {
+        title: 'Membership Source Record',
+        rows: [row],
+        columns: [
+          ['passengerId', 'Passenger ID'],
+          ['passenger', 'Passenger'],
+          ['membershipNumber', 'Membership Number'],
+          ['memberSince', 'Member Since'],
+          ['pointsBalance', 'Current Points'],
+          ['pointsEarnedInApp', 'Points Earned'],
+          ['pointsReversed', 'Points Reversed'],
+          ['membershipStatus', 'Status'],
+          ['tier', 'Calculated Tier'],
+        ],
+      };
+
+    case 'report3':
+      return {
+        title: 'Supporting Payment Transaction',
+        rows: getRows('report3Details').filter(
+          (d) => Number(d.paymentId) === Number(row.paymentId)
+        ),
+        columns: [
+          ['paymentId', 'Payment ID'],
+          ['customerName', 'Customer'],
+          ['transactionReference', 'Reference'],
+          ['transactionType', 'Type'],
+          ['amount', 'Amount'],
+          ['requestDateTime', 'Date & Time'],
+        ],
+        amountKey: 'amount',
+        expectedAmount: row.amount,
+      };
+
+    case 'report4':
+      return {
+        title: 'Flight Fare Passenger Details',
+        rows: getRows('report4Details').filter(
+          (d) => Number(d.flightFareId) === Number(row.flightFareId)
+        ),
+        columns: [
+          ['passengerName', 'Passenger'],
+          ['ticketNumber', 'Ticket Number'],
+          ['seatNumber', 'Seat Number'],
+          ['cabinClass', 'Cabin Class'],
+        ],
+        expectedCount: row.seatsSold,
+      };
+
+    case 'report7':
+      return {
+        title: `Supporting Tickets for ${row.airport}`,
+        rows: getRows('report7Details').filter(
+          (d) => d.airport === row.airport
+        ),
+        columns: [
+          ['customerName', 'Customer'],
+          ['ticketId', 'Ticket ID'],
+          ['ticketNumber', 'Ticket Number'],
+          ['amountPaid', 'Amount Paid'],
+          ['purchaseDateTime', 'Purchase Date'],
+        ],
+        amountKey: 'amountPaid',
+        expectedAmount: row.revenue,
+        expectedCount: row.ticketsSold,
+      };
+
+    default:
+      return null;
+  }
+}
+
+function ReportDrillDown({ details }) {
+  if (!details) return null;
+
+  const records = details.rows;
+
+  const total = details.amountKey
+    ? records.reduce(
+        (sum, row) =>
+          sum + Number(row[details.amountKey] || 0),
+        0
+      )
+    : null;
+
+  const amountsMatch =
+    total === null ||
+    Math.abs(total - Number(details.expectedAmount || 0)) < 0.01;
+
+  const countsMatch =
+    details.expectedCount == null ||
+    Number(details.expectedCount) === records.length;
+
+  const matches = amountsMatch && countsMatch;
+
+  return (
+    <div className="bg-blue-50/40 border border-blue-100 rounded-xl p-5">
+      <h3 className="font-bold text-blue-900 mb-3">
+        {details.title}
+      </h3>
+
+      <div className="flex flex-wrap items-center gap-4 text-sm mb-4">
+        <span className="text-gray-600">
+          {records.length} supporting record(s)
+        </span>
+
+        {total !== null && (
+          <>
+            <span>
+              Supporting Total:
+              <strong className="ml-1">
+                {formatDrillMoney(total)}
+              </strong>
+            </span>
+
+            <span>
+              Report Total:
+              <strong className="ml-1">
+                {formatDrillMoney(details.expectedAmount)}
+              </strong>
+            </span>
+          </>
+        )}
+
+        {(total !== null || details.expectedCount != null) && (
+          <span
+            className={
+              matches
+                ? 'font-semibold text-green-700'
+                : 'font-semibold text-amber-700'
+            }
+          >
+            {matches
+              ? 'Records match summary'
+              : 'Reconciliation requires review'}
+          </span>
+        )}
+      </div>
+
+      {records.length === 0 ? (
+        <p className="text-sm text-gray-500">
+          No matching supporting records were found.
+          Rows with no sales may legitimately have no records.
+        </p>
+      ) : (
+        <div className="overflow-x-auto overflow-y-auto max-h-80">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-blue-50">
+              <tr>
+                {details.columns.map(([key, label]) => (
+                  <th
+                    key={key}
+                    className="px-4 py-3 border-b border-blue-100 whitespace-nowrap"
+                  >
+                    {label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+
+            <tbody>
+              {records.map((record, index) => (
+                <tr
+                  key={`${record.ticketId || record.paymentId || record.passengerId || index}-${index}`}
+                  className="border-b border-gray-100"
+                >
+                  {details.columns.map(([key]) => (
+                    <td
+                      key={key}
+                      className="px-4 py-3 whitespace-nowrap"
+                    >
+                      {key === details.amountKey
+                        ? formatDrillMoney(record[key])
+                        : String(record[key] ?? '—')}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+function ReportTable({ def, rows, search, hiddenColumns, toggleColumn, loading, reportsData }) {
+  const [expandedRow, setExpandedRow] = useState(null);
   const [showColumns, setShowColumns] = useState(false);
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
@@ -292,6 +508,23 @@ function ReportTable({ def, rows, search, hiddenColumns, toggleColumn, loading }
 
   const cols = def.columns.filter((c) => !hiddenColumns.has(c.key));
 
+  const getRowKey = (row, index) => {
+    switch (def.key) {
+      case 'report1':
+        return `flight-${row.flightId}`;
+      case 'report2':
+        return `member-${row.passengerId}`;
+      case 'report3':
+        return `payment-${row.paymentId}`;
+      case 'report4':
+        return `fare-${row.flightFareId}`;
+      case 'report7':
+        return `airport-${row.airport}`;
+      default:
+        return String(index);
+    }
+  };
+
   return (
     <div className="bg-white rounded-3xl shadow border border-gray-200 overflow-visible">
       <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/60 flex flex-wrap justify-between items-center gap-4 rounded-t-3xl">
@@ -300,6 +533,9 @@ function ReportTable({ def, rows, search, hiddenColumns, toggleColumn, loading }
           {def.description && (
             <p className="text-sm text-gray-600 mt-1 max-w-2xl">{def.description}</p>
           )}
+          <p className="text-xs text-blue-600 mt-1">
+            Click the blue arrow for further information
+          </p>
           <p className="text-xs text-gray-500 mt-0.5">{filteredRows.length} {filteredRows.length === 1 ? 'record' : 'records'}{(search || (filterCol && filterVal)) ? ' (filtered)' : ''}</p>
         </div>
 
@@ -394,15 +630,70 @@ function ReportTable({ def, rows, search, hiddenColumns, toggleColumn, loading }
                 </td>
               </tr>
             ) : (
-              sortedRows.map((row, idx) => (
-                <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
-                  {cols.map((col) => (
-                    <td key={col.key} className="px-6 py-3.5 whitespace-nowrap text-gray-800">
-                      {formatCell(row, col.key)}
-                    </td>
-                  ))}
-                </tr>
-              ))
+              sortedRows.map((row, idx) => {
+                const rowKey = getRowKey(row, idx);
+                const isExpanded = expandedRow === rowKey;
+
+                return (
+                  <Fragment key={rowKey}>
+                    <tr
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isExpanded}
+                      onClick={() =>
+                        setExpandedRow(
+                          isExpanded ? null : rowKey
+                        )
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setExpandedRow(
+                            isExpanded ? null : rowKey
+                          );
+                        }
+                      }}
+                      className={`cursor-pointer hover:bg-blue-50/50 transition-colors ${
+                        isExpanded ? 'bg-blue-50' : ''
+                      }`}
+                    >
+                      {cols.map((col, colIndex) => (
+                        <td
+                          key={col.key}
+                          className="px-6 py-3.5 whitespace-nowrap text-gray-800"
+                        >
+                          {colIndex === 0 && (
+                            <span
+                              className="mr-2 text-blue-600"
+                              aria-hidden="true"
+                            >
+                              {isExpanded ? '▾' : '▸'}
+                            </span>
+                          )}
+                          {formatCell(row, col.key)}
+                        </td>
+                      ))}
+                    </tr>
+
+                    {isExpanded && (
+                      <tr>
+                        <td
+                          colSpan={cols.length || 1}
+                          className="p-4"
+                        >
+                          <ReportDrillDown
+                            details={getDrillDetails(
+                              def,
+                              row,
+                              reportsData
+                            )}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -880,6 +1171,7 @@ export default function ReportsPage({ token, email, role, onBackToHome, onSignIn
                       hiddenColumns={hidden}
                       toggleColumn={toggleColumn}
                       loading={loading}
+                      reportsData={reportsData}
                     />
                     {def.key === 'report1' && (
                       <Report1DetailsTable
