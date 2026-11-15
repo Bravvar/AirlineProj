@@ -167,7 +167,14 @@ public class HomeController : ControllerBase
     {
         var data = _context.Flight.AsQueryable();
 
-        data = data.Where(i => i.FlightStatus != "Cancelled");
+        var today = DateTime.Today;
+var currentTime = DateTime.Now.TimeOfDay;
+
+data = data.Where(i =>
+    i.FlightStatus != "Cancelled" &&
+    (i.DepartureDate > today ||
+    (i.DepartureDate == today && i.DepartureTime > currentTime))
+);
 
         if (!string.IsNullOrEmpty(origin))
         {
@@ -261,7 +268,8 @@ public class HomeController : ControllerBase
             JOIN CabinClass cc ON cc.cabin_class_id = ff.cabin_class_id
             JOIN FareClass fc ON fc.fare_class_id = ff.fare_class_id
             WHERE ff.available_inventory > 0
-              AND f.flight_status <> 'Cancelled'
+  AND f.flight_status <> 'Cancelled'
+  AND TIMESTAMP(f.departure_date, f.departure_time) > NOW()
               AND ({0} IS NULL OR f.origin_airport_code = {0})
               AND ({1} IS NULL OR f.destination_airport_code = {1})
               AND ({2} IS NULL OR f.departure_date = {2})
@@ -771,6 +779,8 @@ public class HomeController : ControllerBase
         var flight = _context.Flight.FirstOrDefault(i => i.FlightId == fare.FlightId);
         if (flight == null) return NotFound("No flight like that");
         if (flight.FlightStatus == "Cancelled") return BadRequest("Flight is cancelled");
+        if (flight.DepartureDate.Date + flight.DepartureTime <= DateTime.Now)
+    return BadRequest("This flight has already departed and cannot be booked.");
 
         FlightFare? returnFare = null;
         Flight? returnFlight = null;
@@ -782,8 +792,12 @@ public class HomeController : ControllerBase
 
             returnFlight = _context.Flight.FirstOrDefault(i => i.FlightId == returnFare.FlightId);
             if (returnFlight == null) return NotFound("No return flight like that");
-            if (returnFlight.FlightStatus == "Cancelled") return BadRequest("Return flight is cancelled");
-        }
+           if (returnFlight.FlightStatus == "Cancelled")
+    return BadRequest("Return flight is cancelled");
+
+if (returnFlight.DepartureDate.Date + returnFlight.DepartureTime <= DateTime.Now)
+    return BadRequest("This return flight has already departed and cannot be booked.");
+}
 
         var passengerNames = (book.passengers ?? new List<PassengerName>())
             .Where(p => !string.IsNullOrWhiteSpace(p.firstName) && !string.IsNullOrWhiteSpace(p.lastName))
