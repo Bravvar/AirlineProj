@@ -46,7 +46,6 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
-builder.Services.AddAuthorization();
 
 builder.Services.AddDbContext<ApplicationDbContext>(
             dbContextOptions => dbContextOptions
@@ -55,15 +54,6 @@ builder.Services.AddDbContext<ApplicationDbContext>(
 builder.Services.AddHostedService<CancellationWorker>();
 
 var app = builder.Build();
-
-// Loyalty points: create the bookkeeping tables if missing and catch up on
-// any bookings / refunds that never updated points (see LoyaltyService.cs).
-using (var scope = app.Services.CreateScope())
-{
-    var loyaltyDb = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    var loyaltyLog = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Loyalty");
-    await LoyaltyService.EnsureReadyAsync(loyaltyDb, loyaltyLog);
-}
 
 if (app.Environment.IsDevelopment())
 {
@@ -74,21 +64,6 @@ app.UseHttpsRedirection();
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
-
-app.UseExceptionHandler(errorApp =>
-{
-    errorApp.Run(async context =>
-    {
-        context.Response.StatusCode = 500;
-        context.Response.ContentType = "application/json";
-
-        await context.Response.WriteAsJsonAsync(new
-        {
-            message = "An unexpected server error occurred."
-        });
-    });
-});
-
 app.MapControllers();
 
 app.Run();

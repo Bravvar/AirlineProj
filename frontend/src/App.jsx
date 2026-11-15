@@ -58,16 +58,48 @@ async function loadTripDetails(booking, segments, auth) {
   const [ticketData, outFare, retFare] = await Promise.all([ticketReq, fareFor(out), fareFor(ret)]);
 
   const outSeats = segmentSeats(out);
-  const retSeats = ret ? segmentSeats(ret) : [];
-  const rows = Array.isArray(ticketData?.tickets) ? ticketData.tickets : [];
-  const tickets = rows.length > 0
-    ? rows.map((t, i) => ({
-        ticketNumber: t.ticketNumber,
-        passengerName: [t.passengerFirstName, t.passengerLastName].filter(Boolean).join(' ') || 'Passenger',
-        seatNumber: outSeats[i] || '—',
-        returnSeatNumber: ret ? retSeats[i] || '—' : null,
-      }))
-    : null;
+const retSeats = ret ? segmentSeats(ret) : [];
+
+const rows = Array.isArray(ticketData?.tickets)
+  ? ticketData.tickets
+  : [];
+
+const assignments = Array.isArray(ticketData?.seatAssignments)
+  ? ticketData.seatAssignments
+  : [];
+
+const findSeat = (passengerId, segmentId) => {
+  const match = assignments.find(
+    (a) =>
+      Number(a.passengerId) === Number(passengerId) &&
+      Number(a.reservationSegmentId) === Number(segmentId)
+  );
+
+  return match?.seatNumber || '—';
+};
+
+const tickets = rows.length > 0
+  ? rows.map((t) => ({
+      ticketNumber: t.ticketNumber,
+
+      passengerName:
+        [t.passengerFirstName, t.passengerLastName]
+          .filter(Boolean)
+          .join(' ') || 'Passenger',
+
+      seatNumber: findSeat(
+        t.passengerId,
+        out.reservationSegmentId
+      ),
+
+      returnSeatNumber: ret
+        ? findSeat(
+            t.passengerId,
+            ret.reservationSegmentId
+          )
+        : null,
+    }))
+  : null;
   const ticketNumbers = tickets ? tickets.map((t) => t.ticketNumber) : ticketData?.ticketNumber ? [ticketData.ticketNumber] : [];
 
   return {

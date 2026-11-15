@@ -1282,12 +1282,38 @@ public class HomeController : ControllerBase
         var tickets = _context.Database.SqlQueryRaw<TicketRow>(@"
             SELECT t.ticket_id AS TicketId, t.ticket_number AS TicketNumber, t.ticket_status AS TicketStatus,
                    t.fare_amount AS FareAmount, t.tax_amount AS TaxAmount, t.total_fare_paid AS TotalFarePaid,
-                   t.issue_date_time AS IssueDateTime, p.first_name AS PassengerFirstName, p.last_name AS PassengerLastName
+                   t.issue_date_time AS IssueDateTime, t.passenger_id AS PassengerId,
+p.first_name AS PassengerFirstName, p.last_name AS PassengerLastName
             FROM Ticket t JOIN Passenger p ON p.passenger_id = t.passenger_id
             WHERE t.reservation_id = {0} AND t.ticket_status <> 'Cancelled'
             ORDER BY t.ticket_id", id).ToList();
-        if (tickets.Count == 0) return Ok(new { ticketNumber = (string?)null, tickets = new List<TicketRow>() });
-        return Ok(new { ticketNumber = tickets[0].TicketNumber, tickets = tickets });
+       if (tickets.Count == 0)
+    return Ok(new
+    {
+        ticketNumber = (string?)null,
+        tickets = new List<TicketRow>(),
+        seatAssignments = new List<TicketSeatRow>()
+    });
+
+var seatAssignments = _context.Database.SqlQueryRaw<TicketSeatRow>(@"
+    SELECT
+        rp.passenger_id AS PassengerId,
+        sa.reservation_segment_id AS ReservationSegmentId,
+        s.seat_number AS SeatNumber
+    FROM ReservationPassenger rp
+    JOIN SeatAssignment sa
+        ON sa.reservation_passenger_id = rp.reservation_passenger_id
+    JOIN Seat s
+        ON s.seat_id = sa.seat_id
+    WHERE rp.reservation_id = {0}
+      AND sa.active_seat = 1", id).ToList();
+
+return Ok(new
+{
+    ticketNumber = tickets[0].TicketNumber,
+    tickets = tickets,
+    seatAssignments = seatAssignments
+});
     }
 
     [HttpGet("reports")]
@@ -1980,7 +2006,7 @@ public class DealRow { public int FlightId { get; set; } public string FlightNum
 public class FareRow { public int FlightFareId { get; set; } public int FlightId { get; set; } public int CabinClassId { get; set; } public string CabinName { get; set; } public int FareClassId { get; set; } public string FareClassName { get; set; } public bool Refundable { get; set; } public bool ChangesAllowed { get; set; } public decimal ChangeFee { get; set; } public int CheckedBagsIncluded { get; set; } public int CarryOnBagsIncluded { get; set; } public bool SeatSelectionIncluded { get; set; } public decimal BasePrice { get; set; } public decimal CurrentPrice { get; set; } public int AllocatedCapacity { get; set; } public int AvailableInventory { get; set; } }
 public class SegmentRow { public int ReservationSegmentId { get; set; } public int ReservationId { get; set; } public int FlightId { get; set; } public int FlightFareId { get; set; } public int SegmentNumber { get; set; } public string SegmentStatus { get; set; } public decimal FarePriceAtBooking { get; set; } public DateTime? CancellationDateTime { get; set; } public string? CancellationReason { get; set; } public string FlightNumber { get; set; } public string Origin { get; set; } public string Destination { get; set; } public DateTime DepartureDate { get; set; } public TimeSpan DepartureTime { get; set; } public DateTime ArrivalDate { get; set; } public TimeSpan ArrivalTime { get; set; } public string FlightStatus { get; set; } public string? SeatNumber { get; set; } }
 public class Query1Row { public string FlightNumber { get; set; } public string OriginAirportCode { get; set; } public string DestinationAirportCode { get; set; } public DateTime DepartureDate { get; set; } public TimeSpan DepartureTime { get; set; } public string CabinName { get; set; } public string FareClassName { get; set; } public decimal CurrentPrice { get; set; } public int AvailableInventory { get; set; } }
-public class TicketRow { public int TicketId { get; set; } public string TicketNumber { get; set; } public string TicketStatus { get; set; } public decimal FareAmount { get; set; } public decimal TaxAmount { get; set; } public decimal TotalFarePaid { get; set; } public DateTime IssueDateTime { get; set; } public string? PassengerFirstName { get; set; } public string? PassengerLastName { get; set; } }
+public class TicketRow { public int TicketId { get; set; } public int PassengerId { get; set; }public string TicketNumber { get; set; } public string TicketStatus { get; set; } public decimal FareAmount { get; set; } public decimal TaxAmount { get; set; } public decimal TotalFarePaid { get; set; } public DateTime IssueDateTime { get; set; } public string? PassengerFirstName { get; set; } public string? PassengerLastName { get; set; } }
 
 public class EmployeeRow { public string FirstName { get; set; } public string LastName { get; set; } public DateTime? DateOfBirth { get; set; } public string Email { get; set; } public string? Phone { get; set; } }
 public class StaffFlightRow { public int FlightId { get; set; } public string FlightNumber { get; set; } public string OriginAirportCode { get; set; } public string DestinationAirportCode { get; set; } public DateTime DepartureDate { get; set; } public string FlightStatus { get; set; } public string? StatusReason { get; set; } public long BookedSeats { get; set; } public string? PassengerNames { get; set; } }
@@ -1995,6 +2021,13 @@ public class ModificationReceiptRow { public int PaymentId { get; set; } public 
 public class FlightCancellationRow { public int ReservationId { get; set; } public string FlightNumber { get; set; } public string ReviewStatus { get; set; } public decimal? ApprovedAmount { get; set; } public decimal RefundedAmount { get; set; } public string? RefundReference { get; set; } }
 public class AdminFlightRow { public int FlightId { get; set; } public string FlightNumber { get; set; } public string OriginAirportCode { get; set; } public string DestinationAirportCode { get; set; } public string FlightStatus { get; set; } }
 public class AdminFareRow { public int FlightId { get; set; } public int FlightFareId { get; set; } public int FareClassId { get; set; } public decimal CurrentPrice { get; set; } public int AvailableInventory { get; set; } }
+public class TicketSeatRow
+{
+    public int PassengerId { get; set; }
+    public int ReservationSegmentId { get; set; }
+    public string SeatNumber { get; set; } = "";
+}
+
 
 public class LoyaltyBalanceRow
 {
