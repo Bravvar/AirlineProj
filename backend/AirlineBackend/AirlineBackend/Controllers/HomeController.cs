@@ -792,12 +792,31 @@ public class HomeController : ControllerBase
 
             returnFlight = _context.Flight.FirstOrDefault(i => i.FlightId == returnFare.FlightId);
             if (returnFlight == null) return NotFound("No return flight like that");
+            
             if (returnFlight.FlightStatus == "Cancelled")
                 return BadRequest("Return flight is cancelled");
 
             if (returnFlight.DepartureDate.Date + returnFlight.DepartureTime <= DateTime.Now)
                 return BadRequest("This return flight has already departed and cannot be booked.");
+
+            if (returnFlight.OriginAirportCode != flight.DestinationAirportCode ||
+                returnFlight.DestinationAirportCode != flight.OriginAirportCode)
+            {
+                return BadRequest("Return flight must use the reverse route.");
+            }
+
+            var outboundArrival = flight.ArrivalDate.Date + flight.ArrivalTime;
+            var returnDeparture = returnFlight.DepartureDate.Date + returnFlight.DepartureTime;
+
+            if (returnDeparture <= outboundArrival)
+            {
+                return BadRequest("Return flight must depart after outbound arrival.");
+            }
         }
+
+
+
+
 
         var passengerNames = (book.passengers ?? new List<PassengerName>())
             .Where(p => !string.IsNullOrWhiteSpace(p.firstName) && !string.IsNullOrWhiteSpace(p.lastName))

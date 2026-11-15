@@ -678,40 +678,68 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
     }
   };
 
-  const handleReturnSearch = async () => {
+  
+  const handleReturnSearch = async (outboundFlight) => {
     setReturnSearching(true);
     setShowAllReturn(false);
+    setReturnResults([]);
+
     const params = new URLSearchParams();
-    if (to.trim()) params.set('origin', to.trim().toUpperCase());
-    if (from.trim()) params.set('destination', from.trim().toUpperCase());
+    params.set('origin', outboundFlight.destinationAirportCode);
+    params.set('destination', outboundFlight.originAirportCode);
+
     const dateParam = buildDateParam(endDate);
     if (dateParam) params.set('date', dateParam);
 
+    const flightDateTime = (date, time) => {
+      if (!date || !time) return null;
+
+      const datePart = String(date).slice(0, 10);
+      const timePart = String(time).slice(0, 8);
+      const result = new Date(`${datePart}T${timePart}`);
+
+      return Number.isNaN(result.getTime()) ? null : result;
+    };
+
+    const outboundArrival = flightDateTime(
+      outboundFlight.arrivalDate,
+      outboundFlight.arrivalTime
+    );
+
     try {
       const res = await fetch(`${API_URL}/api/flights?${params.toString()}`);
+
+      if (!res.ok) throw new Error('Return flight search failed');
+
       const data = await res.json();
-      let rows = Array.isArray(data) ? data : [];
+      const rows = Array.isArray(data) ? data : [];
 
-      rows = rows.filter((f) => (f.flightStatus || f.FlightStatus) !== 'Cancelled');
+      const validReturns = rows.filter((f) => {
+        if (f.flightStatus === 'Cancelled') return false;
 
-      if (rows.length === 0 && params.has('date')) {
-        params.delete('date');
-        const retry = await fetch(`${API_URL}/api/flights?${params.toString()}`);
-        const retryData = await retry.json();
-        if (Array.isArray(retryData) && retryData.length > 0) {
-          rows = retryData.filter((f) => (f.flightStatus || f.FlightStatus) !== 'Cancelled');
-        }
-      }
+        const returnDeparture = flightDateTime(
+          f.departureDate,
+          f.departureTime
+        );
 
-      setReturnResults(rows);
-      if (rows.length > 0) {
-        await loadFaresForFlights(rows);
+        return outboundArrival &&
+               returnDeparture &&
+               returnDeparture > outboundArrival;
+      });
+
+      setReturnResults(validReturns);
+
+      if (validReturns.length > 0) {
+        await loadFaresForFlights(validReturns);
       }
     } catch {
       setReturnResults([]);
+      setBookingError('Unable to search return flights.');
+    } finally {
+      setReturnSearching(false);
     }
-    setReturnSearching(false);
   };
+
 
   const handleChangeOutbound = () => {
     setSelectedOutboundFare(null);
@@ -781,11 +809,13 @@ export default function HeroSearch({ activeTab, onBooked, onSignIn, navProps }) 
     setBookingError('');
     setBookingMessage('');
 
-    if (!isReturn && tripType === 'round-trip') {
-      setSelectedOutboundFare({ flight, fare });
-      handleReturnSearch();
-      return;
-    }
+   
+if (!isReturn && tripType === 'round-trip') {
+  setSelectedOutboundFare({ flight, fare });
+  handleReturnSearch(flight);
+  return;
+}
+
 
     const returnFareObj = isReturn ? fare : null;
     const outboundFareObj = selectedOutboundFare?.fare || fare;
