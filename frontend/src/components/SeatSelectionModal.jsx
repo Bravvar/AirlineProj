@@ -7,10 +7,10 @@ const SEATS_PER_SIDE = 3;
 const SEATS_PER_ROW = SEATS_PER_SIDE * 2;
 
 const CABINS = {
-  4: { name: 'First Class', short: 'First', seatFee: 75 },
-  3: { name: 'Business Class', short: 'Business', seatFee: 50 },
-  2: { name: 'Premium Economy', short: 'Premium Economy', seatFee: 35 },
-  1: { name: 'Economy Class', short: 'Economy', seatFee: 20 },
+  4: { name: 'First Class', short: 'First', seatFee: 25 },
+  3: { name: 'Business Class', short: 'Business', seatFee: 25 },
+  2: { name: 'Premium Economy', short: 'Premium Economy', seatFee: 25 },
+  1: { name: 'Economy Class', short: 'Economy', seatFee: 25 },
 };
 
 const ROW_CABIN = { A: 4, B: 3 };
